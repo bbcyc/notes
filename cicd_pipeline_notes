@@ -1,0 +1,50 @@
+Implementing a Full CI/CD Pipeline
+
+https://git-scm.com/downloads
+
+centos
+
+sudo yum -y install git
+
+git --version
+
+git config --global user.name "<your name>"
+git config --global user.email <your email address>
+
+create an ssh key pair for auth
+
+ssh-keygen -t rsa -b 4096
+
+copy this file to github account
+~/.ssh/id_rsa.pub
+
+github>settings>ssh and gpg keys>new ssh keys
+check github docs for addl info
+
+github.com linuxacademuy/cicd-pipeline-train-schedule-git
+fork repo
+
+git clone <repo url>
+git status - info about current state of repo
+
+to make changes
+git add <file> - stage changes
+git add . or git add -A to add all files
+git commit -m "<message>" - adds changes to local repo
+git push
+git push -u <remote name, usually origin> <branch name> - if remote branch doesn't exist
+
+git branch -> lists all branches in repo
+
+git checkout <branch> -> check out an existing branch
+git checkout -b <branch> -> creates new branch
+
+tag -> points to a specific commit
+
+git tag myTag -> creates new tag pointing to current commit
+
+pull request -> not part of core git functionality
+a request to merge changes into a branch that can be reviewed before merging
+this is done in the github ui
+
+

@@ -1,0 +1,484 @@
+BASH Scripting Notes
+
+.bash_profile
+only works when you login
+.bashrc loaded when a new tab is opened
+
+# .bash_profile
+
+# Get the aliases and functions
+if [ .f ~/.bashrc ]; then
+	. ~/.bashrc
+fi
+
+# User specific environment and startup programs
+
+PATH=$PATH:HOME/bin
+
+export PATH
+
+__________
+
+
+# .bashr 
+
+# User specified aliases and functions
+
+alias rm='rm -i'
+alias cp='cp -i'
+alias mv='mv -i'
+
+# Source the global definition
+if [ -f /etc/bashrc ]; then
+	. /etc/bashrc
+fi
+
+---------
+
+env | grep HISTCONTROL
+HISTCONTROL=ignoredups - doesn't write duplicate commands to bash_history
+export HISTCONTROL=$HISTCONTROL:ignorespace - when you run a command with a 
+	space in front, it won't be captured in bash_history
+
+.bash_logout - called whenever a bash session is ended
+- can be used to reset the .bash_profile and .bashrc files to original
+
+pwd
+whoami
+
+bash script - opens a new shell and executes file
+-----
+#!/bin/bash - runs script in new shell
+
+clear
+
+echo "Hello World"
+----
+
+.sh is not necessary, but useful
+
+need to chmod to make executable
+chmod u+x test.sh
+
+vim env.sh
+
+-----
+#!/bin/bash
+
+clear
+
+echo "This script will give us environment information"
+echo "================================================"
+echo "Hello Username: $USER"
+echo ""
+echo "Your home directory is: $HOME"
+echo ""
+echo "Your History File will ignore: $HISTCONTROL"
+echo ""
+echo "Your Terminal Session Type is: $TERM"
+echo ""
+-----
+
+make a var in env that is first name
+FIRSTNAME="Brian"
+no spaces
+export FIRSTNAME - make available to env
+env | grep FIRSTNAME
+export FIRSTNAME="Dave" - overwrites variable
+export TODAYSDATE=`date` - set var to output of command `date`
+
+varexample.sh
+----
+#!/bin/bash
+
+MYUSERNAME="username"
+MYPASSWORD="password123"
+STARTOFSCRIP= `date`
+
+echo "My login name for this application is: $MYUSERNAME"
+echo "My login password for this application is: $MYPASSWORD"
+echo "I started this script at: $STARTOFSCRIPT"
+
+ENDOFSCRIPT=`date`
+
+echo "I ended this script at: $ENDOFSCRIPT"
+----
+
+#!/bin/bash
+# This line is intended to be used as a general description 
+# of the script and anything is does
+
+clear # clears the screen
+
+MYUSERNAME="Brian" # the username for this application
+
+echo "We are using the default user called: $MYUSERNAME" # display to the console
+
+DATETIMESTAMP=`date`
+
+echo "This is when the script was run: $DATETIMESTAMP" # this is the timestamp of run
+----
+substitution.sh
+----
+#!/bin/bash
+# This script is intended to show how to do simple substitution
+
+shopt -s expand_aliases
+alias TODAY="date"
+alias UFILES="find /home -user user"
+
+TODAYSDATE=`date`
+USERFILES=`find /home -user user`
+
+echo "Today's Date: $TODAYSDATE"
+echo "All Files Owned by USER: $USERFILES"
+
+A=`TODAY`
+B=`UFILES`
+
+echo "With Alias, TODAY is: $A"
+echo "With Alias, UFILES is: $B"
+
+----
+errors.sh
+----
+#!/bin/bash
+# this is to show exit status types
+set -e # exits script as soon as an error is encountered
+
+expr 1 + 5
+echo $?
+
+rm doodles.sh
+echo $?
+
+expr 10 + 10
+echo $?
+----
+
+expr 2 + 2 -> needs spaces around numbers
+expr 10 \* 8  -> need to escape * 
+expr \( 2 + 2 \) \* 4 -> need to escape parens as well
+
+----
+expressions.sh
+----
+#!/bin/bash
+# expression evaluation
+
+expr 2 + 2
+
+expr 2 + 2 \* 4
+
+expr \( 2 + 2 \) \* 4
+----
+
+all vars on system
+man printenv
+printenv | more
+env and print_env almost the same output
+set - env variables specific to this session
+----
+
+quoting chars
+echo "\$COL" -> $COL
+echo '$COL' -> $COL - literally prints everything in quotes, no substitution
+escape single char, use \
+echo whole string use ' '
+echo "Today's date is: `date`"
+` backtick - substitute command in a string
+
+/dev/null is the blackhole of the the computer
+anything written to this device, file, or folder (depending on view) will be ignored
+
+----
+null.sh
+----
+#!/bin/bash
+# redirect to /dev/null example
+
+echo "This is displaying on the console"
+
+echo "This is going into the black hole" >> /dev/null
+----
+
+appending (>>) is preferred to overwriting (>), but both work
+
+----
+readsample.sh
+----
+#!/bin/bash
+# interactive script for user input
+
+echo "Enter Your First Name: "
+read FIRSTNAME
+echo "Enter Your Last Name: "
+read LASTNAME
+
+echo ""
+echo "Your full name is: $FIRSTNAME $LASTNAME"
+echo ""
+echo "Enter Your Age: "
+read USERAGE
+
+echo "In 10 years, You will be `expr $USERAGE + 10` years old."
+----
+
+Shell Expansion
+echo sh{ot, ort, oot}
+shot short shoot
+echo st{il, al}l
+still stall
+echo "${!HO*}" -> echos out env vars starting with HO
+HOST HOSTNAME HOSTTYPE
+echo "${VARNAME:=valuesomething}" -> set a var and echo it out
+echo "$[ 2 * 2 ]" -> 4 -> echos out result of expr in square brackets
+
+variables implicitly declared (loose typing)
+MYVAR = 5 -> implicitly determines MYVAR to be a number
+declare can set, unset, display type
+declare -p MYVAR -> displays value and type of MYVAR
+declare -i NEWVAR=10 -> declares as an int
+declare +i NEWVAR -> takes away declaration
+declare -r READONLY="This is a string we cannot overwrite" -> declares as read-only
+readonly MYREADONLY="This string" -> also declares readonly
+----
+Arrays
+MYARRAY=("First", "Second", "Third")
+echo MYARRAY -> First -> just shows first item
+echo ${MYARRAY[1]} -> Second -> right way to echo by index
+echo ${MYARRAY[10]} -> returns nothing
+echo ${MYARRAY[*]} -> returns everything in array
+MYARRAY[3]="Fourth" -> assigns "Fourth" to index 3
+array elements are space delimited, not comma delimited
+NEWARRAY=("First","Second","Third")
+echo NEWARRAY -> First,Second,Third -> They all got assigned to first index bc no space
+----
+arrayex.sh
+----
+#!/bin/bash
+# simple array list and loop display
+
+SERVERLIST=("websrv01" "websrv02" "websrv03" "websrv04")
+COUNT=0
+
+for INDEX in ${SERVERLIST[@]}; do
+  echo "Processing Server: ${SERVERLIST[COUNT]}"
+  COUNT="`expr $COUNT + 1`"
+done
+--- 
+
+cmdlinvar.sh
+----
+#!/bin/bash
+# demo of command line values passed in with our shell script
+
+echo "The following item was passed in to the script at run time $1"
+---
+$ cmdlinvar.sh "Hello Script"
+returns The following item was passed in to the script at run time Hello Script
+----
+#!/bin/bash
+
+USERNAME=$1
+PASSWORD=$2
+
+echo "The username is $USERNAME and the password is $PASSWORD"
+----
+each argument given on command line when running script is assigned
+to sequential variables in the script - $1 $2 $3 etc
+
+If Statement
+simpleif.sh
+----
+#!/bin/bash
+# simple if script for guessing a number
+
+echo "Guess the Secret Number"
+echo "======================="
+echo ""
+echo "Enter a Number Between 1 and 5: "
+read GUESS
+
+if [ $GUESS -eq 3 ]
+  then
+    echo "You Guessed the Correct Number"
+fi
+----
+testfile.sh
+----
+#!/bin/bash
+# tests for the existence of indicated file name
+
+FILENAME=$1
+echo "Testing for the Existence of a File called $FILENAME"
+
+if [ ! -a $FILENAME ] # ! tests negative -a matches on filenames
+  then
+    echo "File $FILENAME Does Not Exist!"
+fi
+----
+
+ifexpr.sh
+----
+#!/bin/bash
+# test multiple expressions in single if statement
+
+FILENAME=$1
+
+echo "Testing for file $FILENAME and readability"
+
+if [ -f $FILENAME ] && [ -r $FILENAME ]
+  then 
+    echo "File $FILENAME exists AND is readable"
+fi
+----
+
+If/then/else
+ifthenelse.sh
+----
+#!/bin/bash
+# simple example of if then else and nested if statements
+
+echo "Enter a number between 1 and 3:"
+read VALUE
+
+if [ "$VALUE" -eq "1" ] # make sure to put values in double quotes
+  then 
+    echo "You entered $VALUE"
+fi
+----
+modify script to check more values
+----
+#!/bin/bash
+# simple example of if then else and nested if statements
+
+echo "Enter a value between 1 and 3:"
+read VALUE
+
+if [ "$VALUE" -eq "1" ] 2>/dev/null || [ "$VALUE" -eq "2" ] 2>/dev/null || [ "$VALUE" -eq "3] 2>/dev/null ; then
+  echo "You entered $VALUE
+else
+  echo "You didn't follow instructions!"
+fi
+----
+2>/dev/null - send error output (2) to /dev/null
+console output is 1
+----
+#!/bin/bash
+# simple example of if then else and nested if statements
+
+echo "Enter a value between 1 and 3:"
+read VALUE
+
+if [ "$VALUE" -eq "1" ] 2>/dev/null; then
+  echo "You entered #1"
+elif [ "$VALUE" -eq "2" ] 2>/dev/null; then 
+  echo "You entered #2"
+elif [ "$VALUE" -eq "3] 2>/dev/null; then
+  echo "You entered #3"
+else 
+  echo "You didn't follow instructions!"
+fi
+----
+forsample.sh
+----
+#!/bin/bash
+# this is a demo of a for loop
+
+echo "List all the shell scripts contents of the directory"
+
+SHELLSCRIPTS=`ls *.sh`
+
+for SCRIPT in "$SHELLSCRIPTS"; do
+  DISPLAY="`cat $SCRIPT`"
+  echo "File: $SCRIPT - Contents $DISPLAY"
+done
+----
+
+casesample.sh
+----
+#!/bin/bash
+# demo fo the case statement
+
+clear
+
+echo "MAIN MENU"
+echo "========="
+echo "1) Choice One"
+echo "2) Choice Two"
+echo "3) Choice Three"
+echo ""
+echo echo "Enter Choice: "
+read MENUCHOICE
+
+case $MENUCHOICE in
+  1)
+    echo "Congratulations for Choosing the First Option";;
+  2)
+    echo "Choice 2 Chosen";;
+  3)
+    echo "Last Choice Made";;
+  *)
+    echo "You chose unwisely";;
+esac
+----
+end statements in case statement with ;;
+*) is default case
+
+----
+whilesample.sh
+----
+#!/bin/bash
+# while loop sample
+
+echo "Enter the number of times to display the 'Hello World' message"
+read DISPLAYNUMBER
+
+COUNT=1
+
+while [ $COUNT -le $DISPLAYNUMBER ]
+do
+  echo "Hello World - $COUNT"
+  COUNT="`expr $COUNT + 1`"
+done
+----
+
+rm superduper 2> /dev/null && echo "File exists and was removed" || echo "File does not exist and cannot be deleted"
+delete superduper - send errors to /dev/null - if successful echo file exists message - else file doesnt exist message
+
+----
+exops.sh
+----
+#!/bin/bash
+# execution operators example
+
+echo "Enter a number between 1 and 5: "
+read VALUE
+
+if [ "$VALUE" -eq "1" ] || [ "$VALUE" -eq "3 ] || [ "$VALUE" -eq "5" ]; then
+  echo "You entered the ODD value of $VALUE"
+else 
+  echo "You entered a value of $VALUE"
+fi
+----
+ 
+vim superheroes.txt
+Batman
+Superman
+Wonder Woman
+Flash
+Green Lantern
+Hawkman
+
+readfile.sh
+---
+#!/bin/bash
+# simple file reading (non-binary) and displaying one line at a time
+
+echo "Enter a filename to read: "
+read FILE
+
+while read -r SUPERHERO; do
+  echo "Superhero Name: $SUPERHERO"
+done < "$FILE"
