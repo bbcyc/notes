@@ -1,0 +1,61 @@
+Jenkins
+
+CI/CD
+
+Workflow
+1. Checkout from SCM (ie git)
+2. Branch and make local changes
+3. Add or change tests as nec
+4. Trigger automated build locally
+5. If successful, consider commiting
+6. Update with latest from mainline
+7. Push changes, build and test
+
+Best practices
+Maintain a single source repo
+Have a common mainline branch
+Automate the build
+Minimize user error, automate everything
+make build self-testing
+everyone commits frequently
+communication
+working branch should be update frequently
+build every commit
+prioritize fixing builds
+keep builds fast
+test env should be as close to prod as possible
+make it easy to get the latest
+
+Continuous Delivery
+software can be released to production at any time
+
+Keys and assumptions
+software is always deployable thoughout software development lifecycle
+not breaking the build is prioritized over adding features
+feedback is fast and production readiness is known
+push-button deployments are possible
+
+Differences
+Continuous Delivery- ability to release at any time
+Continuous Integration- practice of integrating code continuously
+Continuous Deployment- code is released continuously as part of an automated pipeline
+
+Installing Jenkins
+https://jenkins.io/doc/book/installing/
+https://wiki.jenkins.io/display/JENKINS/Installing+Jenkins+on+Red+Hat+distributions
+Crete CentOS7 cloud server
+ssh user@[public ip]
+sudo yum -y install git java-1.8.0-openjdk
+sudo wget -O /etc/yum.repos.d/jenkins.repo http://pkg.jenkins-ci.org/redhat-stable/jenkins.repo
+sudo rpm --import https://jenkins-ci.org/redhat/jenkins-ci.org.key
+sudo yum -y install jenkins-2.89.4
+sudo systemctl enable jenkins
+sudo systemctl start jenkins
+
+check the jenkins logs with 
+sudo tail -f /var/log/jenkins/jenkins.log
+
+get temp admin password with 
+sudo cat /var/lib/jenkins/secrets/initialAdminPassword
+
+

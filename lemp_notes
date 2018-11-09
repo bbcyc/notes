@@ -1,0 +1,8 @@
+Nginx Web Server
+
+apache is most used web server
+nginx gaining pop
+nginx differs in how it handles requests
+apache threaded (process-oriented)
+nginx asynchronous event-driven
+

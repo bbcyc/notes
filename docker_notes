@@ -1,0 +1,649 @@
+Docker Deep Dive
+
+Centos7
+
+sudo yum search docker
+
+cd /etc/yum.repos.d
+
+sudo vim docker.repo
+[dockerrepo]
+name=Docker Repository
+baseurl=https://yum.dockerproject.org/repo/main/centos/$relesasever/
+enabled=1
+gpgcheck=1
+gpgkey=https://yum.dockerproject.org/gpg
+
+sudo yum update
+sudo yum install docker-engine
+sudo systemctl enable docker 
+sudo system start docker
+
+sudo docker images
+docker.sock docker user group
+
+sudo usermod test -aG docker
+to add user test to docker group
+
+docker run container_name
+
+docker --version
+
+docker info - info on host and driver info
+
+df -h
+
+sudo su - 
+cd /var/lib/docker
+ll
+cd containers
+ll
+has container names
+docker ps - current containers
+docker ps -a - all containers
+cd ..
+cd images/devicemapper/imagedb/content/sha256  - the image iteself
+
+go to docker hub > explore
+
+docker pull image_name:tag - no tag will pull default usu latest
+
+docker pull ubuntu:xenial
+
+docker images - shows container just pulled
+
+docker run -i -t ubuntu:xenial /bin/bash  -i = interactive -t =terminal mode start in /bin/bash
+ps aux
+docker ps - no process - stopping container exited the container
+docker restart container_name
+docker inspect ubuntu:xenial for more info on container
+docker attach container_name - reattach to container in bash mode, will stop container when exited
+
+docker run -i -t -d ubuntu:xenial /bin/bash - -d run in background
+docker run -itd ubuntu:xenial /bin/bash - start another container based on the same image
+docker ps -a
+docker inspect container_name - docker creates default image name for each container created
+docker inspect container_name | grep IP
+ip show addr, ifconfig not installed, do not work
+docker inspect works on stopped containers
+difficult to maintain static ip address on docker
+
+to manage container wo exiting, can attach or docker stop, docker restart
+
+docker search ubuntu - all images on docker hub with ubuntu in name
+docker search training/sinatra - / extends repo
+ruby repo
+docker pull training/sinatra
+docker run -it training/sinatra /bin/bash
+gem install json - ruby command to show container is working
+
+gem list --local
+
+pwd
+cd /root
+testing > test.txt
+exit
+docker restart container_name
+docker attach container_name
+changes to container are still there
+
+Package a customized container
+Base image
+Make changes
+docker run -it ubuntu:xenial /bin/bash
+cd /root
+echo "this is version 1 of our custom image" > image_ver.txt
+apt-get update
+apt-get install telnet openssh-server
+adduser test
+verify all is done
+exit
+docker ps -a to get name
+docker restart container_name
+docker attach container_name
+docker commit -m "Already installed SSH" -a "name" container_name name/ubusshd:v1
+docker run -it name/ubusshd:v1
+creates custom image
+
+make Dockerfile with info about image
+mkdir Build
+cd Build
+vim Dockerfile
+# This is a custom ubuntu image
+FROM ubuntu:xenial
+MAINTAINER name <email@email.com>
+RUN apt-get update
+RUN apt get install -y telnet openssh-server
+
+docker build -t="name/ubusshdonly:v2" .  builds in current directory
+
+docker images
+now shows new images
+docker run -it name/ubusshdonly:v2 /bin/bash
+which telnet
+which openssh
+has telnet openssh-server
+
+mkdir Builds
+cd Builds
+mkdir RunAsUser
+cd RunAsUser
+docker images - clean up old images
+docker rmi - old stuff
+Make a container based on CentOS running with user not root
+
+vim Dockerfile
+# This is a Dockerfile based on the latest CentOS 7 image - non-priveleged user entry
+FROM centos:latest
+MAINTAINER linuxacademy@linuxacademy.com
+
+RUN useradd -ms /bin/bash user
+USER user
+
+
+docker build -t centos7/nonroot:v1 .
+docker run -it centos7/nonroot:v1 /bin/bash
+
+who
+whoami
+su -   dont know password
+exit
+docker ps -a
+docker start container_name
+docker exec -u 0 -it container_name /bin/bash  connect to container as root user
+ps aux 
+user and root accounts running
+
+mkdir JavaInstall
+cd JavaInstall
+
+Dockerfile from before
+
+FROM centos:latest
+MAINTAINER linuxacademy@linuxacademy.com
+
+RUN useradd -ms /bin/bash user
+
+RUN echo "EXPORT 192.168.0.0/24" >> /etc/exports.list
+
+RUN yum update -y
+RUN yum install -y net-tools wget
+
+RUN cd ~ && wget --no-cookies --no-check-certificate --header "Cookie: gpw_e24=http%3A%2F%2Fwww.oracle.com%2F; oraclelicense=accept-securebackup-cookie"
+"http://download.oracle.com/otn-pub/java/jdk/8u60-b27/jre-8u60-linux-x64.rpm"
+
+RUN yum localinstall -y ~/jre-8u60-linux-x64.rpm
+
+USER user
+
+RUN cd - && echo "export JAVE-HOME=/usr/java/jdk1.8.0/jre" >> /home/user/.bashrc
+
+docker build -t centos7:java8:v1
+
+docker run -it centos7/java8:v1 /bin/bash
+
+vim Dockerfile  control system wide environment variables
+add this line to dockerfile
+ENV JAVA_BIN /usr/java/jdk1.8.0/jre/bin
+
+rerun docker build and run
+both java_bin and java_home available
+
+RUN command does something during build process to create container
+CMD runs when the container is instantiated
+
+mkdir EchoServer
+cd EchoServer
+vim Dockerfile
+
+FROM centos:latest
+MAINTAINER brian@berry.com
+
+RUN useradd -ms /bin/bash user
+
+CMD "echo" "This is a custom container message for our LinuxAcademy Students"
+
+USER user
+
+docker build -t centos7:echo:v1 .
+
+docker run centos7/echo:v1
+
+mkdir Entry cd Entry
+ 
+FROM centos:latest
+MAINTAINER brian@berry.com
+
+RUN useradd -ms /bin/bash user
+
+ENTRYPOINT echo "This command will display this message on EVERY container that is run on it"
+
+USER user
+
+docker build -t centos7/entry:v1
+
+docker run centos7/entry:v1
+
+# docker run centos7/echo:v1 /bin/echo "Hello from the lab"
+Hello from the lab
+with CMD directive, can change the behavior of the CMD when container is run
+with ENRTYPOINT directive, cannot change the behavior when container is run
+# docker run centos7/entry:v1 /bin/echo "Will you see me?"
+This command will display this message on EVERY container that is run from it
+
+CMD will only run if it is the only command in the container instantiation, but 
+ENTRYPOINT runs whenever you start a container
+
+cd Builds
+ApacheInstallation
+Dockerfile
+# This image is based on CentOS 7 and will start apache service in each container
+FROM centos:latest
+MAINTAINER brian@berry.com
+
+RUN yum update -y
+RUN yum install -y httpd net-tools
+
+RUN echo "This is a custom index file build during the image creation" > /var/www/html/index.html
+
+ENTRYPOINT apachectl "-DFOREGROUND"
+
+docker build -t centos7/apache:v1
+docker run -d --name apacheweb1 centos7/apache:v1
+docker ps
+docker inspect apacheweb1 | grep IPAdd
+elinks (IP)
+docker exec apacheweb1 /bin/cat /var/www/html.index.html
+docker ps
+no ports exposed
+docker run -d --name apacheweb2 -P centos7/apache:v1
+container will run, but no ports exposed
+docker stop apacheweb2
+docker run -d --name apacheweb3 -p 8080:80 centos7/apache:v1
+
+elinks http://localhost:8080
+edit Dockerfile insert before ENTRYPOINT line  EXPOSE 80
+docker run -d --name apacheweb4 -P centos7/apache:v1
+elinks http://localhost:32768 works
+
+-v provides access from host to container
+Launch container with directory mydata
+docker images
+docker run -it --name voltest1 -v /mydata centos:latest /bin/bash
+df -h
+/mydata is a 20g disk
+from container
+cd /mydata 
+ll - it's empty
+echo "this is a test container file" > mytext.txt
+ll
+cat mytext.txt
+
+cd /var/lib/docker/
+ll
+notices /volumes folder
+docker ps
+docker inpect voltest1
+Destination:/mydata
+Source: /var/lib/docker/volumes/klsdjkl;fj
+cd volumes
+ll
+cd _data/
+mytext.txt is there
+
+Builds # mkdir MyHostDir
+echo "something" > config.local
+echo "something else" > message.txt
+echo "ajdskfjlk" > appl.bin
+chmod 755 appl.bin
+
+docker run -it --name voltest2 -v /root/Builds/MyHostDir:/mydata centos:latest /bin/bash
+df -h
+directory is available in container and on host machine
+
+docker images show base images create containers on docker0 bridge adaptor
+default 172.17.0.2 
+
+docker network inspect ls
+docker network ls
+docker network ls --no-trunc
+docker network inspect bridge
+docker network inspect host
+less info
+docker network inspect none
+
+docker images
+docker rmi repo:tag to remove image from system
+if you try to remove a container based on a base image
+you get a conflict, need to docker rm that container first
+docker run -it ubuntu:xenial /bin/bash
+docker images
+docker rmi ubuntu:xenial -> error message
+docker rmi -f ubuntu:xenial -> force remove image
+container is still there, but image is gone
+docker rmi centos:centos7 centos:latest is still there even though same container
+docker pull centos:centos7
+docker rmi [image_id] conflict bc two images same id
+must do docker rmi -f [image_id]
+
+
+pull images from local repo or docker hub
+docker allows us to tar and save images
+docker images
+docker pull centos:latest
+docker images -> have centos
+docker run -it centos:latest /bin/bash
+yum update
+docker ps -a 
+docker images
+docker commit container_name centos:mine
+docker rm container_name
+docker images
+docker ps -a
+docker save centos:latest > centos.latest.tar
+docker save -o centos.latest.tar centos:latest
+docker save --output centos.latest.tar centos:latest
+ls -al centos.latest.tar
+tar tvf centos.latest.tar directory structure and disk space values from /var/lib/docker
+docker rmi centos:latest
+docker load < centos.latest.tar
+docker load --input centos.latest.tar
+gzip centos.latest.tar
+docker load --input centos.latest.tar.gz
+docker images -> centos is back
+
+docker history centos:mine -> show all history for building base image
+docker history only available for images, not containers
+docker history --no-trunc nginx -> shows full id
+docker history --quiet -> only shows ids
+
+docker tag image_id mine/centos:v1.0 tags what was centos:mine with new tag
+docker tag mine/centos:v1.0 tcox2.mylabserver.com/centos:v1.0.1b
+tag names uc, lc, periods, dashes 128 chars
+can tag as part of push process
+
+create a container in interactive mode attached to terminal using google public dns, using domain search mydomain.local, named mycontainer31 with a mount called /local_vol
+and a mount called remote_vol that mounts to file system in /home/user
+docker run -it --dns=8.8.8.8 --dns-search="mydomain.local" --name=mycontainer31 -v /local_vol -v /home/user/docker/mydata:/remote_vol ubuntu:latest /bin/bash
+
+
+go to docker hub and login
+unlimited pub repos, 1 private
+create repository
+always tagged with username -> unique identifier
+bbcyc -> myubuntu
+test repo
+private only
+bbcyc/myubuntu
+docker login -> give userid -> give passwd
+cd .docker 
+ll
+login credentials there
+docker tag mine/centos:v1.0 bbcyc/mycentos
+docker login
+docker login --username=bbcyc --email=yrrebnairb@gmail.com
+docker push bbcyc/mycentos
+once it's pushed, we should be able to check it out on docker hub
+docker images -> it's there
+docker logout
+docker push -> fails bc logged out
+
+To setup Docker in WebFarm environment
+Virtual machine
+ifconfig -> local ip
+be able to set static routes on local network
+setup git
+
+Start in virtual machine from scratch
+Centos7 or ubuntu
+install docker
+docker pull centos:centos6
+docker run -it centos:centos6 /bin/bash
+get epel repo go to website and get url of rpm install
+yum install wget
+wget http://epelurl fedoraproject
+yum update
+yum install which sudo httpd php openssh-server
+which service
+
+vi .bashrc
+# add the services we want to start
+/sbin/service httpd start
+/sbin/service openssh-server start
+
+copy containerid
+docker commit containerid centos6:baseweb
+docker run -it centos6:baseweb /bin/bash
+service sshd start
+docker images
+docker rmi centos6:baseweb
+docker rm containerid
+docker rmi centos6:baseweb
+docker start containerid(from docker commit command)
+docker attach containerid
+vi .bashrc
+fix openssh-server -> sshd
+copy containerid
+exit
+docker commit newcontainerid centos6:baseweb
+docker run -it centos6:baseweb /bin/bash
+can see that apache and ssh servers are running
+
+opensourcewebdesign, download theme
+create website dir on localhost
+cp /home/tcox/Downloads/bluefreedom.zip .
+mkdir docker
+cd docker
+ mkdir dockerwww
+unzip bluefreedom.zip to dockerwww
+docker images 
+docker run -it --name=webtest centos6:baseweb /bin/bash
+docker rm webtest
+docker run --name=webtest -v /root/docker/dockerwww:/var/www/html -i -t centos6:baseweb /bin/bash
+172.17.0.7 shows webcontent
+exit
+dockerwww # git init .
+git status
+git add *
+git commit im "This is the initial commit"
+set up git repo config
+docker start webtest
+docker attach webtest
+ps aux | grep httpd
+df -h
+if config
+yum install git
+cd /var/www/html
+ll
+git status
+ls -al
+git repo web server and host os
+
+docker images -> only centos and baseweb
+docker ps -a
+docker commit webtest centos6:serverv1
+docker images -> now has serverv1
+expose ports to os
+docker run -it centos6:serverv1 /bin/bash
+ps aux | grep http
+df -h -> volume not mounted
+docker run --name=externalweb -p 8081:80 -itv /root/docker/dockerwww:/var/www/html centos6:serverv1
+check in host web browser
+192.168.1.1:80 should show blue freedom
+adduser tcox 
+passwd tcox
+ssh tcox@172.17.0.10 
+
+docker images
+docker ps -a has changes to container
+docker commit externalweb centos6:finalwebv1
+docker images -> centos6:finalwebv1 there
+cd dockerwww
+git status
+mv dockerwww dockergit
+cd dockergit
+git status
+cd ..
+docker # git clone root@localhost:/root/docker/dockergit dockerwww
+
+docker run -d -i -t --name=devweb1 -p 8081:80 -v /root/docker/dockerwww:/var/www/html centos6:finalwebv1 /bin/bash
+docker run -d -i -t --name=devweb2 -p 8082:80 -v /root/docker/dockerwww:/var/www/html centos6:finalwebv1 /bin/bash
+docker ps 
+docker inspect devweb1 | grep IPAddress
+docker inspect devweb2 | grep IPAddress
+point web browser to ips
+use nginx to proxy port 80 to 8081 and 8082
+yum install nginx on hostos
+service nginx start
+localhost
+cd /etc/nginx
+cd sites-available
+vi default.conf
+upstream containerapp {
+	server 192.168.1.35:8081
+	server 192.168.1.35:8082
+}
+
+server {
+	listen *:80;
+
+	server_name 192.168.1.135;
+	index index.html index.htm index.php;
+
+	access_log /var/log/nginx/localweb.log;
+	error_log /var/log/nginx/localerr.log;
+
+	location / {
+		proxy_pass http://containerapp;
+	}
+}
+
+service restart nginx
+
+move to browser on diff machine 
+go to virtaul machine ip
+
+ifconfig
+docker0 
+if you have ip on network that conflicts
+can build a bridge
+use local virtual machine with docker -> vid uses ubuntu
+ps aux | grep docker 
+service docker stop or service docker.io stop
+ip link add br10 type bridge
+ip addr 10.10.100.1/24 dev br10
+ip link set br10 up
+ifconfig
+br10 bridge adaptor
+docker -d -b br10 &
+docker images
+docker run -i -t centos:centos6 /bin/bash
+ifconfig
+ping 10.10.100.1
+will last until reboot
+cd /etc/rc
+cat rc.local
+cd /etc/network
+vim interfaces
+auto br10
+iface br10 inet static
+	address 10.10.100.1
+	netmask 255.255.255.0
+	bridge_ports dummy0
+	bridge_stp off
+	bridge_fd 0
+
+persists across reboot
+
+
+Prereqs for use case - test software against upgrades
+Local virtual machine - install docker git java tomcat
+sample war file
+docker images
+set up containers for java 7 and 8
+cd docker 
+mkdir downloads
+cp /home/tcox/Downloads .
+copy all files needed
+will create volume mount
+
+
+docker run -i -t --name=jdk7 -v /root/docker/downloads:/root/Downloads centos:centos6 /bin/bash
+cd /root/Downloads
+all files there
+yum update
+yum install git wget sudo which
+ll 
+mkdir tmp
+cd tmp
+tar zvxf ../jdk7whatever
+mv jdk7589740  /opt/java
+cd /opt
+cd java
+has files
+use java alternatives
+alternatives --install /usr/bin/java java /opt/java/bin/java 2
+alternatives --config java
+can select which version of java to run
+alternatives --install /usr/bin/jar jar /opt/java/bin/jar 2
+alternatives --install /usr/bin/javac javac /opt/java/bin/javac 2
+alternatives --set jar /opt/java/bin/jar
+alternatives --set javac /opt/java/bin/javac
+javac -version
+which jar
+ exit container
+docker commit jdk7 centos6:java7
+repeat process for java8 container
+
+launch java7 and java8 containers with apache tomcat 7 and 8
+docker run -i -t --name=java7tomcat7 -v /root/docker/downloads:/root/Downloads -p 8180:8080 centos6:java7 /bin/bash
+java -version 
+df -h
+tar zxvf ../apache-tomcat-file
+mv apache-tomcat-7.0.57/ /opt/tomcat
+ll
+export JAVA_HOME=/opt/java
+ecport JAVA_JRE=/opt/java
+export CATALINA_BASE=/opt/tomcat
+export CATALINA_HOME=/opt/tomcat
+export CATALINA_IMPDIR=/opt/tomcat/temp
+env | more
+cd bin
+ls -al
+./startup.sh &
+ps aux | grep tomcat
+yum install curl
+curl http://localhost:8080
+use diff term and docker ps
+ifconfig
+check in browser
+docker commit java7tomcat7 centos7Ljdk7tomcat7
+follow same process for java8 and tomcat8
+docker images
+cd docker 
+cd downloads
+ll
+docker run -i -t --name=tomcatweb7 -v /root/docker/downloads:/root/Downloads -p 8180:8080 
+	-e JAVA_HOME=/opt/java -e JRE_HOME=/opt/java centos6:jdk7tomcat7 /bin/bash
+env | grep HOME
+/opt/tomcat/bin/startup.sh
+ifconfig
+browser 172.17.0.2:8080
+/opt/tomcat/bin/shutdown.sh
+cp sample.was /opt/tomcat/webapps
+cd /opt/tomcat/webapps
+/opt/tomcat/bin/startup.sh
+ifconfig
+go to browser ip from above
+ll
+cd sample
+ll
+docker run the other 3 containers select different port for each 8181,8182
+docker ps 
+docker attach jdk8tomcatweb7
+ll
+cp sample.war /opt/tomcat/webapps
+/opt/tomcat/bin/startup.sh
+check it out on web browser
+
+
