@@ -20,7 +20,7 @@ export PATH
 __________
 
 
-# .bashr 
+# .bashr
 
 # User specified aliases and functions
 
@@ -37,7 +37,7 @@ fi
 
 env | grep HISTCONTROL
 HISTCONTROL=ignoredups - doesn't write duplicate commands to bash_history
-export HISTCONTROL=$HISTCONTROL:ignorespace - when you run a command with a 
+export HISTCONTROL=$HISTCONTROL:ignorespace - when you run a command with a
 	space in front, it won't be captured in bash_history
 
 .bash_logout - called whenever a bash session is ended
@@ -105,7 +105,7 @@ echo "I ended this script at: $ENDOFSCRIPT"
 ----
 
 #!/bin/bash
-# This line is intended to be used as a general description 
+# This line is intended to be used as a general description
 # of the script and anything is does
 
 clear # clears the screen
@@ -157,7 +157,7 @@ echo $?
 ----
 
 expr 2 + 2 -> needs spaces around numbers
-expr 10 \* 8  -> need to escape * 
+expr 10 \* 8  -> need to escape *
 expr \( 2 + 2 \) \* 4 -> need to escape parens as well
 
 ----
@@ -266,7 +266,7 @@ for INDEX in ${SERVERLIST[@]}; do
   echo "Processing Server: ${SERVERLIST[COUNT]}"
   COUNT="`expr $COUNT + 1`"
 done
---- 
+---
 
 cmdlinvar.sh
 ----
@@ -329,7 +329,7 @@ FILENAME=$1
 echo "Testing for file $FILENAME and readability"
 
 if [ -f $FILENAME ] && [ -r $FILENAME ]
-  then 
+  then
     echo "File $FILENAME exists AND is readable"
 fi
 ----
@@ -344,7 +344,7 @@ echo "Enter a number between 1 and 3:"
 read VALUE
 
 if [ "$VALUE" -eq "1" ] # make sure to put values in double quotes
-  then 
+  then
     echo "You entered $VALUE"
 fi
 ----
@@ -373,11 +373,11 @@ read VALUE
 
 if [ "$VALUE" -eq "1" ] 2>/dev/null; then
   echo "You entered #1"
-elif [ "$VALUE" -eq "2" ] 2>/dev/null; then 
+elif [ "$VALUE" -eq "2" ] 2>/dev/null; then
   echo "You entered #2"
 elif [ "$VALUE" -eq "3] 2>/dev/null; then
   echo "You entered #3"
-else 
+else
   echo "You didn't follow instructions!"
 fi
 ----
@@ -458,11 +458,11 @@ read VALUE
 
 if [ "$VALUE" -eq "1" ] || [ "$VALUE" -eq "3 ] || [ "$VALUE" -eq "5" ]; then
   echo "You entered the ODD value of $VALUE"
-else 
+else
   echo "You entered a value of $VALUE"
 fi
 ----
- 
+
 vim superheroes.txt
 Batman
 Superman
@@ -482,3 +482,6 @@ read FILE
 while read -r SUPERHERO; do
   echo "Superhero Name: $SUPERHERO"
 done < "$FILE"
+
+
+
