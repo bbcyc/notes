@@ -47,4 +47,17 @@ pull request -> not part of core git functionality
 a request to merge changes into a branch that can be reviewed before merging
 this is done in the github ui
 
+Build Automation
+  Compiling
+  Depenency Management
+  Executing Automated Tests
+  Packaging the App for Deployment
+
+Gradle
+gradle.org
+needs java jdk7 or higher
+on centos
+wget -O ~/gradle-4.7-bin.zip https://services.gradle.org/distibutions/gradle-4.7-bin.zip
+sudo yum -y install java-1.8.0-openjdk unzip
+
 
