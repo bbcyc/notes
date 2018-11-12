@@ -1,0 +1,653 @@
+Linux Academy
+Running Container Clusters with Kubernetes
+
+1 Master/Controller->n Minions(servers)->Docker(or other container manager)->n Pods->n Containers
+
+Minions- physical or virtual server- Container clients, virtual or real
+etcd- keyed pair management service, keeps things in sync - exchanges message on cluster stack
+kubeproxy
+
+Pods- One or more containers
+guaranteed to be on same host machine
+assigned unique ips within a cluster
+allows apps to use ports without having to worry about port conflicts
+share resources - disks
+pod management through api or controller
+
+Labels- clients can attach key-value pairs to any object in system (like pods or minions) -
+labels can be used to identify for config and management of objects
+
+Selectors- label selectors represent queries made against those labels- they correspond to matching object
+
+Labels and Selectors are the primary way that grouping is done in Kubernetes and determine which components
+    that a given operation applies to when indicated
+
+Controllers - enforce desired configuration state of cluster
+Controllers manage a set of pods and can engage other controllers to handle replication and scaling
+Also responsible for replacing any container that fails
+
+DaemonSet Controller - enforces a 1 to 1 ratio of pods to minions
+Job Controller - runs pods to completion as in batch jobs
+The set of pods managed by a controller is determined by the label selectors that are part of definition
+
+Services
+Pod is one or more containers and guaranteed to be on same host machine to facilitate sharing resources
+This allows pods to work together like in a multi-tiered application config
+Kube provides service discovery and routing with static ips for each pod as well as load balancing connections among
+the pods in the label selector
+
+Introduction to YAML
+Yet Another Markup Language
+YAML Ain't Markup Language
+meant to be human readable data serialization format
+nost closely resembles an outline or a list of things and short descriptions
+
+---# Our Favorite Movies of All Time
+-  The Terminator
+-  Star Trek
+-  Star Wars
+
+dashes, colons, and indents important
+Ansible uses YAML exclusively to construct playbooks
+
+All servers need to have NTP installed and running
+One master server and three minions - all CentOS
+yum install -y ntpd - on all 4 servers
+ntp gives most server as accurate of time as possible
+systemctl enable ntpd && systemctl start ntpd
+systemctl status ntpd
+want to make sure we have full name resolution
+for linux lab server - we need to use internal ips
+centos-master and centos-minion1, 2, 3
+vim /etc/hosts
+172.31.20.104 centos-master
+172.31.118.99 centos-minion1
+172.31.116.145 centos-minion2
+172.31.125.32 centos-minion3
+[linux acad server ip] centos-master
+[ip] centos-minion1
+[ip] centos-minion2
+[ip] centos-minion3
+put this in the /etc/hosts for all four servers
+ping centos-minion2 -> test to make sure it works
+add repo to pull latest docker and kube releases
+vim /etc/yum.repos.d/virt7-docker-common-release.repo
+[virt7-docker-common-release]
+name=virt7-docker-common-release
+baseurl=http://cbs.centos.org/repos/virt7-docker-common-release/x86_64/os/
+gpgcheck=0
+save and then yum update
+do this for all four servers
+make sure ip tables and firewalld are not running by
+systemctl status iptables
+systemctl status firewalld
+both should return not found
+install etcd - key/value sharing system
+yum install -y --enablerepo=virt7-docker-common-release kubernetes docker
+^ do this on all 4 servers
+
+cd /etc/kubernetes
+vim config
+KUBE_LOG_LEVEL 0 is most verbose
+KUBE_ALLOW_PRIV a way to allow any docker container to be run
+KUBE_MASTER must bind to interface that we can communicate with
+    change from localhost to
+KUBE_MASTER="--master=http://centos-master:8080"
+add
+KUBE_ETCD_SERVERS="--etcd-servers=http://centos-master:2379"
+save and repeat for minions
+cd /etc/etcd
+vim etc.conf
+ETCD_LISTEN_CLIENT_URLS="http://0.0.0.0:2379"
+ETCD_ADVERTISE_CLIENT_URLS="http://0.0.0.0:2379" -> listens on all 2379 ports
+save and quit - not needed on minions
+cd /etc/kubernetes
+vim apiserver
+KUBE_API_ADDRESS="--address=0.0.0.0"
+KUBE_API_PORT="--port=8080"
+KUBELET_PORT="--kubelet-port=10250"
+comment out KUBE_ADMISSION_CONTROL
+save and quit
+systemctl enable etcd kube-apiserver kube-controller-manager kube-scheduler
+systemctl start etcd kube-apiserver kube-controller-manager kube-scheduler
+master control services must be started before minion services
+systemctl status etd kube-apiserver kube-controller-manager kube-scheduler | grep "(running)" | wc -l
+should give number of services running - 4
+
+Install and configure minions
+centos-minion1
+should have /etc/hosts set up
+vim /etc/kubernetes/config
+change KUBE_MASTER="--master=http://centos-master:8080"
+KUBE_ETCD_SERVERS="--etcd-servers=http://centos-master:2379"
+save and replicate for minion2, 3
+edit /etc/kubernetes/kubelet
+KUBELET_ADDRESS="--address=0.0.0.0"
+KUBELET_PORT="--port=10250"
+KUBELET_HOSTNAME="--hostname-override=centos-minion1"
+KUBELET_API_SERVER="--api-servers=http://centos-master:8080"
+comment out KUBELET_POD_INFRA_CONTAINER
+save and quit
+systemctl enable kube-proxy kubelet docker
+systemctl start kube-proxy kubelet docker
+systemctl status kube-proxy kubelet docker | grep "(running)" | wc -l
+docker images
+docker --version
+docker pull hello-world
+docker images
+docker run hello-world
+docker ps -a
+copy for minion2 and minion3
+
+Kubectl
+man kubectl
+controls the kubernetes cluster manager
+kubectl get nodes -> get nodes that are registered to master server
+man kubectl -get
+kubectl describe nodes -> gives a lot of info about nodes in json format
+kubectl get nodes -o jsonpath='{.items[*].status.addresses[?(@.type=="ExternalIP")].address}'
+get nodes that are ready
+kubectl get nodes -o jsonpath='{range.items[*]}{@.metadata.name}:{range @.status.conditions[*]}{@.type}={@.status};{end}{end}'| tr ';' "\n" | grep "Ready=True"
+
+Pull an image
+Docker infrastructure - the image and containers instantiated on that image
+docker images
+docker version
+docker info -> lots of info on host and containers
+/var/lib/docker is where images and data storage live
+df -h
+sudo su -
+cd /var/lib/docker
+cd containers
+directories with container names
+cd images/devicemapper/imagedb/content/sha256 -> actual container
+go to docker hub to find docker containers that can be pulled down
+docker pull ubuntu:xenial
+docker images shows ubuntu:xenial 
+docker run -i -t ubuntu:xenial /bin/bash
+exit, stops container
+docker ps -a
+docker restart container_name
+docker inspect ubuntu:xenial
+docker attach container_name will log you in to container
+
+Running containers
+docker run -itd ubuntu:xenial /bin/bash
+^ do this twice
+docker inspect ubuntu:xenial - info about image
+docker inspect container_name - info about this specific container
+grep IP to get IPs 
+docker attach container_name
+ifconfig
+ip show addr 
+apt-get install ifconfig
+exit - stops container
+docker inspect works on stopped container
+docker stop container_name stops container
+docker search ubuntu - will search all images on docker hub with name ubuntu
+docker search training/sinatra - ubuntu with ruby
+docker pull training/sinatra
+docker run -it training/sinatra /bin/bash
+gem install json
+gem list --local -> what is already installed
+
+The Dockerfile
+mkdir Builds
+cd Builds
+mkdir RunAsUser
+cd RunAsUser
+docker rmi [old_image_tags] - get rid of unneeded images
+vim Dockerfile
+# Dockerfile based on the latest CentOS 7 image - non-privileged user entry
+FROM centos:latest
+MAINTAINER linuxacademy@linuxacademy.com
+
+USER user
+
+docker build -t centos7/nonroot:v1 .
+docker run -it centos7/nonroot:v1 /bin/bash - fails because user does not exist
+add to Dockerfile above USER
+RUN useradd -ms /bin/bash user
+rerun build
+docker images
+docker run -it centos7/nonroot:v1 /bin/bash - works now
+cant become root user
+can attach as root user
+docker start container_name
+docker exec -u 0 -it container_name /bin/bash - connect as user id 0 (root)
+
+Managing Ports with Container Deployments
+can user dockerfile to expose ports
+go to docker hub and look for something that uses a specific port
+docker pull nginx:latest
+docker run -d nginx:latest
+docker ps - see that container_name is running
+docker inspect container_name - find ip
+sudo apt-get install elinks
+elinks http://[ip]
+elinks http://localhost - gives error
+can do port redirection when starting container
+docker stop container_name
+docker run -d -p 80:80 nginx:latest - connect local port 80 to container port 80
+docker ps
+elinks http://localhost shows nginx default site now
+docker run -d -p 8080:80 nginx:latest
+docker ps 
+localhost 8080 now connected to container port 80
+elinks http://localhost - nothing
+elinks http://localhost:8080 - shows nginx site
+redirecting localhost 8080 through docker daemon to docker nginx container port 80
+can run multiple webservers from one container
+
+Create and Deploy Pod Definitions
+kubectl get nodes
+can create config using json or yaml
+create pod by creating pod definition - desired state
+cd Builds
+vim nginx.yaml
+apiVersion: v1
+kind: Pod
+metadata: 
+  name: nginx
+spec:
+  containers:
+  - name: nginx
+    image: nginx:1.7.9
+    ports:
+    - containerPort: 80
+kubectl get pods - no pods
+kubectl create -f ./nginx.yaml
+kubectl get pods - containers running - google pause container and nginx container
+kubectl describe pod nginx - docker id, minion assigned to and ip address, labels, controllers
+ping [ip of pod] - cant get to it, no external route, other pods can access
+kubectl run busybox --image=busybox --restart=Never --tty -i --generator=run-pod/v1
+now in busybox pod
+wget -q0- http://ip of nginx pod
+kubectl delete pod busybox
+docker ps -a - no longer running
+kubectl get pods - only nginx
+kubectl delete pod nginx
+port forwarding to access pods
+kubectl create -f nginx.yaml
+kubectl port-forward nginx:80 &
+wget -qO- http://localhost:[port assigned above] - should return nginx page
+have pod but not easy to refer to it
+will use labels for that 
+
+Labels and Selectors
+add a label to help refer to different types of objects- key value pair
+from Builds dir
+cp nginx.yaml nginx-pod-label.yaml
+vim nginx-pod-label.yaml
+apiVersion: v1
+kind: Pod
+metadata: 
+  name: nginx
+  labels:
+    app:nginx
+spec:
+  containers:
+  - name: nginx
+    image: nginx:1.7.9
+    ports:
+    - containerPort: 80
+kubectl create -f nginx-pod-label.yaml
+kubectl get pods
+kubectl get pods -l app=nginx
+cp nginx-pod-label.yaml nginx2-pod-label.yaml
+vim nginx2-pod-label.yaml - change all nginx to nginx2
+kubectl create -f nginx2-pod-label.yaml
+docker ps
+kubectl get pods -l app=nginx2
+kubectl describe pods -l app=nginx2
+labels are called selectors and are used to differentiate objects
+
+Deployment State
+deploy a pod that is a production nginx container and one that is a development nginx container
+cp nginx-pod-label.yaml nginx-deployment-prod.yaml
+vim nginx-deployment-prod.yaml
+apiVersion: extensions/v1beta1  (check if this changed)
+kind: Deployment
+metadata:
+  name: nginx-deployment-prod
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: nginx-deployment-prod
+    spec:
+      containers:
+      - name: nginx-deployment-prod
+        image: nginx:1.7.9
+        ports: 
+        - containerPort: 80
+save and clear
+kubectl create -f nginx-deployment-prod.yaml
+kubectl get pods
+kubectl get deployments
+cp nginx-deployment-prod.yaml nginx-deployment-dev.yaml
+vim nginx-deployment-dev.yaml
+apiVersion: extensions/v1beta1  (check if this changed)
+kind: Deployment
+metadata:
+  name: nginx-deployment-dev
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: nginx-deployment-dev
+    spec:
+      containers:
+      - name: nginx-deployment-dev
+        image: nginx:1.7.9
+        ports: 
+        - containerPort: 80
+changed all the prod to dev
+kubectl create -f nginx-deployment-dev.yaml
+kubectl get deployments
+kubectl describe deployments -l app=nginx-deployment-dev
+can do updates by deployment types
+cp nginx-deployment-dev.yaml nginx-deployment-dev-update.yaml
+vim nginx-deployment-dev-update.yaml
+change image to nginx:1.8
+kubectl apply -f nginx-deployment-dev-update.yaml
+kubectl get pods
+kubectl describe deployments nginx-deployment-dev
+docker ps - 2 different container ids -> success
+describe deployments -l app=nginx-deployment-dev
+strategyType - Rollin Update
+
+Multi-Pod(Container) Replication Controller
+can have layers with multiple containers
+can define multiple containers in a single pod
+Deploy 1 to n pods of a particular container
+start kubelet kube-proxy on all minions
+systemctl start kubelet kube-proxy
+cd Builds
+vim nginx-multi-label.yaml
+apiVersion: v1
+kind: ReplicationController
+metadata:
+  name: nginx-www
+spec:
+  replicas: 3
+  selector:
+    app: nginx
+  Template: 
+    metadata:
+      name: nginx
+      labels:
+        app: nginx
+      spec:
+        containers:
+        - name: nginx
+          image: nginx
+          ports:
+          - containerPort: 80
+kubectl get nodes - should see all 3 minions Ready
+kubectl create -f nginx-multi-label.yaml
+kubectl get pods
+kubectl describe ReplicationController
+kubectl describe pods
+kubectl get services
+kubectl delete pod nginx-www-[id]
+kubectl get pods
+deleting pods will just cause new pods to be spun, since we are using a ReplicationController
+kubectl get replicationcontrollers
+kubectl delete replicatoncontroller nginx-www -> deletes controller and pods
+
+Create and Deploy Service Definitions
+kubectl get replicationcontrollers
+get pods 
+get nodes - should have 3 nodes ready
+kubectl create -f nginx-multi-label.yaml
+vim nginx-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-service
+spec:
+  ports: 
+  - port: 8000
+    targetPort: 80
+    protocol: TCP
+  selector:
+    app: nginx
+kubectl create -f nginx-service.yaml
+kubectl get services - 2 services - must exist on one host to see
+kubectl describe service nginx-service
+endpoints all the same- can be problematic- can get info from each
+kubectl run busybox --generator=run-pod/v1 --image=busybox --restart=Never --tty -i
+wget -qO- http://[ip:8000]
+kubectl delete service nginx-service -> deletes service, but not pods
+would have to bring up busybox and connect to internal ip of each pod to communicate
+
+Creating Temporary Pods at the Command Line
+kubectl run - can run a pod based on an image
+docker ps
+kubectl run mysample --image=latest123/apache
+creates a deployment
+kubectl get pods - shows pod
+kubectl get deployments - shows the deployment
+kubectl describe deployments
+kubectl describe [pod_name]
+kubectl delete deployment mysample
+kubectl get deployments
+kubectl get pods - shows pod terminating
+kubectl run myreplicas --image=latest123/apache --replicas=2 --labels=app=myapache,version=1.0
+kubectl get pods - shows 2 replicas running
+kubectl describe deployment myreplicas
+go to minion1 and docker ps - see one running
+kubectl describe pods -l version=1.0
+
+Interacting with Pod Containers
+use kubectl to connect to containers and not kill them on exit
+kubectl get pods - no pods running
+cat myapache.yaml
+apiVersion: v1
+kind: Pod
+  name: myapache
+spec:
+  containers: 
+  - name: myapache
+    image: latest123/apache
+    ports:
+    - containerPort: 80
+kubectl create -f myapache.yaml
+kubectl describe pod myapache - has container id
+kubectl get pods
+kubectl exec myapache date - runs date command in pod
+kubectl exec myapache - container_id date -> to specify container to attach to 
+kubectl exec myapache -i -t -- /bin/bash - attach to first container in myapache pod and run /bin/bash
+ps aux | grep apache
+cd /var/www/html
+ls -al
+export TERM=xterm
+apt-get update
+working in container
+apt-get install lynx
+lynx http://localhost
+mv index.html index.backup
+echo "this is a test page" > index.html
+lynx http://localhost
+exit
+kubectl get pods
+log back into pod
+term did not persist, index.html did
+
+Logs
+kubectl get pods
+to pull logs from running pod
+kubectl logs myapache
+kubectl logs --tail=1 myapache
+kubectl logs --since=24h myapache
+kubectl logs -f myapache - follow logs as they appear
+to get log on container
+kubectl logs -f -c container_name myapache
+
+Autoscaling and Scaling Our Pods
+can define minimum and maximum state for each pod
+cat nginx-multi-label.yaml
+kubectl run myautoscale --image=latest123/apache --port=80 --labels=app=myautoscale
+creates a single pod on single minion
+kubectl get deployments
+kubectl autoscale deployment myautoscale --min=2 --max=6 -> min 2 pods, max 6 pods
+kubectl get pods -> should show 2 running
+to edit the autoscale, 
+kubectl scale --current-replicas=2 
+
+
+Exercises
+Installing Kubernetes - Master Server
+1. Install and configure "ntp" so that it start on boot
+2. Install the packages necessary to create and configure a Kubernetes "Master Controller"
+3. Configure the appropriate setup files for Kubernetes, the "etcd" daemon and the API server
+4. Enable and start the appropriate services for your master controller
+
+Installing Kubernetes - Minions/Nodes
+Complete the following:
+1. Install and configure "ntp" so that it start on boot
+2. Install the packages necessary to create and configure a Kubernetes "Minion"
+3. Configure the appropriate setup files for Kubernetes and the Kubelet services
+4. Enable and start the appropriate services for your minion
+
+Docker Installation and Image Setup
+1. Update your system as appropriate for the distribution you are using. Use the instructions in the videos OR on the Docker site to add the DOCKER repository for installing the latest copy of Docker for your distribution and version.
+sudo yum update (or upgrade)
+
+2. Using the appropriate package management commands, install the 'docker' package. Once installed, enable the service so that it starts upon reboot. Additionally, start the 'docker' service and verify it is running.
+sudo yum -y install docker
+sudo systemctl enable docker
+sudo systemctl start docker
+ps aux | grep docker
+
+3. Enable the non-root users to run 'docker' commands on the system. Create the appropriate group, add the users you want to have access to 'docker' commands, restart the 'docker' service and verify that non-root users can run basic 'docker' commands.
+sudo groupadd docker
+vim /etc/group
+find line that looks like docker:x:1001: 
+add 'user' to the end of that line
+sudo service docker restart (or sudo systemctl restart docker)
+docker images
+
+4. Once 'docker' is installed and non-root users can run commands, use the appropriate 'docker' commands and options to download the latest available image in the public repository for Ubuntu. Once downloaded and installed, verify the image appears in the local base image list.
+docker pull ubuntu:latest
+docker images
+
+5. Start a container based upon the Ubuntu base image downloaded in Step #4. When you start the container, start it connected to the current terminal, in interactive mode, starting the bash shell for you to connect to. You may exit the container at that 
+docker run -it docker.io/ubuntu:latest /bin/bash
+exit
+
+
+Creating Custom Image form a Dockerfile
+1. Create a directory called 'custom' and change to it. In this directory, create an empty file called "Dockerfile". 
+mkdir custom 
+cd custom
+touch Dockerfile
+
+2. Edit the "Dockerfile" created in Step #1 above. This configuration file should be written to perform the following actions:
+Use the base Centos 6 Latest version image from the public repository
+Identify you and your email address as the author and maintainer of this image
+Update the base OS after initial import of the image
+Install the Open-SSH Server
+Install Apache Web Server
+Expose ports 22 and 80 to support the services installed
+
+vim Dockerfile
+#Dockerfile that modifies centos:centos6 to update, include ApacheWeb
+#Server and OpenSSH Server, exposing the appropriate ports
+FROM centos:centos6
+MAINTAINER User Name<username@domain.com>
+
+#Update the server OS
+RUN yum -y upgrade
+
+#Install Apache Web Server
+RUN yum -y install httpd
+
+#Install OpenSSH-Server
+RUN yum -y install openssh-server
+
+#Expose the SSH and Web Ports for attachment
+EXPOSE 22 80
+
+
+3. Build the custom image from the 'Dockerfile' as created above. Name/tag this new image as "mycustomimg/withservices:v1". Once the image is built, verify the image appears in your list.
+docker build -t mycustomimg/withservices:v1 . 
+docker images
+
+Exposing Container Ports to the Host
+1. Create a container from the 'centos:6' base image on your system. This container does not need to be name but should be run in daemon mode, interactive and connected to the current terminal. Finally, it should start the bash shell on start up
+docker run -itd docker.io/centos:6 /bin/bash
+docker ps 
+
+2. Using the appropriate Docker inspection command, find the IP address and name for the running container. Once you have the IP, ping the IP to be sure it is running. Finally, attach to the running container so you are logged into the shell.
+docker ps 
+docker inspect container_name | grep IP
+ping [IPAddress returned from previous command]
+docker attach container_name
+
+3. From within the container, install the Open-SSH server and make sure the service is running. From another terminal, try to log into the container over SSH by IP and note the result.
+yum install openssh-server
+service sshd start 
+[in separate terminal] ssh test@172.17.0.2
+
+4. Exit and stop the container. Remove the container from the list of previously run containers once you obtain the name from the appropriate Docker command.
+docker ps -a 
+docker rm container_name
+docker images
+
+5. Create another container, name this container 'test_ssh'. When creating the container, it should be run in interactive mode and attached to the current terminal running the bash shell. Finally, expose port 22 on the container to port 8022 on the host system. Once logged in, install the Open-SSH server and make sure the service is running. Find the IP address of the container and note it.
+docker run -it --name="test_ssh" -p 8022:22 docker.io/centos:6 /bin/bash
+yum install openssh-server
+ifconfig
+6. Install the 'sudo' utility. Add a user called 'test' and set a password for that user. Add the 'test' user to the 'sudoers' file. From another terminal window, attempt to log into the container via SSH on port 8022 as the 'test' user and confirm access.
+yum install sudo
+adduser test
+passwd test
+ssh test@172.17.0.3
+
+Creating Pod Definitions
+Create and display a basic POD definition that will install a single POD with a single container running the NGINX webserver image. 
+Potential POD YAML File - nginx-pod.yaml
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nginx
+spec:
+  containers:
+  - name: nginx
+    image: nginx:1.7.9
+    ports:
+    - containerPort: 80
+
+Create and display a basic POD definition that will install a single POD with a single container running the NGINX webserver image. Using the "label" directive, make sure you can refer to your pod with the name "nginx" directly.
+Potential POD Label Solution - nginx-pod-label.yaml
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nginx
+  labels:
+    app: nginx
+spec:
+  containers:
+  - name: nginx
+    image: nginx
+    ports:
+    - containerPort: 80
+
+Running a Command in Your Pod Containers
+Complete the following steps:
+1. Create a temporary deployment of pods in your environment, it should
+- have 2 replicas
+- expose port 80
+- run the nginx image
+- label of app should be set to mynginx
+
+kubectl run mypod --image=nginx --port=80 --label=app=mynginx
+
+2. Run a command that displays the pod's container /var/www/html/index.html file
+kubectl exec mypod -i -t -- cat /var/www/html/index.html

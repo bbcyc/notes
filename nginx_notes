@@ -1,0 +1,369 @@
+Linux Academy
+NGINX and the LEMP stack
+
+CentOS commmands
+
+fedora project
+linux academy lab server
+wget https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
+yum update
+yum repolist
+yum install nginx
+config to start nginx on startup
+chkconfig nginx on
+service nginx start
+yum install lynx -> text based webserver
+lynx http://localhost -> displays default webpage
+check config files
+cd /etc/nginx
+cat nginx.conf | more -> most important conf file
+user config is in
+cd /usr/share/nginx/html
+
+cd /etc/nginx
+vi nginx.conf
+worker_processes -> lets server know how many workers to spawn once it's bound to ip - usu 1 process per core
+cat /proc/cpuinfo | more -> can see how many cores are available
+worker_connections -> how many concurrent connections can be served -> most browsers open 2-3 connections
+cat  /proc/cpuinfo | grep processor | wc -l -> num of cores
+ulimit -n -> upper limit of connections
+go into nginx.conf to adjust
+buffers -> too low - nginx will have to write to system
+client body buffer size -> form submissions, etc
+client header buffer size -> only header size
+client max body size -> max size for request
+large client header buffer
+typical config for med to high traffic loads:
+put these in http section of nginx.conf
+client_body_buffer_size 10k;
+client_header_buffer_size 1k;
+client_max_body_size 8m;
+large_client_header_buffers 2 1k;
+
+timeouts can improve performance of webserver
+client_body_timeout, header_timeout - time that server will wait for these elements to be present
+408 error request timeout
+keepalive_timeout -> how long to keep connection open
+send_timeout -> time between 2 operations of reading
+add to http directive
+client_body_timeout 12;
+client_header_timeout 12;
+keepalive_timeout 15;
+send_timeout 10;
+
+service nginx restart
+
+cd /etc/nginx
+vim nginx.conf
+http section -> pull all configs for conf.d
+add -> include /etc/nginx/vhost.d/*.conf;
+mkdir vhost.d
+cd vhost.d
+mv ../conf.d/default.conf .
+vim default.conf
+comment out include /etc/nginx/default.d/*.conf
+change location / { root from /usr/share/nginx/html to /var/www/html;
+save changes and exit
+mkdir -p /var/www/html
+lynx http://localhost -> make sure it works
+echo "THIS IS OUR NEW CONFIG AND INDEX" > /var/www/html/index.html  -> new index file
+nginx -t -> test config file and other configs that are also loaded
+service nginx stop -> stops and shutdowns down all services
+service nginx restart -> does mess up existing connections
+lynx http://localhost  -> should show new index page
+
+
+vi /etc/hosts
+linux academy lab server ip www.myexample.local
+ping www.myexample.local
+mkdir /var/www/html/myexample
+echo "www.myexample.local" > /var/www/html/myexample/index.html
+cd /etc/nginx
+ll
+cd vhost.d
+edit default.conf or set up new config
+vi www.myexample.local.conf
+server {
+    listen 80;
+
+    root /var/www/html/myexample;
+    index index.html index.htm index.php;
+
+    server_name www.myexample.local myexample;
+}
+^ this is the least required to configure a server
+nginx -t -> test changes, can use to make sure config file is getting picked up
+lynx http://localhost
+lynx http://www.myexample.local -> still showing old index, need to restart nginx to pick up new config
+service nginx reload -> wont drop existing connections
+service nginx restart -> will drop existing connections
+
+cd /var/www/html
+mkdir node
+make a file called server.js
+with this content:
+
+var http = require("http"),
+    url = require("url"),
+    path = require("path"),
+    fs = require("fs"),
+    port = process.argv[2] || 8888;
+
+http.createServer(function(request, response) {
+
+    var uri = url.parse(request.url).pathname,
+        filename = path.join(process.cwd(), uri);
+
+    path.exists(filename, function(exists) {
+        if(!exists) {
+            response.writeHead(404, {"Content-type": "text/plain"});
+            response.write("404 Not Found\n");
+            response.end();
+            return;
+        }
+
+        if (fs.statSync(filename).isDirectory()) filename += '/index.html';
+
+        fs.readFile(filename, "binary", function(err, file) {
+            if(err) {
+                response.writeHead(500, {"Content-Type": "text/plain"});
+                response.write(err + "\n");
+                response.end();
+                return;
+            }
+
+            response.writeHead(200);
+            response.write(file, "binary");
+            response.end();
+        });
+    });
+}).listen(parseInt(port, 10));
+
+console.log("Static file server running at\n => http://localhost:" + port + "/\nCTRL + C to shutdown");
+
+install node.js
+sudo yum install nodejs
+vi /etc/hosts
+lab server ip www.mynode.local mynode
+from node dir
+node server.js &
+echo "This is our testnode file" > index.html
+lynx http://localhost:8888
+create upstream reference
+create new vhost file
+cd /etc/nginx/vhost.d
+vi www.mynode.local.conf
+upstream mynode {
+    server localhost:8888;
+}
+
+server {
+    server_name www.mynode.local;
+
+    location / {
+        proxy_pass http://mynode;
+    }
+}
+save and service nginx restart
+lynx http://localhost:8888
+lynx http://www.mynode.local
+
+Load balancing -> can be done through round-robin
+cd /var/www/node
+cp server.js server2.js -> make a second node server instance
+vi server2.js
+port = process.argv[2] || 8889;
+if (fs.statSync(filename).isDirectory()) filename =+ '/index2.html';
+echo "THIS IS SERVER 1" > index.html
+echo "THIS IS SERVER 2" > index2.html
+cd /etc/nginx/vhost.d
+vi www.mynode.local.conf
+to upstream directive add   server localhost:8889;
+will load balance round robin
+nginx -t
+service nginx restart
+lynx http://localhost:8888
+cd /var/www/html/node
+node server2.js &  -> start server2
+lynx http://localhost:8889
+ps aux | grep node -> shows server and server2 running
+lynx http:/www.mynode.local -> do this repeatedly to see that it is switching between the two servvers
+cd /etc/nginx/vhost.d
+vi www.mynode.local.conf
+change to
+upstream mynode {
+    server localhost:8888 weight=1;
+    server localhost:8889 weight=4;
+-> this will cause 20% of traffic to go to 8888 and 80% to 8889
+save, then nginx -t, service nginx restart
+lynx http://wwww.mynode.local several times to see that the weights have changed
+other ways to laod balance -> least connections, ip hashes
+
+Cerificates and Nginx
+Creating a self-signed certificate
+cd /etc/nginx
+mkdir ssl
+which openssl -> make sure openssl is installed
+openssl genrsa -des3 -out server.key 1024
+enter 4 digit passphrase for key
+openssl req -new -key server.key -out server.csr
+enter the 4 digit key just entered in last command
+this is to make a new key
+enter info
+remove passphrase from server key
+if not, nginx will ask for key whenever restarted
+cp server.key server.key.org
+openssl rsa -in server.key.org -out server.key
+ls -al -> should show server.csr, server.key, server.key.org
+openssl x509 -req -days 365 -in server.csr -signkey -out server.crt
+cd to vhost.d
+vi www.myexample.local.conf
+add another server section
+server {
+    listen 403;
+
+    root /var/www/html/myexample;
+    index index.html index.htm index.php;
+
+    server_name www.myexample.local myexample;
+
+    ssl_on;
+    ssl_certificate /etc/nginx/ssl/server.crt;
+    ssl_certificate_key /etc/nginx/ssl/server.key;
+}
+save and exit
+nginx -t
+service nginx restart
+lynx http://www.myexample.local
+lynx https://www.myexample.local will give an error about a self-signed cert that can be ignored to see if it is working
+
+Location directive
+cat /etc/hosts
+grab ip for linux lab server
+cd /etc/nginx/vhost.d
+vi www.myexample.local.conf
+to have multiple file locations, remote of local, need to use location directive
+remove root directive from server and add
+location / {
+    root /var/www/html/myexample;
+}
+this is the same as the old root directive
+service nginx restart
+shows the same -> but is more flexible
+to proxy a connection
+add to .conf
+location /google/ {
+    proxy_pass http://google.com
+}
+nginx -t
+service nginx restart
+lynx http://www.myexample.com/google serves the content from google.com
+cd /var/www/html
+mkdir images
+cd images
+echo "images" > images.txt
+vhost.d
+vi www.myexample.local.conf
+add
+location /images/ {
+    root /var/www/html/images;
+}
+nginx -, service nginx restart, lynx http://www.myexample.local/images shows files from /var/www/html/images
+
+Return directive
+cd /etc/nginx/vhost.d
+vi www.myexample.local.conf
+under server add
+location /forum {
+    return 404;
+}
+save, nginx -t, service nginx restart, lynx http://www.myexample.local/forum -> returns 404
+to show a permanent redirect 301
+change .conf
+location /forum {
+    return 301 http://www.google.com
+}
+redirects www.myexample.local/forum to www.google.com
+
+Basic rewrites
+Takes a regex and rewrites it to serve it from a new location
+cd /etc/nginx/vhost.d
+vi www.myexample.local.conf
+if forum changed to forums we can rewrite a request for forum to forums
+location /forum {
+    rewrite ^/forum/(.*)$ http://www.myexample.local/forums/$1 permanent;
+save, nginx -t, cd /var/www/html/myexample
+mkdir forums
+echo "forum test file" > forums.txt
+restart nginx
+lynx http://www.myexample.local/forum/forums.txt -> see that it redirects to /forums/forums.txt
+another way to serve location based content based on uri
+
+Custom Error Pages
+Can exercise more control over error pages on system level or domain level
+cd /var/www/html/myexample
+echo "THIS IS OUR CUSTOM CONTENT DOES NOT EXIST PAGE - www.myexample.local - 404 error" > 404.html
+cd /etc/nginx
+vi nginx.conf - to edit on a system wide level
+cd vhost.d
+vi www.myexample.local.conf
+under server add
+error_page = /404.html;
+location = /403.html {
+    root /var/www/html/myexample;
+    internal;
+}
+can not be accessed externally
+save, nginx -t, restart, lynx http://www.myexample.local/somegarbagethatdontexit -> shows custom 404 page
+
+Logging directives
+nginx.conf has many default logging directives
+error_log /var/log/nginx/error.log
+access log -> assumes that service is running, http will answer requests that are then logged
+log_format for exact format of log
+cd /var/log/nginx
+cat access.log
+cat error.log
+for servers that are serving multiple domains, want to keep logs separate
+vi www.myexample.local.conf
+in server 80, between server_name and location add
+access_log /var/log/nginx/myexample.access.http.log;
+error_log /var/log/nginx/myexample.error.http.log;
+in server 443 add
+access_log /var/log/nginx/myexample.access.https.log;
+error_log /var/log/nginx/myexample.error.https.log;
+save, nginx -t, service nginx restart, lynx http://www.myexample.local and https://www.myexample.local and make erros
+now check /var/log/nginx/ and cat myexample.access.http.log and see the visit
+
+Custom Log Levels
+cd /etc/nginx/vhost.d
+access log can be buffered and compressed
+vi www.myexample.local.conf
+access_log /var/log/nginx/myexample.access.http.log buffer=32k; -> will buffer to 32k before writing to system
+error_log can be set to log different levels
+emergency alert critical errors warning notice info
+error_log /var/log/nginx/myexample.error.http.log debug;
+reload and generate some errors
+cd /var/log/nginx check logs to see what is considered debug
+
+Custom Access Log Format
+Error log can only be customized to error level
+/etc/nginx/vhost.d/www.myexample.local.conf
+can define one or more log formats for access log
+is server 80, below server_name add (can get all format vars by googling)
+log_format myAccessFormat 'Remote IP: $remote_addr - Time Request: $time_local - Browser Agent: $http_user_agent';
+access_log /var/log/nginx/myexample.access.http.log myAccessFormat buffer=32k;
+save, nginx -t, service nginx restart
+/var/log/nginx
+generate some traffic, then check /var/log/nginx/myexample.access.http.log
+cd /etc/nginx/vhost.d
+vi www.myexample.local.conf
+can create multiple log_formats with diff names
+
+
+
+
+
+
+
+

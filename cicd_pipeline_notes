@@ -54,10 +54,121 @@ Build Automation
   Packaging the App for Deployment
 
 Gradle
-gradle.org
-needs java jdk7 or higher
-on centos
-wget -O ~/gradle-4.7-bin.zip https://services.gradle.org/distibutions/gradle-4.7-bin.zip
-sudo yum -y install java-1.8.0-openjdk unzip
+gradle.org/install
+Needs Java JDK 7 or higher
+
+In Centos 7
+wget -O ~/gradle-4.7-bin.zip https://services.gradle.org/distributions/gradle-4.7-bin.zip
+sudo yum -y install unzip java-1.8.0-openjdk
+sudo mkdir /opt/gradle
+sudo unzip -d /opt/gradle/ ~/gradle-4.7-bin.zip
+sudo vim /etc/profile.d/gradle.sh
+  export PATH=$PATH:/opt/gradle/gradle-4.7/bin
+sudo chmod 755 /etc/profile.d/gradle.sh
+log out and back in
+gradle --version
+
+Gradle Wrapper
+script that invokes a declared version of Gradle, downloading if necessary
+install the wrapper by
+cd /your/project/root/directory
+gradle wrapper
+add .gradle to .gitignore
+run gradle command from root dir with ./gradlew build
+
+gradle basics
+a gradle build is defined in a groovy script called build.gradle located in project root dir
+
+gradle init - create new project
+
+./gradlew someTask someOtherTask - runs someTask and then someOtherTask
+build.gradle controls what tasks are available
+you can define your own tasks in build.gradle
+task dependencies need to be enumerated
+taskA.dependsOn taskB
+
+plugins - lots available
+prebuilt tasks
+
+gradle.build file
+plugins {
+    id 'com/moowork.node' version '1.2.0'
+}
+
+task sayHello << {
+    println 'Hello, World!'
+}
+
+task anotherTask << {
+    println 'This is another task'
+}
+
+./gradlew sayHello
+
+Automated Testing
+create a test task and have the build task depend on it
+task build
+task test
+build.dependsOn test
+
+Continuous Integration
+practice of frequently merging code changes
+
+use a CI server to automatically execute build automation
+if the code doesn't compile of the tests fail, then the build fails
+gives quick feedback and makes it easier to find and fix problems
+
+Jenkins
+jenkins.io
+installing jenkins on centos with yum
+sudo yum -y remove java
+sudo yum -y install java-1.8.0-openjdk
+sudo yum install epel-release
+sudo wget -O /etc/yum.repos.d/jenkins.repo http://pkg.jenkins-ci.org/redhat-stable/jenkins-repo
+sudo rpm --import https://jenkins-ci.org/redhat/jenkins-ci.org.key
+sudo yum -y install jenkins-2.121.1
+sudo systemctl enable jenkins
+sudo systemctl start jenkins
+go to <your server address>:8080 in browser and follow instructions to log in
+install suggested plugins
+create first admin user
+
+set up a jenkins project
+project - the config that controls jenkins automation
+copy url of source code repo
+create new project - freestyle
+source code management - repo url
+build - invoke gradle script
+task - build
+archive the artifacts - postbuild actions - dist-trainschedule.zip
+
+
+Webhooks
+Notifications from one application to another over http
+set up github webhooks in jenkins
+create an access token in github
+add a github server in jenkins
+create a jenkins credential with the token and configure github server
+check 'manage hooks' for github server config
+in project config under 'Build Triggers' select
+  'GitHub hook trigger for GITScm polling'
+
+create personal fork of train schedule app
+developer settings->personal access tokens->new token
+  admin:repo hook permission
+copy api key
+go to jenkins
+manage jenkins->configure system
+add github server
+make up name
+add credentials->secret text
+paste api key into Secret field
+select key and make sure manage hooks is checked
+save and go to project
+configure->source code management->git->change url to personal fork
+select Github hook trigger
+go back to github->settings->webhooks->jenkins webhook should be there
+make a commit and the build should be started in jenkins
+
 
 

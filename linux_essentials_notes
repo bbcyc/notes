@@ -1,0 +1,25 @@
+passwd - change user password
+su - - switch to root user
+cat - display contents of a file
+
+
+
+
+debian-based systems
+apt-get update - update
+apt-cache search nginx
+apt-get install nginx
+apt-get remove nginx
+apt-get remove --purge nginx
+apt-get autoremove nginx
+apt-get upgrade - upgrade all packages
+apt-get dist upgrade - upgrades OS
+dpkg - installs debian files .deb
+wget - download and access http files
+dpkg -i dropbox.deb - install dropbox.deb
+apt-get -f upgrade - update dependencies for dpkg install
+dpkg --get-selections - see all packages installed
+dpkg --purge dropbox - purge configs for dropbox
+
+
+
