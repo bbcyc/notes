@@ -483,5 +483,149 @@ while read -r SUPERHERO; do
   echo "Superhero Name: $SUPERHERO"
 done < "$FILE"
 
+file descriptors 
+0 - standard input
+1 - standard output
+2 - standard error
+pick a number greater than or equal to 3 for a file descriptor in a script
 
+filedesc.sh
+---
+#!/bin/bash
+# demo
+
+echo "Enter a file name to read: "
+read FILE
+
+exec 5<>$FILE # 5 is file descriptor >=3; 5 is arbitrary; < is read-only; > is write-only; <> is both; 
+
+while read -r SUPERHERO; do # `read -r` means read a file one line at a time
+  echo "Superhero Name: $SUPERHERO"
+done <&5  # reference to file descriptor is passed in
+
+echo "File Was Read On: `date`" >&5 # write out using file descriptor
+
+exec 5>&-  # closes file descriptor; not necessary but best practice to not fill up available file descriptor slots
+---
+
+delimited files
+IFS - internal field separator
+echo $IFS
+cat spacedelim.txt
+i7 4Gz 32gb 4TB
+
+vim ifsdelim.sh
+---
+#!/bin/bash
+# delimiter example using IFS
+
+echo "Enter filename to parse: "
+read FILE
+
+echo "Enter the delimiter: "
+read DELIM
+
+IFS="$DELIM"
+
+while read -r CPU MEMORY DISK; do
+  echo "CPU: $CPU"
+  echo "Memory: $MEMORY"
+  echo "Disk: $DISK"
+done <"$FILE"
+---
+this script takes a file as input and splits it up base on the delimiter provided
+
+---
+trap - allows to look for an event and act based on it
+vim trapex.sh
+---
+#!/bin/bash
+# example of trapping events and limiting the shell stopping
+
+clear
+
+trap 'echo " - Please Press Q to Exit..."' SIGINT SIGTSTP SIGTERM 
+	# trap takes 2 args, first is what to do in single quotes, 
+	# second is what signals to trap
+
+while [ "$CHOICE" != "Q" ] && [ "$CHOICE != "q" ]; do
+  echo "MAIN MENU"
+  echo "========="
+  echo "1) Choice One"
+  echo "2) Choice Two"
+  echo "3) Choice Three"
+  echo "Q) Quit/Exit"
+  echo ""
+  read CHOICE
+
+  clear
+done
+
+---
+SIGINT - ctrl-c
+SIGTERM - 
+SIGTSTP - ctrl-z
+
+Debugging Scripts
+set debugging for entire script
+bash -x env.sh
+gives info while script is running
+
+to debug part of a script
+use set -x at start and set +x at finish
+----
+#!/bin/bash
+# simple file reading (non-binary) and displaying one line at a time
+
+echo "Enter a filename to read: "
+
+# DEBUG START
+set -x
+
+read FILE
+
+while read -r SUPERHERO; do
+  echo "Superhero Name: $SUPERHERO"
+done < "$FILE"
+
+set +x
+# STOPS DEBUG
+----
+set -f stops wildcards
+
+vim errorexit.sh
+----
+#!/bin/bash
+# demo of using error handling with exit
+
+echo "Change to a directory and list the contents"
+DIRECTORY=$1 
+
+cd $DIRECTORY 2>/dev/null   # redirect std error output to /dev/null
+if [ "$?" = "0" ]; then     # $? is exit status of last command
+  echo "We can change into the directory $DIRECTORY, and here are the contents"
+  echo "`ls -al`"
+else
+  echo "Cannot change directories, exiting with an error and no listing"
+  exit 1
+fi
+
+
+Simple Functions
+simplefunc.sh
+----
+#!/bin/bash
+# this is a simple function example
+
+# function cannot be empty or just contain a comment, can contain : which is short for null
+
+echo "Starting function definition"
+funcExample () {
+  echo "We are now in the function..."
+} 
+# single line function needs to end command with semicolon
+
+anotherFuncExample () { echo "we are in another function...'; }
+
+funcExample  # have to call the function after defining it
 
