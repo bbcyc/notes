@@ -629,3 +629,194 @@ anotherFuncExample () { echo "we are in another function...'; }
 
 funcExample  # have to call the function after defining it
 
+vim funstructure.sh
+----
+#!/bin/bash
+# demo of functions within a shell script structure
+
+# script or global variables
+CMDLINE=$1
+
+# function definitions - start
+
+# displays a message
+funcExample () {
+  echo "This is an example"
+}
+
+# displays another message
+funcExample2 () {
+  echo "This is another example"
+}
+
+# function definitions - end
+
+# beginning of the script
+echo "This is the start..."
+
+funcExample2    # function must be defined before it is called
+funcExample
+----
+
+vim varscope.sh
+----
+#!/bin/bash
+# demonstrating variable scope
+
+# global variable declaration
+GLOBALVAR="Globally visible"
+
+# function definitions - start
+
+# sample function for function variable scope
+funcExample () {
+  # local variable to the function
+  LOCALVAR="Locally Visible"
+ 
+  echo "From within the function, the variable is $LOCALVAR..."
+}
+
+# function definitions - stop
+
+# script - start
+clear
+
+echo "This step happens first..."
+echo ""
+echo "GLOBAL variable = $GLOBALVAR (before the function call)"
+echo "LOCALVAR variable = $LOCALVAR (before the function call)"
+echo ""
+echo "Calling Function - funcExample()"
+echo ""
+
+funcExample
+
+echo ""
+echo "Function has been called..."
+echo ""
+echo "GLOBAL variable = $GLOBALVAR (after the function call)"
+echo "LOCAL variable = $LOCALVAR (after the function call)"
+----
+
+vim funcparams.sh
+----
+#!/bin/bash
+# this demo is for functional parameter passing
+
+#global variable
+USERNAME=$1
+
+# function definitions - start
+
+funcAgeInDays () {
+  echo "Hello $USERNAME, You are $1 Years Old."
+  echo "That makes you approximately `expr $1 \* 365` days old..."
+}
+
+# function definitions - stop
+
+# script - start
+clear
+
+echo "Enter Your Age: "
+read USERAGE
+
+# calculate the number of days
+funcAgeInDays $USERAGE
+----
+
+Nested Functions
+define a function with one of more functions inside of it
+
+vim nested.sh
+----
+#!/bin/bash
+# demo of nested functions and some abstraction
+
+# global variable
+GENDER=$1
+
+# create a human being
+funcHuman () {
+  ARMS=2
+  LEGS=2
+
+  echo "A Human has $ARMS arms and $LEGS legs - but what gender are we?"
+  echo ""
+
+  funcMale () {
+    BEARD=1
+
+    echo 'This man has $ARMS arms and $LEGS legs, with $BEARD beard(s)..."
+    echo ""
+  }
+
+  funcFemale () {
+    BEARD=0
+
+    echo "This woman has $ARMS arms and $LEGS legs, with $BEARD beard(s)..."
+    echo ""
+  }
+}
+
+# function definitions - stop
+
+# script - start
+clear
+echo "Determining the characteristics of the gender $GENDER"
+echo ""
+
+# determine the actual gender and display the characteristics
+if [ "$GENDER" == "male" ]; then
+  funcHuman
+  funcMale
+else 
+  funcHuman
+  funcFemale
+fi
+----
+
+vim returnval.sh
+----
+#!/bin/bash 
+# demo of return values and testing results
+
+# global variable
+YES=0
+NO=1
+FIRST=$1
+SECOND=$2
+THIRD=$3
+
+# function definitions - start
+
+# check the command line parameters passed in
+funcCheckParms () {
+  # did we get three 
+  if [ ! -z "$THIRD" ]; then
+    echo "We got three parms..."
+    return $YES
+  else 
+    echo "We did not get three parms..."
+    return $NO
+  fi
+}
+
+# function definitions - stop
+
+# script - start
+funcCheckParms
+RETURN_VALS=$?
+
+# did we get three or not?
+if [ "$RETURN_VALS" -eq "$YES" ]; then
+  echo "We received three parms and they are: "
+  echo "Parm 1: $FIRST"
+  echo "Parm 2: $SECOND"
+  echo "Parm 3: $THIRD"
+  echo ""
+else
+  echo "Usage: returnval.sh [parm1] [parm2] parm3]"
+  exit 1
+fi
+
