@@ -170,5 +170,111 @@ select Github hook trigger
 go back to github->settings->webhooks->jenkins webhook should be there
 make a commit and the build should be started in jenkins
 
+Jenkins Pipelines - https://jenkins.io/doc/book/pipeline
+set of jenkins plugins that support continuous delivery
+
+Jenkinsfile - file kept in source control with steps to deploy
+
+Two syntaxes - scripted and declarative
+
+Project>Configure>Pipeline Script - not best practice, should be in source control
+
+Pipeline Stages - large pieces of a CD process
+Build code
+Test code
+deploy to staging
+deploy to production
+
+Pipeline steps - individual tasks that make up a stage
+execute a command
+copy files
+restart a service
+wait for input
+steps implemented with declarative keywords
+
+Jenkinsfile
+----
+pipeline {
+    agent any
+    staging {
+        stage("Build") {
+            steps {
+                echo "Running build automation"
+                sh "./gradlew build --no-daemon"
+                archiveArtifacts artifacts: 'dist/trainSchedule.zip'
+            }
+        }
+    }
+}
+----
+https://jenkins.io/doc/pipeline/steps
+
+Continuous Delivery - ensuring that you are always able to deploy any version of your code.
+Continuous Deployment - deploying code frequently
+
+automate deployment
+Define Stages for stages of the CD process that involve deploying
+In each deployment stage, define Steps that perform the tasks necessary to carry out the deployment
+We can also prompt the user for approval before performing the actual production deployment
+
+Demo Setup
+Jenkins server configured to manage webhooks on Github
+Personal fork of sample code
+Staging and production webservers
+  user called deploy set up with perms to perform deploy steps
+  systemd service configured for the train schedule app
+jenkins ui>manage jenkins>manage plugins>search 'Publish over SSH'>install wo restart
+jenkins main page>manage jenkins> configure jenkins>Publish over SSH>
+  SSH Servers>Add>name 'staging' hostname 'ip address' remote directory '/'
+  Add>name 'production' hostname 'public ip of server' remote directory '/'
+jenkins main page>Credentials>Jenkins scope>global>add credentials
+  username 'deploy' password 'password of deploy' id 'webserver_login' desc 'Webserver Login'
+jenkins main page>new item>train-schedule - multibranch pipeline>ok
+  branch sources>add source>github>add>jenkins>username with password>username-github username
+  password-github api key id-github_api_key desc-github api key>add
+  select newly created credential from dropdown owner-github username repos will autopopulate>
+  pick train-schedule and save
+go to github>edit Jenkinsfile
+----
+pipeline {
+    agent any
+    stages {
+        stage("Build") {
+            stage {
+                echo "Running build automation"
+                sh './gradlew build --no-daemon'
+                archiveArtifacts artifacts: 'dist/trainSchedule.zip'
+            }
+        }
+        stage('DeployToStaging') {
+            when {
+                branch 'master'
+            }
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'webserver_login', usernameVariable: 'USERNAME', passwordVariable: 'USERPASS')]) {
+                    sshPublisher(
+                        failOnError:true,
+                        continueOnError:false,
+                        publishers: [
+                            sshPublisherDesc(
+                                configName: 'staging',
+                                sshCredentials: [
+                                    username: "$USERNAME"
+                                    encryptedPassphrase: "$USERPASS"
+                                ],
+                                transfers: [
+                                    sshTransfer(
+                                        sourceFiles: 'dist/trainSchedule.zip'
+                                        removePrefix: 'dist/'
+                                        remoteDirectory: '/tmp',
+                                        execCommand: 'sudo /usr/bin/systemctl stop train-schedule && rm -rf /opt/train-schedule'
+                                    )
+                                ]
+                            )
+                        ]
+                    )
+                }
+            }
+
 
 
