@@ -820,3 +820,185 @@ else
   exit 1
 fi
 
+InfoBox
+method of popping up an n-curses?
+yum install dialog
+vim simpleinfobox.sh
+----
+#!/bin/bash
+# demo of a simple info box with dialog and ncurses
+
+# global variables / default values
+INFOBOX=${INFOBOX=dialog}
+TITLE="Default"
+MESSAGE="Something to say"
+XCOORD=10
+YCOORD=20
+
+# function declarations - start
+
+# display the infobox and our message
+funcDisplayInfoBox () {
+  $INFOBOX --title "$1" --infobox "$2" "$3" "$4"
+  sleep "$5"
+}
+
+# function declarations - stop
+
+# script - start
+
+if [ "$1" == "shutdown" ]; then
+  funcDisplayInfoBox "WARNING!" "We are SHUTTING DOWN the System..." "11" "21" "5"
+  echo "Shutting Down!"
+else
+  functionDispalyInfoBox "Information..." "You are not doing anything fun..." "11" "22" "5"
+  echo "Not doing anything..."
+fi
+
+# script - stop
+----
+
+MessagBox for Confirmation
+man dialog
+vim simpleMessageBox.sh
+----
+#!/bin/bash
+# demo of a message box with an OK button
+
+#global variables / default variables
+MSGBOX=${MSGBOX=dialog}
+TITLE="Default"
+MESSAGE="Some Message"
+XCOORD=10
+YCOORD=20
+
+#function declarations - start
+
+# display the message box with our message
+funcDisplayMsgBox () {
+  $MSGBOX --title "$1" --msgbox "$2" "$3" "$4"
+}
+
+# function declarations - stop
+
+# script - start
+if [ "$1" == "shutdown" ]; then
+  funcDisplayMsgBox "WARNING!" "Please press OK when you are ready to shut down the system" "10" "20"
+  echo "SHUTTING DOWN NOW!!!"
+else
+  funcDisplayMsgBox "Boring..." "You are not asking for anything fun..." "10" "20"
+  echo "Not doing anything, back to regular scripting..."
+fi
+
+# script - stop
+----
+
+vim simple dialog.sh
+----
+#!/bin/bash
+# demo of a dialog box that display a menu
+
+# global variables / default values
+MENUBOX=${MENUBOX=dialog}
+
+# function declarations - start
+
+# function to display a simple menu
+funcDisplayDialogMenu () {
+  $MENUBOX --title "[ M A I N   M E N U ]" --menu "Use UP/DOWN Arrows to Move and Select the Number of Your Choice and Enter" 15 45 4 1 "Display Hello World" 2 "Display Goodbye World" 3 "Display Nothing" X "Exit" 2>choice.txt
+}
+# 15=xcoord 45=ycoord 4=number of options 1=name of first option 
+# 2>choice.txt redirect std error to file to capture user input
+
+# function declarations - stop
+
+# script - start
+
+funcDisplayDialogMenu
+
+case "`cat choice.txt`" in
+  1) echo "Hello World";;
+  2) echo "Goodbye World";;
+  3) echo "Nothing";;
+  X) echo "Exit";;
+esac
+
+# script - stop
+----
+
+InputBox
+vim simpleinputbox.sh
+----
+#!/bin/bash
+# simple demo of an input dialog box
+
+# global variables / default values
+INPUTBOX=${INPUTBOX=dialog}
+TITLE="Default"
+MESSAGE="Something to display"
+XCOORD=10
+YCOORD=20
+
+# function declarations - start
+
+# display the input box
+funcDisplayInputBox () {
+  $INPUTBOX --title "$1" --inputbox "$2" "$3" "$4" 2>tmpfile.txt
+}
+
+# function declarations - stop
+
+# script - start
+
+funcDisplayInputBox "Display File Name" "Which file in the current directory do you want to display?" "10" "20"
+
+if [ "`cat tmpfile.txt`" != "" ]; then
+  cat "`cat tmpfile.txt`"
+else
+  echo "Nothing to do"
+fi
+
+# script - stop
+----
+
+Overriding Events
+vim overriding.sh
+----
+#!/bin/bash
+# override/trap the system exit and execute a custom function
+
+# global variables
+TMPFILE="tmpfile.txt"
+TMPFILE2="tmpfile2.txt"
+
+trap 'funcMyExit' EXIT
+
+# function declarations - start
+
+# run this exit instead of the default exit when called
+funcMyExit () {
+  echo "Exit Intercepted..."
+  echo "Cleaning up the temp files..."
+  rm -rf tmpfil*.txt
+  exit 255
+}
+
+# function declarations - stop
+
+# script - start
+
+echo "Write something to tmp file for later use..." > $TMPFILE
+echo "Write something to tmp file 2 for later use..." > $TMPFILE2
+
+echo "Trying to copy the indicated file before processing..."
+cp -rf $1 newfile.txt 2>/dev/null
+
+if [ "$?" -eq "0" ]; then
+  echo "Everything worked out ok..."
+else
+  echo "I guess it did not work out ok..."
+  exit 1
+fi
+
+# script - stop
+----
