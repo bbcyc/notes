@@ -241,7 +241,7 @@ pipeline {
     stages {
         stage("Build") {
             stage {
-                echo "Running build automation"
+                echo 'Running build automation'
                 sh './gradlew build --no-daemon'
                 archiveArtifacts artifacts: 'dist/trainSchedule.zip'
             }
@@ -267,7 +267,7 @@ pipeline {
                                         sourceFiles: 'dist/trainSchedule.zip'
                                         removePrefix: 'dist/'
                                         remoteDirectory: '/tmp',
-                                        execCommand: 'sudo /usr/bin/systemctl stop train-schedule && rm -rf /opt/train-schedule'
+                                        execCommand: 'sudo /usr/bin/systemctl stop train-schedule && rm -rf /opt/train-schedule/* && unzip /tmp/trainschedule.zip -d /opt/train-schedule && sudo /usr/bin/systemctl start train-schedule'
                                     )
                                 ]
                             )
@@ -275,6 +275,63 @@ pipeline {
                     )
                 }
             }
+	}
+	stage('DeployToProduction') {
+	    when {
+		branch 'master'
+	    }
+	    steps {
+		input 'Does the staging environment look OK?'
+		milestone(1)
+		withCredentials([usernamePassword(credentialsID: 'webserver_login', usernameVariable: 'USERNAME', passwordVariable: 'USERPASS')]) {
+		    sshPublisher(
+			failOnError: true,
+			continueOnError: false,
+			publishers: [
+			    sshPublisherDesc(
+				configName: 'production',
+				sshCredentials: [
+				    username: "$USERNAME",
+				    encryptedPassphrase: "$USERPASS"
+				],
+				transfers: [
+				    sshTransfer(
+					sourceFiles: 'dist/trainSchedule.zip',
+					removePrefix: 'dist/',
+					remoteDirectory: '/tmp',
+					execCommand: 'sudo /usr/bin/systemctl stop train-schedule && rm -rf /opt/train-schedule/* && unzip /tmp/train-schedule.zip -d /opt/train-schedule && sudo usr/bin/systemctl start train-schedule'
+				    )
+				]
+			    )
+			]
+		    )
+		}
+	    }
+	}
+    }
+}
+
+
+test build
+check staging server
+if ok, click Proceed and check production server
+make change to index.jade file
+commiting change will kick off new deployment, check staging, approve and check prod
+code for this jenkinsfile is at https://github.com/linuxacademy/cicd-pipeline-train-schedule-cd
+to create deploy user with necessary perms and configure the train-schedule app as a systemd service:
+adduser deploy
+echo "deploy:jenkins" | chpasswd
+groupadd train-schedule
+usermod -a -G train-schedule deploy
+echo "deploy ALL=(ALL) NOPASSWD: /usr/bin/systemctl stop train-schedule" >> /etc/sudoers
+echo "deploy ALL=(ALL) NOPASSWD: /usr/bin/systemctl start train-schedule" >> /etc/sudoers
+echo -e "[Unit]\\nDescription=Train Schedule\\nAfter=network.target\\n\\n[Service]\\n\\nType=simple\\nWorkingDirectory=/opt/train-schedule\\nExecStart=/usr/bin/node bin/www\\nStandardOutput=syslog\\nStandardError=syslog\\nRestart=on-failure\\n\\n[Install]\\nWantedBy=multi-user.target" > /etc/systemd/system/train-schedule.service
+/usr/bin/systemctl daemon-reload
+mkdir -p /opt/train-schedule
+chown root:train-schedule /opt/train-schedule
+chmod 775 /opt/train-schedule/
+yum -y install nodejs unzip
+
 
 
 
