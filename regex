@@ -64,6 +64,13 @@ D -> literal character
 \d -> any digit 0-9
 \s -> -> any whitespace character
 for XML, .net, XPath a few others there is a way to subtract from a range
-    [A-Z-[D]][A-Z-[E]] -> A-Z except for D and A-Z except for E
+
+Backreferences
+Match all header tags except H1
+<([Hh][2-3]).*?>.+?<\/\1>
+Match only HTML tags to strip out
+<[^>]*>
+grep -o -P "<([Hh][2-3]).*?>.+?<\/\1>" study-guide.html | sed 's/<[^>]*>//g' > toc.txt
+find all of the lines that are not in h1 tags, strips out the tags, then outputs to a file
 
 
