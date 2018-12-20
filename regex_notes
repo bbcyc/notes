@@ -240,4 +240,24 @@ Match only HTML tags to strip out
 grep -o -P "<([Hh][2-3]).*?>.+?<\/\1>" study-guide.html | sed 's/<[^>]*>//g' > toc.txt
 find all of the lines that are not in h1 tags, strips out the tags, then outputs to a file
 
+Named groups
+Different implementations
+Python
+Named Group <(?P<tag>[Hh][2-3]).+?> -> named group is ?P<tag>
+Reference <\/(?P=tag)>
+.NET
+Named Group <(?<tag>[Hh][2-3]).+?> -> ?<tag>
+	    <(?'tag'[Hh][2-3]).+?> -> ?'tag'
+Reference
+<\/\k<tag>>
+<\/\k'tag'>
+PCRE
+Named group <(?P<tag>[Hh][2-3]).+?> -> ?P<tag>
+	    <(?<tag>[Hh][2-3]).+?>  -> ?<tag>
+	    <(?'tag'[Hh][2-3]).+?>  -> ?'tag'
+Reference <\/(?P=tag)>  <\/\g{tag}
+	  <\/\k<tag>    <\/\k{tag}
+		<\/\k'tag'>
+example
+grep -o -P "<(?'tag'[Hh][2-3]).+?>.*?<\/\k'tag'>" study-guide.html | sed 's/<[^>]*>//g'
 
