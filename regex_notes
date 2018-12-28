@@ -9,7 +9,7 @@ examples of regex
 globbing
 ls *.txt
 * - wildcard for any character
-vim - uses regex for 
+vim - uses regex for
 ^ - move to front of a line
 $ - move to end of line
 
@@ -48,7 +48,7 @@ IEEE POSIX Standards
   ERE- Extended Regular Expressions
   SRE- Simple Regular Expressions- not used anymore
 ERE builds off BRE
-ERE adds repitition, alternation, changes the () and {} 
+ERE adds repitition, alternation, changes the () and {}
 DFA friendly
 [:digit:] to match digit
 
@@ -57,9 +57,9 @@ used by Java, Python, .NET
 Perl supports many Python implementations
 NFA-minded
 
-grep -P '\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}' ip 
+grep -P '\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}' ip
   runs PCRE grep wtih the ip address pattern on file named 'ip'
-grep -E '\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}' ip 
+grep -E '\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}' ip
   runs ERE grep on ip which returns nothing bc \d is not supported
 grep -E '[[:digit:]]{1,3}\.[[:digit:]]{1,3}\.[[:digit:]]{1,3}\.[[:digit:]]' ip
   returns the ips now
@@ -102,12 +102,12 @@ I-500                Enterprise                  Gamma Series                   
 Ix-900               Enterprise                  Gamma Series                         $750.00
 
 
-/\w/g - matches any word, which includes numbers 
+/\w/g - matches any word, which includes numbers
 /[A-D]\g - matches any uppercase letter between A and D
 /[ABD]\g - matches only A, B, or D
 /\W/g - matches any nonword
 /[ABD]\W/g - matches an A, B, or D followed by a nonword
-/[ABD]\W\w\w\w/g - 
+/[ABD]\W\w\w\w/g -
   [ABD] - match a character that is either A, B, or D (uppercase)
   \W - match a non-word character (NOT A-Z, a-z, 0-9)
   \w - match a word character (A-Z, a-z, 0-9); each \w is an individual token
@@ -116,7 +116,7 @@ Digits
 \d - digit 0-9, each \d is an individual token
 \D - not a digit
 - - used outside of a range, the dash has no special meaning and can be used as a literal
-/[ABD]-[6-9]\d\d/g 
+/[ABD]-[6-9]\d\d/g
   [6-9] - match any number between 6 and 9
 
 Whitespace
@@ -260,4 +260,101 @@ Reference <\/(?P=tag)>  <\/\g{tag}
 		<\/\k'tag'>
 example
 grep -o -P "<(?'tag'[Hh][2-3]).+?>.*?<\/\k'tag'>" study-guide.html | sed 's/<[^>]*>//g'
+
+Lookaheads
+Match an extended zipcode, only capturing the first 5 digits
+(\d{5})(?=-\d{4}) - this is a positive lookahead
+(?=  ) -> match an expression in a group but do not capture it, works as a boundary
+grep -P '(\d{5})(-\d{4})' customer-data.txt -> matches and returns entire ZIP+4 code
+grep -P '(\d{5})(?=-\d{4})' customer-data.txt -> same line matches but only highlights first 5 digits
+
+Negative lookaheads
+Match any instance of linuxacademy.com not followed by "blog"
+linuxacademy\.com(?!\/blog)
+(?! ) -> ensure the grouped text does not follow the prior expression; works as a boundary
+grep -P 'linuxacademy\.com' access-logs -> returns all logs with linuxacademy.com in them
+grep -P 'linuxacademy\.com(?!\/blog)' access-logs -> returns all logs with linuxacademy.com but not linuxacademy.com/blog
+grep -P "linuxacademy\.com(?!\/blog)" access-logs -> fails because bash does weird stuff to ! when using double-quotes
+
+Lookbehinds
+Positive lookbehinds
+Find all metacharacters referenced in a study guide
+(?<=<li><code>).+?(?=<\/code>)
+(?<= ) -> matches an expression in that group, but does not capture it; works as a boundary
+grep -Po '(?<=<li><code>).+?(?=<\/code)' study-guide.html ->
+cannot use + or * based quantifiers in lookbehinds bc they can go on forever
+Negative lookbehinds
+Find all text within code tags that are not at the start of a line
+(?<!<li><code>)(?<=<code>).+?(?=<\/code>)
+(?<! ) -> ensures a group does not come before the following expression, works as a boundary
+<li><code> -> literal matches
+
+Take a Salt file, remove excess whitespace, use lookarounds to match all data between (---------)
+and before 'changes:', output the data with grep -z to allow for multi-line matching
+sed -i 's/^\s*//g' highstate -> -i = edit replace all spaces at beginning of line with nothing globally
+grep -Pzo -> P - PCRE perl compatible regexes  z -> match across multiple lines  o -> only output matches
+grep -Pzo '(?<=-{10})\n__id__:(?:\n|.)+?(?=changes:)' highstate > sls-report.txt
+(?<=-{10}) -> lookbehind that finds 10 dashes in a row
+\n__id__: -> literals
+(?:\n|.)+? -> unnamed group - matches newline and anything 1 or more times, non-greedy
+(?=changes:) -> lookahead for changes:
+
+If Conditionals
+Match only the ID and function lines of a log file
+(ID|(Function)): (?(2)\w+?\.\w+|\w+)
+(ID|(Function)) -> capturing group
+(Function) -> second capturing group
+ID, Function, and : are literals
+| is or operator
+(? ) -> if conditional group
+(2) -> references the second captured group (Function);
+    if the captured expression matches this capturing group,
+    continue to match the following expression up until the vertical pipe
+\w -> any word character
++? - repeat expression 1 or more times, non-greedy
+\. - escaped literal
+| - works as the "else" within the if conditional group; anything that does not match the (2) matches this
+File contents to match from:
+minion1:
+----------
+          ID: php_install
+    Function: pkg.installed
+        Name: php
+      Result: True
+     Comment: All specified packages are already installed
+     Started: 16:19:04.217642
+    Duration: 587.977 ms
+     Changes:
+----------
+          ID: mod_mysql
+    Function: pkg.installed
+        Name: php-mysql
+      Result: True
+     Comment: All specified packages are already installed
+     Started: 16:19:04.805807
+    Duration: 14.708 ms
+     Changes:
+----------
+          ID: mod_curl
+    Function: pkg.installed
+        Name: php-curl
+      Result: True
+     Comment: All specified packages are already installed
+     Started: 16:19:04.820690
+    Duration: 14.099 ms
+     Changes:
+----------
+
+grep -Po '(ID|(Function)): (?(2)\w+?\.\w+|\w+)'
+
+Named and Nested Conditionals
+(ID|(?<fn>Function)|(?<dur>Duration)): (?(fn)\w+?\.\w+|(?(dur)\d+\.\d+ ms|\w+))
+(ID|(?<fn>Function)|(?<dur>Duration)) -> capturing group
+(?<fn>Function) -> named capturing group
+(?<dur>Duration) -> named capturing group
+ID, Function, Duration, : -> literals
+(? -> if conditional
+(fn) -> references the captured group called the "if" match; notice that only the name is needed
+| works as the "else" with the if conditional group, anything that does not match the (fn) group matches this
+
 
