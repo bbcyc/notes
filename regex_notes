@@ -261,6 +261,36 @@ Reference <\/(?P=tag)>  <\/\g{tag}
 example
 grep -o -P "<(?'tag'[Hh][2-3]).+?>.*?<\/\k'tag'>" study-guide.html | sed 's/<[^>]*>//g'
 
+
+Non-capturing groups
+use parantheses to create groups that are easy to see without being counted against numerical backreferences
+perl -lne '/(?:<[Hh][2-3].*?>)(.*?)(?:<\/[Hh][2-3]>)/ && print $1' study-guide.html
+(?: - non-capturing group
+< - Literals
+[Hh] - range H or h
+[2-3] - range: 2-3
+. - wildcard; match any character
+*? - repeat previous token zero or more times (non-greedy)
+> - end of literals
+$1 -> backreference to (.*?)
+
+Learning Activity
+Get page name and referrer from apache access logs
+Put in format
+Page: PAGE NAME
+Referrrer: REFERRER
+Access Logs look like:
+198.51.100.8 - - [30/Oct/2018:00:46:55 ] "GET /linux HTTP/1.0" 200 2733 "http://linuxacademy.com/blog" "Mozilla/5.0 (iPad; CPU OS 6_0 like Mac OS X) AppleWebKit/536.26 (KHTML, like Gecko) Version/6.0 Mobile/10A5355d Safari/8536.25"
+
+192.0.2.129 - - [30/Oct/2018:00:50:49 ] "GET /gcp HTTP/1.0" 200 2684 "http://www.linuxacademy.com" "Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 6.0)"
+
+203.0.113.532 - - [30/Oct/2018:00:53:19 ] "GET /containers HTTP/1.0" 200 4293 "http://google.com" "Mozilla/5.0 (Windows; U; Windows NT 6.1; rv:2.2) Gecko/20110201"
+
+203.0.113.23 - - [30/Oct/2018:00:54:13 ] "GET /containers HTTP/1.0" 200 4440 "http://linuxacademy.com/blog" "Mozilla/5.0 (iPad; CPU OS 6_0 like Mac OS X) AppleWebKit/536.26 (KHTML, like Gecko) Version/6.0 Mobile/10A5355d Safari/8536.25"
+
+Start by grabbing this portion: "GET /containers HTTP/1.0" 200 4440 "http://linuxacademy.com/blog"
+perl -lne '/GET (\/\w+?) HTTP\/1.0" 200 \d\d\d\d "https?:\/\/(?:www\.)?(\w[a-zA-Z0-9\-]*\w{2,63}(?:\/\w[a-zA-Z0-9\-]*)?)/ && print "Page: $1\nReferrer: $2\n"' access-logs > referrers.txt
+
 Lookaheads
 Match an extended zipcode, only capturing the first 5 digits
 (\d{5})(?=-\d{4}) - this is a positive lookahead
@@ -357,4 +387,45 @@ ID, Function, Duration, : -> literals
 (fn) -> references the captured group called the "if" match; notice that only the name is needed
 | works as the "else" with the if conditional group, anything that does not match the (fn) group matches this
 
+Learning Activity
+Return a list of Froms and Subjects from a file containing raw emails
+To match From:
+grep -Po 'From: \w+ <\w+@\w+\.\w{2,63}>' emaillist.mbox
+From: - literal
+\w+ - more than 0 word chars (name)
+< - literal
+\w+ - more than 0 word chars
+@ - literal
+To match Subject:
+grep -Po 'Subject: .+' emaillist.mbox
+To match both:
+my answer: grep -Po '(From|(Subject)): (?(2).+|\w+ <\w+@\w+\.\w{2,63}>)' emaillist.mbox
+correct answer: grep -Po '((From)|Subject): (?(2)\w+ <\w+@\w+\.\w{2,63}>|.+)' emaillist.mbox
+
+Using a sed script to Generate Human-Readable Files
+curl https://raw.githubusercontent.com/linuxacademy/content-mastering-regex/master/highstate -o hs.json
+we want id, sls, and comments
+heading for minion name
+cp hs.json hs.test.json
+vim minionreport.sed
+---
+#!/usr/bin/sed
+
+s/^\s+// # remove whitespace at beginning of each line
+1s/(.+?):/RUN REPORT: \1\n/ # 1s - runs substitute command on first line
+			# (.+?): - capture group for up to :
+			# \1 -> backreference to capture group
+/-{10}/d # remove 10 dashes in a row
+/^[a-z]+_\|/d # remove lines starting with lower letters then a _ and |
+/p?changes:/d # remove lines with changes: or pchanges:
+/^[a-z_]+:/ {
+N # take this match and take the next line with it
+s/\n\s+/ / # substitute newlines and following spaces with a single space
+}
+/^(__run_num__|duration|name|result|start_time|__state_ran__)/d # remove lines that start with those
+s/__id__/ID/ # substitute __id__ with ID
+s/__sls__/SLS/ # substitute __sls__ with SLS
+s/comment: (.+)/Comment: \1\n/ # match comment and use capturing group, substitute with captured group and newline
+---
+sed -E -f minionreport.sed hs.json > minion1_2018-10-12
 
