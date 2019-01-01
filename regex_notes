@@ -429,3 +429,150 @@ s/comment: (.+)/Comment: \1\n/ # match comment and use capturing group, substitu
 ---
 sed -E -f minionreport.sed hs.json > minion1_2018-10-12
 
+
+Using Perl to Convert an HTML Document
+html-to-md.pl
+---
+#! /usr/bin/perl
+
+while (<>) {
+  s/<[Hh]1[^>]*>(.+?)<\/[Hh]1>/# \1\n/;
+  s/<[Hh]2[^>]*>(.+?)<\/[Hh]2>/## \1\n/;
+  s/<[Hh]3[^>]*>(.+?)<\/[Hh]3>/### \1\n/;
+  s/<li>/+ /;
+  s/<\/li>//;
+  s/<\/?ul>\n//;
+  s/<code>(.+?)<\/code>/`\1`/g;
+  s/<a href="(.+?)">(.+?)<\/a>/[\2](\1)/g;
+  s/<em>(.+?)<\/em>/_\1_/g;
+  if (/\+ <p>/) {
+    s/<\/?p>//g;
+  }
+  s/<p>(.+?)<\/p>/\n    \1\n/;
+  print;
+}
+close;
+---
+perl -f html-to-md.pl study-guide.html > study-guide.md
+
+Learning Activity
+Convert HTML to Latex
+HTML Tag| Latex
+H1 	| \title{TITLE}
+H2	| \section{SECTIONNAME}
+H3	| \subsection{SECTIONNAME}
+UL	| \begin{itemize} AND \end{itemize}
+LI	| \item
+em	| \textit{TEXT}
+code    | texttt{TEXT}
+blocks  | \begin{verbatim} AND \end{verbatim}
+All documents must start with:
+\documentclass{article}
+\usepackage{hyperref}
+\begin{document}
+Documents must end with:
+\end{document}
+
+html-to-latex.pl
+---
+#! /usr/bin/perl
+
+print "\\documentclass{article}\n\\usepackage{hyperref}\n\\begin{document}\n";
+
+while (<>) {
+  s/<[Hh]1[^>]*>(.+?)<\/[Hh]1>/\\title{\1}\n/;
+  s/<[Hh]2[^>]*>(.+?)<\/[Hh]2>/\\section{\1}\n/;
+  s/<[Hh]3[^>]*>(.+?)<\/[Hh]3>/\\subsection{\1}\n/;
+  s/<ul>/\\begin{itemize}\n/;
+  s/<\/ul>/\\end{itemize}\n/;
+  s/<li>/\\item /;
+  s/<\/li>//;
+  s/<em>(.+?)<\/em>/\\textit{\1}/g;
+  s/<code>(.+?)<\/code>/\\texttt{\1}/g;
+  if (/\\item <p>/) {
+    s/<\/?p>//g;
+  }
+  s/(?<!\\item )<p>(.+?)<\/p>/\\begin{verbatim}\n\1\n\\end{verbatim}/;
+  print;
+}
+print "\\end{document}\n";
+---
+perl -f html-to-latex.pl regexcs.html > regexcs.latex
+
+
+Password Validation with JavaScript
+on centos server
+sudo yum install httpd php php-pear git
+sudo systemctl start httpd
+sudo systemctl enable httpd
+cd /var/www/html
+chown -R user:user /var/www/html
+sudo !!  # runs sudo on the last command
+git clone https://github.com/linuxacademy/content-regex-validation.git
+mv content-regex-validation/* .
+rm -rf content-regex-validation
+from browser: enter [ip of computer]/test.php
+vim index.html
+---
+<html>
+  <head>
+    <title>EtherCloud Solutions</title>
+     <link rel="stylesheet" type="text/css" href="style.css">
+  </head>
+  <body>
+    <div id="container">
+      <div id="header"><h1>EtherCloud Solutions</h1></div>
+      <div id="form">
+        <form name="regform" action="#" onsubmit="validate()">
+          <input id="username" type="text" placeholder="Username"><br>
+          <input id="password" type="text" placeholder="Password"><br>
+          <input id="register" type="submit" value="Register">
+        </form>
+      </div>
+    </div>
+    <script>
+      function validate() {
+        var username_val = REGEX;
+        var password_val = REGEX;
+        var username = document.getElementById('username').value;
+        var password = document.getElementById('password').value;
+        if (!username_val.test(username)) {
+          alert("Usernames can only contain the following characters:\nA-Z 0-9 . - _");
+          return false;
+        }
+        if (!password_val.test(password)) {
+          alert("Passwords must be between 10 and 20 characters in length and contain both upper and lowercase letters, at least one number, and one of the following characters: ! * . % &");
+          return false;
+        }
+      }
+    </script>
+  </body>
+</html>
+---
+replace username_val with a real regex
+var username_val = /^[\w-.]+$/; // ^ and $ to test entire username, \w includes _, 
+use lookaheads and lookbehinds for each category in the password
+var password_val = /^(?=[^a-z]*[a-z])(?=[^A-Z]*[A-Z])(?=\D*\d)(?=[^!*.%&]*[!*.%&])(.{10,20})$/;
+
+Learning Activity
+Edit a login page with validation for multiple fields
+
+The name field can contain any A-Z character, case insensitive, dashes, and spaces. At least one space is required to check for a first name, last name setup. No digits.
+
+name_val = /^(?=\S+\s)[A-Za-z ]+$/;
+
+The email must begin with a word character, and can contain word characters, dots, dashes, underscores in the username. The domain name must start with a word-character, but can also contain dashes, and the top-level domain must be 2 - 63 characters long, containing A-Z characters or dots
+
+email_val = /^\w[\w.-]+@\w[\w-]+\.[a-zA-Z.]{2,63}$/;
+
+The username should be between 4-15 characters, and can contain alphanumeric characters, underscores, dashes, and dots.
+
+username_val = /^[\w_-.]{4,15}$/;
+
+The password must be between 8-30 characters and contain uppercase and lowercase letters, at least one digit, and at least one of any of these symbols: !@#$%^&*()
+
+password_val = /^(?=[^A-Z]*[A-Z])(?=[^a-z]*[a-z])(?=\D*\d)(?=[^!@#$%^&*()]*[!@#$%^&*()]).{8,30}$/;
+
+The credit card can contain digits and must be between 13-16 characters
+
+credit_val = /^\d{13,16}$/;
