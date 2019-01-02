@@ -429,3 +429,35 @@ s/comment: (.+)/Comment: \1\n/ # match comment and use capturing group, substitu
 ---
 sed -E -f minionreport.sed hs.json > minion1_2018-10-12
 
+Learning Activity
+Use a sed script to and the provided file mail-forwarding.txt, create a script that does the following:
+Add the following to the top of the document:
+  \documentclass{article}
+  \usepackage{hyperref}
+  \begin{document}
+Encase the first line in a /title{NAME} tag
+Convert all sections starting with Roman numerals to use \section{NAME}; dont keep numerals
+Encase all lines starting with [root@red-hat ~]# in code blocks
+  (\begin{verbatim} and \end{verbatim}; ~ can be alternate text
+  There are some instances where two lines start with [root@red-hat ~]# immediately after one another,
+  use sed's N functionality to write this portion of the script
+Any lines beginning with four spaces or a tab should be contained in code blocks
+Format any file names ending with .cf to use \texttt{TEXT} tags
+Change anything encased in backticks to use \texttt{TEXT} tags
+At the end of the document add \end{document}; this can be done by using $ a <APPENDED TEXT>
+---
+#!/usr/bin/sed
+
+1s/(.+*)/\\documentclass{article}\n\\usepackage{hyperref}\n\\begin{document}\n\\title{\1}/
+s/^[IVXLCDM]+\. (.+)/\\section{\1}/
+/\[root@red-hat.+?]#/ {
+    N
+    s/(\[root@red-hat.+?\]#.+(\n\[root@red-hat.+)?)/\\begin{verbatim}\n\1\n\\end{verbatim}/
+}
+s/(\t|    )(.+)/\\begin{verbatim}\2\\end{verbatim}/
+s/(\b\w+\.cf\b)/\\texttt{\1}/g
+s/`(.+?)`/\\texttt{\1}/g
+$ a \\\end{document}
+---
+sed -E -f latex.sed mail-forwarding.txt > mail-forwarding.txt
+
