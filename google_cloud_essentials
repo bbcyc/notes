@@ -2,4 +2,53 @@ Google Cloud Essentials
 
 Interactive Diagram https://linuxacademy.com/cp/guides/download/refsheets/guides/refsheets/google-essentials_1529985391.html
 
+App Engine Fundamentals
+PaaS - Platform as a Service
+No server setup or provisioning with minimal management required
+Automatic scaling and load-balancing
+Great for websites, mobile apps, and line of business apps
+Standard Environment         Flexible Environment
+  Earliest implementation      Recently Introduced
+  More proprietary             Standardized on Docker
+  Limited languages and access Broader language/version use
+  Faster instance spin up      slower instance spin up
+  Less expensive               more expensive
+
+Compute Engine Fundamentals
+IaaS - Infrastructure as a Service
+Scalable, high-performance virtual machines (VMs)
+Numerous configurations, completely customizable
+Run public disk images or private images
+Various storage options
+Optionally, works with containers
+Virtual Private Network (VPC) support
+Default and custom firewalls
+Complete routing support
+
+Kubernetes Engine Fundamentals
+Managed, orchestrated environment for containerized applications
+Uses Compute Engine to form cluster
+Relies on open source Kubernetes cluster management system
+Currently only Docker containers are supported
+Benefits
+  Load-balancing integrated
+  Node pools supported
+  Automatic cluster and node scaling
+  Automatic upgrades
+  Automatic repair based on health reports
+  Automatic logging and monitoring with Stackdriver
+
+Cloud Functions Fundamentals
+Serverless Environment for executing code and connecting cloud services
+Fully managed zero infrastructure or management requirements
+JavaScript functions in a Node.js wrapper
+Triggers:
+  HTTP request
+  Cloud Storage
+  Pub/Sub Event
+Use cases:
+  Webhooks - Respond to any HTTP request
+  Data & Image Processing - Validate/transform data or manipulate images
+  Mobile Back end - React to storage, authentication or data events
+  Internet of Things - Respond to Pub/Sub messages from devices
 
