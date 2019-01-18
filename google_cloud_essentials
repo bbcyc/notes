@@ -52,3 +52,141 @@ Use cases:
   Mobile Back end - React to storage, authentication or data events
   Internet of Things - Respond to Pub/Sub messages from devices
 
+Cloud Identity Fundamentals
+  Identity as a Service - IDaaS
+  Originally G-Suite based with separate Google Admin
+  Intergrated with Google Cloud
+  Manage resources hierarchically
+  Assign unmanaged accounts to project
+  Allow single sign-on
+  Hierarchy- Organization->Folders->1 or more Projects->1 or more Resources per project
+  Policy inheritance
+ 
+Cloud IAM Fundamentals
+  Unified resource access managemenet system
+  For both users and services
+  3 main components: policies, roles, resources
+  Policy: Who can do what on which resources
+  Roles: List of permissions assigned to identities/members
+  Identities:
+    Google account(managed account), unmanaged account
+    Service account
+    Google Group, G-Suite Domain, Cloud Identity Domain
+  Resources:
+    Projects and folders
+    Cloud services(Compute Engine, Cloud Storage, Pub/Sub, etc)
+    Aspects of those services(instances, buckets, topics, etc.)
+
+Cloud KMS
+  Cryptographic key management system
+  Keys are used to encrypt/decrypt files
+  Hierarchical, like IAM
+    Project>Location>Key Ring>Key>Key Version
+  Cloud KMS is a project-based resource
+  Specify locations:
+    Regional, Multi-Regional, or Global
+  Key ring is a collection of keys in a specified location for a specific project
+  Individual keys inherit permissions from keyring
+  Different key versions have different encryption/decryption values
+  Key version states: Enabled, Disabled, Scheduled for Destruction, Destroyed
+  Key versions can be rotated regularly and automatically or manually
+
+Cloud IAP
+  Application-level authorization service
+  Based on internal Google enterprise security model, BeyondCorp
+  Supplements network-level firewalls
+  Ideal for line of business apps
+  No VPN needed:
+    Straight-forward implementation for administrators
+    Simple to use for remote workers
+  No additional charge
+
+---
+
+Cloud Storage Fundamentals
+  Binary large object(BLOB) storage
+  Images, videos, audio files, documents, static webistes, etc.
+  Automatic data encryption at rest and decryption on delivery
+  Primary container: buckets
+    Project-based
+    Globally unique ID
+    Specific location
+    Set class for optimum price/performance
+      Multi-regional - highes availability, most frequently accessed
+      Regional - routinely accessed, best for analytics
+      Nearline - infrequently accessed, used for archival and data backup
+      Coldline - least accessed, lowest cost, typically for disaster recovery
+
+Cloud Datastor Fundamentals
+  NoSQL document database for semi-structured data
+  Key Features:
+    ACID transactions
+    Highly available and scalable
+    Multiple access options, i.e. Console, JSON API, and open source clients
+    SQL-like language, GQL
+  Structure - similar to traditional, but more flexible (schemaless):
+    Kinds - like tables
+    Entity - like row, but can have different properties
+    Property - like field, but can multiple properties possible
+    Key - like primary index
+    Supports optional ancestors and children
+  Uses: product catalogs, user profiles, ACID transactions, etc.
+
+Cloud SQL Fundamentals
+  Fully managed relational database service
+  Supports PostgresSQL 9.6
+  Supports MySQL 5.5(1st generation) and 5.6 or 5.7(2nd generation)
+  Robust scalability
+  Automatic replication and backup
+  Highly configurable SQL instances
+  Data automatically encrypted
+  Default firewalls for each instance
+  Full integration with Google Cloud services
+
+Cloud Bigtable Fundamentals
+  Fully managed, massively scalable NoSQL database service for big data
+  Used for Gmail, Google Search, Maps & Analytics as well as eBay and Spotify
+  Although also NoSQL, different from Cloud Datastore
+    Wide column database vs document database
+    No SQL-like language available
+    Single key per row
+  Capable of holding hundreds of petabytes of information
+  Columns wide enough for entire web pages or satellite imagery
+  Consistent low latency and high throughput
+  Dynamically change cluster size without stopping and restarting
+  Use cases: graph data, financial data, IoT data, marketing data, etc.
+
+Open a Google Cloud Shell instance to use bigtable
+gcloud components update
+sudo gcloud components install cbt
+echo project = laca-international > ~/.cbtrc
+echo instance - laca-international-cbt >> ~/.cbtrc
+cbt createtable laca-table
+cbt ls
+cbt createfamily laca-table cf1
+cbt set laca-table r1 cf1:c1=laca-int-airport
+cbt read laca-table
+
+Cloud Spanner Fundamentals
+  Fully managed, enterprise-grade, relational database service
+  Is to Cloud SQL as Cloud Bigtable is to Cloud Datastore
+  Scales horizontally like NoSQL databases
+  High availability(99.999% uptime) with strong consistency
+  Industry standard SQL support
+  Supports data definition language(DDL)
+  Client libraries: C#, Go, Java, Node,js, PHP, Python, and Ruby
+  Full console support
+  Use cases: call centers, financial trading, telecom, transportation, etc.
+
+Cloud MemoryStore Fundamentals
+  Fully managed, in-memory datastore service
+  Recently released
+  Redis protocol compatible
+  Extrememly low latency: sub-millisecond
+  As-needed scaling, up to 300 GB instance
+  Connect with App Engine, Compute Engine, and Kubernetes Engine
+  Service tiers:
+    Basic - default, for basic caching
+    Standard - for highly available Redis instance
+  Use cases: caching layer in gaming and analytical pipelines, stream processing
+
