@@ -1,0 +1,30 @@
+YAML Essentials
+
+YAML ain't markup language
+  Yet another markup language
+  2001
+  Ingy Dot Net, Clark Evans, Oren Ben-Kiki
+
+YAML is a data serialization language
+  "Natural and meaningful"
+  AKA Human-readable
+
+Relies on the familiar:
+  Works with "agile" languages
+    Python, Perl, Ruby, etc.
+  Common data types:
+    Scalars, lists, arrays
+  Common data structures:
+    Indentation, dashes, colons
+  Common uses:
+    Config files
+    Storing data
+
+Goals (in order):
+    Easily human-readable
+    Portable
+    Matches native data structures to agile languages
+    Consistent and able to support generic tools
+    One-pass processing
+    Expressive and extensible
+    Easy to implement and use

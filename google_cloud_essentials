@@ -190,3 +190,198 @@ Cloud MemoryStore Fundamentals
     Standard - for highly available Redis instance
   Use cases: caching layer in gaming and analytical pipelines, stream processing
 
+Cloud BigQuery Fundamentals
+  Fully managed data warehouse for big data
+  Near real-time interactive analysis of massive datasets
+  Analyze terabytes of data in seconds
+  Standard SQL supported
+  Storage and computing handled and billed separately
+  Query public or commercial dataset with your own
+  External services queries: Cloud Storage, Cloud Bigtable & Google Drive
+  Automatic data replication
+  Modify data with Data Definition Language
+  Use cases: real-time inventory, predictive digital marketing, analytic events
+
+Cloud Datafow Fundamentals
+  Fully managed service for creating pipelines to process data
+  Based on Apache Beam
+  Processes data on multiple machines in parallel
+  Handles both streaming (live) and batch (archived) data
+  No instances or clusters to establish: serverless
+  Easy replication of services with templates:
+    No need to recompile code before processing pipeline
+    Execute pipeline without dev environment and its dependencies
+    Can customize exection with template parameters
+    Can be executed via the console or gcloud command
+  Best option if no current implementation with Apache Hadoop or Spark
+  Use cases: analytical dashboards, forecasting sales trends, ELT operations
+
+Cloud Datapro Fundamentals 
+  Fully managed cluster data processing service
+  Compatible with Apache Hadoop, Spark, and Hive
+  Move existing projects or pipelines without redevelopment
+  Boasts fast cluster creation - 90 seconds vs. 5 - 30 minutes
+  Can scale clusters up and down without stopping the job
+  Can switch to different versions of Hadoop, Spark, and others
+  Workflow templates recently added
+    Create template, add job, and instantiate template
+      Workflow 1: Creates cluster, runs jobs, and deletes cluster
+      Workflow 2: Works with exisiting cluster and runs jobs
+  Similar to Cloud Dataflow
+    Both process data
+    Both handle batch and streaming data
+
+How to choose between Cloud Dataflow and Cloud Dataproc
+  Do you have dependencies of specific tools/packages in the Apache Hadoop/Spark Ecosystem?
+    Yes -> Cloud Dataproc
+    No -> Do you favor a hands-on/DevOps approach to operations, or a hands-off/serverless one?
+      DevOps -> Cloud Dataproc
+      Serverless -> Cloud Dataflow
+
+Cloud Pub/Sub Fundamentals
+  Fully managed messaging middleware service
+  Allows secure and highly available messages between independent apps
+  Works with both Google Cloud and external services
+  Full range of communication:
+    One to many 
+    Many to one
+    Many to many
+  Both push and pull options
+  Messages encrypted and HIPAA compliant
+  Use cases: streaming data, event notifications, asynchronous workflows, etc.
+
+Publisher==Message->Topic(->Message Storage)->Subscription->Message->Subscriber->Ack->Subscription
+
+Cloud Datalab Fundamentals
+  Interactive data analysis and machine learning environment
+  Packaged as a container and runs in a VM instance
+  Based on Jupyter notebooks
+    Notebooks:
+      Contain code, docs in markdown, and code results
+      Code results can be text, image, JavaScript, or HTML
+      Can be shared with team members
+      Collections of cells containing code or markdown
+create zone
+datalab create laca-datalab
+datalab connect --zone us-east1-b --port 8081 laca-datalab
+
+Cloud Data Studio Fundamentals
+  Interactive report and big data visualizer
+  Creates dashboards, charts, and tables
+  Connects to Cloud BigQuery, Cloud Spanner, Cloud SQL, & Cloud Storage
+  Stores shareable files on Google Drive
+  Basic process in three steps:
+    Connect to data source
+    Visualize data in report
+    Share report
+
+Cloud VPC(virtual private cloud) Fundamentals
+  Private network within Google Cloud network infrastructure
+  Adds network to Compute Engine, Kubernetes Engine, and App Engine(Flex)
+  Global resource consisting of regional subnets, connected by WAN
+  Cloud VPC includes:
+    Firewalls
+    Routes
+    Forwarding rules
+    Configuration of IP addresses, external or internal
+  Two types of VPC creation: Auto mode and Custom mode
+  Additional services include Shared VPC and Network Peering
+
+Cloud Load Balancing Fundamentals
+  Fully managed incoming traffic service
+  Distributes traffic across several VM instances
+  Benefits:
+    Autoscaling(by policy, CPU utilization, or serving capacity)
+    Supports heavy traffic
+    Routes traffic to closest instances
+    Detect and remove unhealthy instances
+  Types of load balancing supported:
+    Global external- HTTP/S, SSL, and TCP
+    Regional external- TCP/UDP within a region
+    Regional internal- between groups of instances in a region
+
+Cloud CDN Fundamentals
+  Accelerates delivery from Compute Engine and Cloud Storage
+  Lowers network latency, offloads origin servers, and reduces serving costs
+  Features include:
+    Offers SSL at no additional cost
+    Supports HTTP/1.0, HTTP/1.1, HTTP/2
+    Supports cache invalidation
+    Cach-to-cache filling supported
+  General availability caches to 10GB, Large Object Caching(Beta) to 5TB
+  Caching considerations:
+    Caching is reactive
+    Caches cannot be preloaded
+    Once enabled, caching is automatic
+    HTTP(S) load balancer is required
+
+Cloud VPN Fundamentals
+  Provides secure connections between on-premises and Cloud VPC
+  Utilizes IPsec VPN gateways with encrypted/decrypted traffic
+  Features include:
+    Site-to-site VPN via simple topology or with redundancy
+    Suppports Internet Key Exchange(IKE) v1 and v2 with shared secret
+    Uses ESP in Tunnel mode with authentication for encryption
+  Routing methods supported:
+    Dynamic gateways using Border Gateway Protocol
+    Policy-based routing
+    Route-based VPN
+  Best for low/medium traffic: 3 GB/second with direct peering; 1.5 without
+
+Cloud Interconnect Fundamentals
+  Provides higher-capacity connections between on-prem and Cloud VPC
+  Dedicated Interconnect
+    Direct physical connections with Google Network
+    69 colocations facilities in 17 regions
+    Highest bandwidth: 10 GB/sec per circuit (8 circuits max)
+    Routing equipment in colocation facility required
+  Partner Interconnect
+    Connects to 3rd party service provider
+    Many more connection possibilities
+    Bandwidth from 50 MB/sec to 10 GB/sec
+    Routing equipment not required
+  Public internet bypassed
+  VPN tunnels or NAT devices not needed
+  Not encrypted - use app level encryption or own VPN
+
+Cloud AI Fundamentals
+  Collection of services and APIs designed to facilitate machine learning
+  Includes hardware accelerators: TPUs (Tensor Flow Processing Units)
+  Primary service: Cloud Machine Learning Engine (ML Engine)
+    Training
+      Trains computer models to recognize patterns in data
+      Supports TensorFlow, scikit-learn, and XGBoost
+    Prediction
+      Online
+        Real-time processing with fully managed ML engines
+        No Docker container required & supports multiple frameworks
+      Batch
+        For asynchronous operations
+        Scales to terabytes of data
+  Data must be stored in accessible location, e.g., Cloud Storage
+
+Cloud IoT Core Fundamentals
+  Fully managed service for connecting and managing IoT devices
+  Devices must be registered
+  Works with both telemetry (event data) & device state data
+  Receives data and sends to Cloud Pub/Sub topic
+  Supports HTTP and MQTT protocols for communication
+  Highly secure: 
+    Each device uses JSON Web Tokens for public/private keys
+    Supports RSA or Elliptic Curve algorithms to verify signatures
+    Key rotation support
+    Access to IoT core controlled by Cloud IAM roles and permissions
+  Part of an IoT eco-system with Android Things and Google Beacon
+
+Cloud Data Transfer Fundamentals 
+  Range of options available for transferring data to Google Cloud
+  Online Transfer
+    Tools available: console upload, JSON REST API, gsutil
+  Storage Transfer Service
+    Imports online data to Cloud Storage
+    Supports transfer of objects from AWS S3
+  Transfer Appliance
+    Physical device loaded on-prem and shipped to Google data center
+    Single device can hold petabyte of data
+    Far faster than online transfer for large amounts of data
+
