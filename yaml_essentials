@@ -96,6 +96,34 @@ Mappings
   - No duplicate keys
   - Mappings can be nested
 
+Structure:
+  - Multiple directives/documents in one file
+  - Optional within the YAML Spec
+      - May be a requirement for different platforms
+  - Triple dashes (---) to mark the start of a file
+  - Triple dots(...) to mark the end without closing the data stream
+
+Multi-doc stream
+---
+host: phl-42
+datacenter:
+  location: Philadelphia
+  cabinet: "13"
+  cab_unit: "2"
+roles:
+  - webserver
+  - wp_database
+downtime_sch: |
+  2018-10-31 - kernel upgrade
+---
+host: phl-43
+datacenter:
+  location: Philadelphia
+  cabinet: "13"
+  cab_unit: "3"
+
+Stream with End
+---
 host: phl-42
 datacenter:
   location: Philadelphia
@@ -171,4 +199,197 @@ Structures
       - May be a requirement for different platforms
   - Triple dashes (---) to mark the start of a file
   - Triple dots (...) to mark the end without closing the data stream
+  cab_unit: 2
+...
+---
+host: hel-13
+datacenter:
+  location: Helsinki
+  cab: 9
+  cab_unit: 1-2
+...
+
+Comments
+  - Define a comment with an octothorpe and whitespace (# )
+  - Inline comments okay
+      - Must continue to end of the line
+  - Comments cannot be contained in scalars
+  - Comments are for humans
+      - No actual content should be conveyed through comments
+  - Blank lines function as commented lines
+
+Do This:
+# Philly DC Host Data
+---
+host: phl-42
+datacenter:
+  location: Philadelphia # Reference ID: PHL
+  cab: 13
+  cab_unit: 2
+...
+
+Don't Do This:
+#Philly DC Host Data
+---
+host: phl-42
+datacenter:
+  location: "Philadelphia # Reference ID: PHL"
+  cab: 13
+  cab_unit: 2
+...
+must have space after # and # cannot be within quotes
+
+
+Tags:
+  - Used for:
+      - Setting a custom URI
+      - Setting local tags
+      - Setting a data type
+Set a URI:
+  - Use the %TAG ! prefix
+
+%TAG ! tag:hostsdata:phl:
+---
+
+Set a local tag:
+  - Single exclamation point, no space(!)
+  - URI: tag:hostsdata:phl:PHL
+
+datacenter:
+  location: !PHL Philadelphia
+
+Set data type:
+  - Force data type; don't rely on parser
+  - Use two exclamation points, no space(!!)
+
+cabinet: !!str 13
+cab_unit: !!str 2
+
+Default data types:
+seq - Sequence
+map - Map
+str - String
+int - Integer
+float - Floating-point decimal
+null - Null
+binary - Binary code
+omap - Ordered map
+set - Unordered set
+
+Anchors:
+  - Store and reuse data
+  - Anchor names can be reused
+  - Define anchor with &
+  - Reference anchor data with *
+  - Anchor a single scalar:
+
+---
+host: phl-42
+datacenter:
+  location: &PHL Philadelphia
+---
+host: phl-43
+datacenter:
+  location: *PHL
+
+  - Or a collection
+
+---
+roles: &wphost
+  - webserver
+  - wp_database
+...
+---
+roles: *wphost
+
+# Philly DC Host Data
+%TAG ! tag:hostdata:phl:
+---
+host: phl-42
+datacenter:
+  location: &PHL Philadelphia # Reference ID: PHL
+  cab: !!str 13
+  cab_unit: !!str 3
+roles: &wphost
+  - webserver
+  - wp_database
+downtime_sch: |
+  2018-10-31 - kernel upgrade
+  2019-02-02 - security fix
+comments: >
+  Experiencing high I/O
+  since 2018-10-01.
+  Currently investigating.
+---
+host: phl-43
+datacenter:
+  location: *PHL
+  cab: !!str 13
+  cab_unit: !!str 4
+roles: *wphost
+
+redefing an anchor will cause the value to get overwritten
+
+Learning Activity
+Create an ansible playbook
+ssh cloud_user@ip address
+su - ansible
+ssh-copy-id localhost
+vim mariadb.yaml
+--- # Install MariaDB
+- hosts: localhost
+  remote_user: ansible
+  become: yes
+  become_method: sudo
+  connection: ssh
+  gather_facts: yes
+  tasks:
+    - name: Installing MariaDB
+      yum:
+        name: mariadb-server
+        state: latest
+      notify:
+        - startservice
+  handlers:
+    - name: startservice
+      service:
+        name: mariadb
+        state: restarted
+
+ansible-playbook mariadb.yaml
+systemctl status mariadb
+
+Structuring a YAML Playbook with Ansible
+Level One
+Start of document directive and inline comment
+Start of list
+  Level Two
+  hosts (inline with start of list)
+  remote_user
+  become
+  become_method
+  connection
+  gather_facts
+  tasks
+    Level Three
+    Start of list
+      Level Four
+      name (inline with start of list)
+      yum
+        Level 5
+        name
+        state
+      notify
+        L5
+        startservice(list)
+  handlers
+    L3
+    start of list
+      L4
+      name (inline with start of list)
+      service
+        L5
+        name
+        state
+
 
