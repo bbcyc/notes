@@ -29,6 +29,72 @@ Goals (in order):
     Expressive and extensible
     Easy to implement and use
 
+Syntax
+Human > computers
+ - Spaces, not tabs
+ - Indent for structure
+ - Dashes for lists
+ - Colons for key-value
+
+host: phl-42
+ datacenter:
+   location: Philadelphia
+   cab: 13
+ roles:
+  - web
+  - dns
+
+Character support
+  - Printable Unicode
+  - Unsupported symbols:
+      - C0/C1 blocks
+         - Exceptions:
+            - Tab
+            - Line feeds
+            - Carriage return
+            - Delete
+            - Next line
+         - Surrogates
+      - Encoding
+         - UTF-8
+         - UTF-16
+         - UTF-32
+            - Mandatory for JSON compatibility
+
+YAML Styles
+Block or flow:
+ - Two forms of styles:
+    - Block styles
+    - Flow styles
+
+Block Styles
+ - Better for humans
+ - Less compact
+ - The YAML you've probably seen
+
+host: phl-42
+datacenter:
+  location: Philadelphia
+  cab: 13
+roles:
+  - web
+  - dns
+
+Flow styles:
+  - An extension of JSON
+  - "Folding" long lines of content
+  - Tags and anchors
+
+host: "phl-42"
+datacenter: { location:
+  Philadelphia , cab: 13 }
+roles: [ web , dns ]
+
+Mappings
+  - Associative arrays, hash tables, key-value pairs, collection
+  - Denoted with a colon and a space(: )
+  - No duplicate keys
+  - Mappings can be nested
 
 Structure:
   - Multiple directives/documents in one file
@@ -62,6 +128,77 @@ host: phl-42
 datacenter:
   location: Philadelphia
   cab: 13
+  cab_unit: 3
+
+space after colon is important
+2 space indent under datacenter
+
+Flow styles:
+  - Use curly brackets and commas
+
+datacenter: { location:
+  Philadelphia , cab: 13 }
+
+
+Sequences
+  - Lists, arrays, collections
+  - Denoted with a dash and a space (- )
+  - Can be combined with mappings
+      - "Mapping of sequences"
+      - "Sequence of mappings"
+
+roles:
+  - webserver
+  - wp_database
+
+  - Cannot be:
+      - Blank
+      - Nested without mapping
+
+Do this:
+- playbooks:
+    - wordpress
+    - mysql
+
+Don't do this
+- playbooks
+    - wordpress
+    - 
+    - mysql
+
+Flow styles:
+roles: [ webserver , wp_database ]
+
+
+Scalars:
+  - Stringm number, boolean
+      - Whitespace permitted
+  - "...presented with zero or more Unicode characters"
+  - Mapping: Assigning one scalar to another
+  - Use quotes (single or double) to convert a non-string scalar into a string scalar
+      - Double quotes permit escape sequences
+  - Multiline scalars:
+      - Block style(preserve newlines) uses vertical bar
+
+downtime_sch: |
+  2019-10-04 - kernel upgrade
+  2019-02-02 - security fix
+
+      - Folded style (converts newlines/spacing to single space) uses >
+
+comments: >
+  Experiencing high I/O 
+  since 2018-10-01. 
+  Currently investigating.
+
+  need to indent all lines to same level
+
+Structures
+  - Mutliple directives/documents in one file
+  - Optional within the YAML spec
+      - May be a requirement for different platforms
+  - Triple dashes (---) to mark the start of a file
+  - Triple dots (...) to mark the end without closing the data stream
   cab_unit: 2
 ...
 ---
