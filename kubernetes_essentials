@@ -1,0 +1,111 @@
+Kubernetes Essentials
+kubernetes.io
+
+Cluster Architecture
+
+Kube Master
+  Docker
+  Kubeadm
+  Kubelet
+  Kubectl
+  Control Plane
+
+Kube Node 1
+  Docker
+  Kubeadm
+  Kubelet
+  Kubectl
+
+Kube Node 2
+  Docker
+  Kubeadm
+  Kubelet
+  Kubectl
+
+Setting up Playground Servers
+New Server
+Ubuntu 18.04
+Small
+Tag Kube Master, Kube Node 1, Kube Node 2
+ssh into servers
+
+Installing Docker
+Docker is a container runtime which is the software that actually runs the containers.
+Add the Docker repo GPG key
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+Add the Docker repo
+sudo add-apt-repository    "deb [arch=amd64] https://download.docker.com/linux/ubuntu \
+   $(lsb_release -cs) \
+   stable"
+Reload the apt sources list
+sudo apt-get update
+Install Docker
+sudo apt-get install -y docker-ce=18.06.1~ce~3-0~ubuntu
+Prevent auto-updates for the Docker package
+sudo apt-mark hold docker-ce
+Verify that Docker is working
+sudo docker version
+
+Installing Kubeadm, Kubelet, and Kubectl
+Kubeadm - automates a large portion of the process of setting up a cluster
+Kubelet - essential part of kubernetes that handles running containers on a node, every running server needs kubelet
+Kubectl - CLI tools for interacting with the cluseter once it is up
+
+Do the following to each server:
+
+Install the Kubernetes GPG key
+curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -
+
+Add the Kubernetes repo
+cat << EOF | sudo tee /etc/apt/sources.list.d/kubernetes.list
+deb https://apt.kubernetes.io/ kubernetes-xenial main
+EOF
+
+Reload the apt sources list
+sudo apt-get update
+
+Install packages (use specific version to make it easier to follow along)
+sudo apt-get install -y kubelet=1.12.2-00 kubeadm=1.12.2-00 kubectl=1.12.2-00
+
+Prevent auto-updates for the Kube packages
+sudo apt-mark hold kubelet kubeadm kubectl
+
+Verify that kubeadm is working
+kubeadm version
+
+Bootstrapping the cluster
+Kube master node, initialize cluster
+sudo kubeadm init --pod-network-cidr=10.244.0.0/16
+
+Setup local kubeconfig
+mkdir -p $HOME/.kube
+sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+Verify the cluster is responsive and Kubectl is working
+kubectl version - should get Server Version and Client Version
+
+kubeadm init command should output a kubeadm join command with token and hash to be run with sudo on both worker nodes
+something like this:
+sudo kubeadm join $some_ip:6443 --token $some_token --discovery-token-ca-cert-hash $some_hash
+
+Verify all nodes successfully joined cluster
+kubectl get nodes
+
+Configuring Networking using Flannel
+On all nodes run
+echo "net.bridge.bridge-nf-call-iptables=1" | sudo tee -a /etc/sysctl.conf
+sudo sysctl -p
+
+Install Flannel on the master node
+kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/bc79dd1505b0c8681ece4de4c0d86c5cd2643275/Documentation/kube-flannel.yml
+
+Verify that all nodes have a status of ready
+kubectl get nodes
+
+Verify Flannel pods are up and running
+kubectl get pods -n kube-system
+
+
+
+
