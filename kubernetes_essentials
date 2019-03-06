@@ -49,7 +49,7 @@ sudo docker version
 Installing Kubeadm, Kubelet, and Kubectl
 Kubeadm - automates a large portion of the process of setting up a cluster
 Kubelet - essential part of kubernetes that handles running containers on a node, every running server needs kubelet
-Kubectl - CLI tools for interacting with the cluseter once it is up
+Kubectl - CLI tools for interacting with the cluster once it is up
 
 Do the following to each server:
 
@@ -133,6 +133,9 @@ kubectl get pods
 to get all pods in all namespaces
 kubectl get pods --all-namespaces
 
+to see the kube pods
+kubectl get pods -n kube-system
+
 for more info about the pod
 kubectl describe pod nginx
 or more generally
@@ -141,6 +144,245 @@ kubectl describe pod $pod_name -n $namespace
 delete the pod
 kubectl delete pod nginx
 
+Clustering and Nodes
+Kubernetes implements clustered architecture
+typical env, multiple servers to run containers
 
+Nodes - Servers that run containers
+Control servers - manage and control the cluster and host the kube API
+Worker nodes - run applications within the cluster
 
+get a list of nodes-
+kubectl get nodes
+
+get more info about a specific node-
+kubectl describe node $node_name
+
+Networking in Kubernetes
+The Kubernetes networking model involves creating a virtual network across the whole cluster.
+Every pod on the cluster has a unique IP address, and can communicate with any other pod in the cluster,
+even if the other pode is running on a different node
+
+Example
+Create a deployment with 2 nginx pods:
+cat << EOF | kubectl create -f -
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx
+  labels:
+    app: nginx
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.15.4
+        ports:
+        - containerPort: 80
+EOF
+
+Create a busybox pod to use for testing:
+cat << EOF | kubectl create -f -
+apiVersion: v1
+kind: Pod
+metadata:
+  name: busybox
+spec:
+  containers:
+  - name: busybox
+    image: radial/busyboxplus:curl
+    args:
+    - sleep
+    - "1000"
+EOF
+
+Get the IP addresses of your pods
+kubectl get pods -o wide
+
+Get the IP address of one of the nginx pods, then contact that nginx pod from the busybox pod using the nginx pod's IP address
+kubectl exec busybox -- curl $nginx_pod_ip
+
+Kubernetes Architecture and Components
+kubectl get pods -n kube-system
+
+Kubernetes includes mutliple components that work together to provide the functionality of a Kube cluster.
+
+The control plane components manage and control the cluster:
+- etcd - Provides distributed, synchronized data storage for the cluster state
+- kube-apiserver - Serves the Kubernetes API, the primary interface for the cluster
+- kube-controller-manager - Bundles several components into one package
+- kube-scheduler - Schedules pods to run on individual nodes
+
+In addition to the control plane, each node also has:
+- kubelet - Agent that executes containers on each node
+- kube-proxy - Handles network communication between nodes by adding firewall rules
+
+With kubeadm, many of these components are run as pods within the cluster itself
+
+Check the status of the kubelet service
+sudo systemctl status kubelet
+
+Kubernetes Deployments
+A deployment allows you to specify a desired state for a set of pods. Then cluster will then constantly work to maintain that desired state.
+For example:
+- Scaling - With a deployment, you can specify the number of replicas you want, and the deployment will create (or remove) pods to meet that number of replicas.
+- Rolling Updates - With a deployment, you can change the deployment container image to a new version of the image.
+    The deployment will gradually replace existing containers with the new version.
+- Self-Healing - if one of the pods in the deployment is accidentally destroyed, the deployment will immediately spin up a new one to replace it.
+
+Create a deployment:
+cat <<EOF | kubectl create -f -
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-deployment
+  labels:
+    app: nginx
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.15.4
+        ports:
+        - containerPort: 80
+EOF
+
+To get a list of deployments:
+kubectl get deployments
+
+Get more info about a deployment:
+kubectl describe deployment nginx-deployment
+
+Get a list of pods
+kubectl get pods
+The deployment should have created 2 pods
+
+Kubernetes Services
+
+Services allow you to dynamically access a group of replica pods.
+Replica pods are often being created and destroyed, so what happens to other pods
+or external entities which need to access those pods?
+
+A Service creates an abstraction layer on top of a set of replica pods.
+You can access the service rather than accessing the pods directly,
+so as pods come and go, you get uninterrupted, dynamic access to whatever replicas are up at the time.
+
+Create a NodePort service on top of your nginx pods:
+cat << EOF | kubectl create -f -
+kind: Service
+apiVersion: v1
+metadata:
+  name: nginx-service
+spec:
+  selector:
+    app: nginx
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 80
+    nodePort: 30080
+  type: NodePort
+EOF
+
+Get a list of services in the cluster:
+kubectl get svc or kubectl get services - you should see a service called nginx-service
+
+Test that NodePort is accessible
+curl localhost:30080
+you should get a response from nginx
+
+Learning Activity
+Set up a store-products deployment and service
+cat <<EOF | kubectl create -f -
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: store-products
+  labels:
+    app: store-products
+spec:
+  replicas: 4
+  selector:
+    matchLabels:
+      app: store-products
+  template:
+    metadata:
+      labels:
+        app: store-products
+    spec:
+      containers:
+      - name: store-products
+        image: linuxacademycontent/store-products:1.0.0
+        ports:
+        - containerPort: 80
+EOF
+
+Create a store-products service
+cat <<EOF | kubectl create -f -
+kind: Service
+apiVersion: v1
+metadata:
+  name: store-products
+spec:
+  selector:
+    app: store-products
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 80
+EOF
+
+kubectl get svc store-products -> see that the service exists
+use busybox to see that the service is working
+kubectl exec busybox -- curl -s store-products
+
+Mircroservices are small, independent services that work together to form a whole application
+Many applications are designed with a monolithic architecture,
+meaning that all parts of the application are combined in one large executable.
+
+Advantages of microservices:
+Scalability - individual microservices are independently scalable
+Cleaner code - it's easier to make changes in one area of the application without breaking things in other areas
+Reliability - Problems in one area are less likely to affect other areas
+Variety of tools - different parts of the app can be built with different tools, languages, and frameworks
+
+Implementing microservices means deploying, scaling, and managing a lot of individual components. Kubernetes is great for this
+
+Deploying the Robot Shop App
+Stan's Robot Shop repo from Instana
+
+Clone the git repo
+cd ~/
+git clone https://github.com/linuxacademy/robot-shop.git
+
+Create a namespace and deploy the application objects to the namespace using the deployment descriptors from the Git repo
+kubectl create namespace robot-shop
+kubectl -n robot-shop create -f ~/robot-shop/K8s/descriptors
+
+Get a list of the application's pods and wait for all of them to finish starting up
+kubectl get pods -n robot-shop -w
+
+Once all the pods are up, you can access the application in a browser using the public IP of one of your Kubernetes servers and port 30080
+http://$kube_server_public_ip:30080
+
+To scale the number of mongo replicas:
+kubectl edit deployment mongodb -n robot-shop
+change replicas: 1 to replicas: 2
+kubectl get deployment mongodb -n robot-shop -> check status of deployment
 
