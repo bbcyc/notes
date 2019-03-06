@@ -1,0 +1,333 @@
+Ansible
+
+Ansible is an automation engine that allows for agentless system configuration and deployment
+
+The real power of Ansible comes from its simplicity.
+
+Ansible operates over SSH and runs Ansible modules on remote systems in order to complete tasks.
+
+Ansible is typically installed on a single, lightweight control node where a list of host inventory files, as well as "playbooks", are kept.
+
+The heavy lifting is generally performed on the remote host as that is where Ansible Modules are executed.
+
+Ansible Installation and Configuration
+In order to install Ansible, you must configure the EPEL repository on your system.
+yum list epel-release
+
+Once the EPEL repository is configured, your package manager installs Ansible and manages the dependencies:
+sudo yum install ansible
+
+It is advisable to install some means of source control as well
+sudo yum install git
+
+/etc/ansible/ansible.cfg si the primary Ansible configuration file.
+
+Notable configurations include:
+- Default inventory configuration
+- Default remote user
+
+/etc/ansible/hosts is the default Ansible Inventory File
+
+An inventory is a list of hosts that Ansible manages.
+
+Inventory location may be specified as follows:
+- Default /etc/ansible/hosts
+- Specified by CLI `ansible -i`
+- Can be set in ansible.cfg
+
+Example Inventory File
+---
+mail.example.com ansible_port=5556
+
+[webservers]
+httpd1.example.com
+httpd2.example.com
+
+[labservers]
+lab[01:99]
+
+scoldham2 ansible_host=scoldham2c.mylabserver.com -> creates an alias and assigns the ansible_host variable for that alias
+scoldham3 ansible_host=scoldham3c.mylabserver.com
+---
+
+While it is possible to connect to a remote host with Ansible via password authentication using -k (note lowercase),
+it is not a common practice as it can cause significant overhead in terms of manual intervention.
+
+Ansible is best implemented using a common user across all Ansible controlled systems.
+
+The ssh-keygen and ssh-copy-id command can facilitate creating a pre-shared key for user authentication.
+
+/etc/sudoers may be edited to allow your selected user to sudo any command without a password for
+the most automated configuration using the line:
+ansible ALL=(ALL) NOPASSWD: ALL
+
+It is also possible to prompt for a sudo password at runtime using -K (note uppercase) if desired.
+Note that this can become a challenge when executing against many systems.
+
+Add an ansible user to the control node
+sudo useradd ansible -> creates ansible user without password (password not needed bc we wont be sshing in to control node)
+
+ssh into one of the worker nodes
+ssh scoldham2c.mylabserver.com
+sudo useradd ansible -> creates user without password
+sudo passwd ansible -> add password
+
+back in control node
+sudo su - ansible
+ssh-keygen -> create ssh key pair
+ssh-copy-id scoldham2c.mylabserver.com -> copy public key to worker node, use ansible password just created
+ssh scoldham2c.mylabserver.com -> should log you in to that server without a password
+ansible user on scoldham2c is not privileged, so need to log in as privileged user
+ssh cloud_user@scoldham2c.mylabserver.com
+sudo visudo -> opens sudoers file in vi
+add this line
+ansible ALL=(ALL) NOPASSWD: ALL
+sudo su - ansible -> should switch to ansible user without asking for a password
+sudo su - -> should log in as root user from ansible user without asking for a password
+
+Documentation
+You can find more useful documentation at doc.ansible.com
+
+A module index is provided at docs.ansible.com as well. It contains detailed information over each module.
+
+Ansible ships with the ansible-doc command as well. The command:
+- Specifies a module name as a parameter and provides module specific documentation.
+- Combined with the -l flag lists installed modules with a brief description.
+- ansible-doc -s [module_name] -> condensed version
+
+Ad Hoc commands
+Ansible ad-hoc commands and comparable bash commands
+
+Playbooks are analagous to bash script (we'll look at those later)
+
+Syntax: ansible <HOST> -b -m <MODULE> -a "<ARG1 ARG2 ARG3>"
+
+HOST os a host of host group defined in the Ansible inventory file.
+
+-b is for become, which replaces the deprecated -s flag as in sudo
+
+Ansible escalates permission to --become-user (default root) using the method defined by --become-method (default sudo).
+
+-m is for module and allows a command to be used on a module.
+
+-a allows parameters to pass. If used without a module, it is like running a shell command on the target system(s).
+
+ansible scoldham2 -m setup | less
+errors out - bc set up as cloud_user, need to switch to ansible user to use rsa key
+ansible scoldham3 -m ping
+
+other examples
+yum "name=<NAME> state=<STATE>"
+ansible scoldham2 -m yum -a "name=httpd state=latest" -> fails bc not root
+ansible scoldham2 -b -m yum -a "name=httpd state=latest" -> works bc switched to sudo
+
+service "name=<NAME> state=<STATE>"
+ansible scoldham2 -b -m service -a "name=httpd state=started"
+
+copy "src=<SOURCE_PATH> /
+dest=<ABSOLUTE_DESTINATION_PATH>"
+
+Ansible Playbooks are the primary means for Ansible to perform tasks
+
+As ad-hoc commands are to bash commands, playbooks are to bash scripts.
+
+Playbooks run using the ansible-playbook command, not the ansible command.
+
+You must specify the playbook to run as a parameter.
+
+Playbooks are written in YAML.
+
+Playbooks contain different elements called plays.
+
+Plays contain lists of hosts and, at minimum, one task.
+
+Each task has a name and module.
+
+Modules may have parameters.
+
+Pro tip: Spaces matter!
+
+Improper indentation can cause a playbook to err in a vague way.
+
+Sample playbook:
+---
+- hosts: webservers
+  become: yes
+
+  tasks:
+  - name: latest httpd installed
+    yum:
+      name: httpd
+      state: latest
+  - name: write apache config file
+    template:
+      src: /srv/httpd.j2
+      dest: /etc/httpd.conf
+
+- hosts: databases
+  remote_user: root
+
+  tasks:
+  - name: latest postgresql installed
+    yum:
+      name: postgresql
+      state: latest
+  - name: postgresql must by started
+    service:
+      name: postgresql
+      state: started
+
+create an inventory file
+vim inv
+[webservers]
+scoldham2c.mylabserver.com
+scoldham3c.mylabserver.com
+vim web.yml
+--- # Bootstrap webservers
+- hosts: webservers -> defined in the file above
+  become: yes -> run everything as root
+  tasks:
+  - name: install httpd -> every task starts with a name, plain english to explain what happens
+    yum: -> module name
+      name: httpd
+      state: latest -> parameters for yum
+  - name: create index.html file
+    file:
+      name: /var/www/html/index.html
+      state: touch -> equivalent to bash touch
+  - name: add web content
+    lineinfile:
+      line: "here is some text"
+      path: /var/www/html/index.html
+  - name: start httpd
+    service:
+      name: httpd
+      state: started
+
+ansible-playbook -i inv web.yml -> -i allows you to specify an inventory file
+running playbook will output results
+curl scoldham2c.mylabserver.com:80/index.html returns "here is some text"
+
+Check Mode provides a quick sanity check:
+- Dry run; does not actually affect systems
+- Syntax: ansible-playbook foo.yml --check
+
+Retry file:
+- If a playbook fails, a retry file is generated and contains the list of hosts where the playbook failed: playbook-name.retry
+- The file may be specified using --limit with the same playbook to reattempt the playbook at a later time.
+
+Plays should be idempotent, meaning they should be safe to run repeatedly against the same target without ill effect.
+
+Ansible variables
+Variable names should be letters, numbers, and underscores. They should always start with a letter
+
+Examples of valid variable names:
+- foobar
+- foo_bar
+- foo5
+
+Variables can be scoped by group, host, or within a playbook.
+
+Variables may be passed in via command line using the --extra-vars, the -e flag, or defined within a playbook.
+
+Playbook example
+Go into playbook above and change the lines
+name: httpd
+to
+name: "{{ target_service }}"
+after saving, run this in the terminal
+ansible-playbook -i inv web.yml -e "target_service=httpd"
+
+CLI Example:
+ansible-playbook service.yml -e \
+"target_hosts=localhost \
+target_service=httpd";
+
+
+Variables are referenced using double curly braces.
+
+It is good practice to wrap variable names or statements containing variable names in weak quotes:
+hosts: "{{ my_host_var }}"
+
+Ansible Facts are simply various properties regarding a given remote system.
+
+The setup module can retrieve facts.
+ansible scoldham2 -m setup -> returns a lot on info
+
+The filter parameter takes regex to allow you to prune fact output.
+ansible scoldham2 -m setup -a filter=*ipv4* -> returns facts where the key has ipv4 in it
+
+Facts are gathered by default in the Ansible Playbook execution
+Edit web.yml
+line: "here is some text" -> line: "{{ ansible_hostname }}" -> this variable will be defined by the gather_facts step of the playbook run
+
+The keyword gather_facts may be set in the playbook to change fact gathering behavior
+in playbook under become line add
+gather_facts: no
+
+It is possible to print Ansible facts in files using variables.
+
+Facts may be filtered using the setup module ad-hoc by passing a value for the filter parameter.
+
+The ansible command output may be directed to a file using the --tree outputfile flag which may be helpful when working with facts.
+
+It is possible to use {{ ansible_facts }} for conditional plays based on facts.
+
+The debug module may be used to help troubleshoot plays:
+- Use to print detail information about in-progress plays
+- Handy for troubleshooting
+
+debug takes two primary parameters that are mutually exclusive:
+- msg: A message that is printed to STDOUT
+- var: A variable whose content is printed to STDOUT
+
+Example:
+- debug:
+    msg: "System {{ inventory_hostname }}
+has uuid {{ ansible_product_uuid }}"
+
+The register module is used to store task output.
+
+Several attributes are available: return code, stderr, and stdout.
+
+The following play will store the results of the shell module in a variable named motd_contents:
+- hosts: all
+  tasks:
+  - shell: cat /etc/motd
+    register: motd_contents
+
+In the web.yml playbook under tasks: line
+- debug:
+    var: target_service
+
+to use register, add it at same level of indentation as module
+- name: add web content
+  lineinfile:
+    line: "{{ ansible_hostname }}"
+    path: /var/www/html/index.html
+  register: task_debug
+- debug:
+    msg: "Output of lineinfile is: {{ task_debug }}"
+
+Understanding Handlers in Ansible
+Ansible provides a mechanism that allows an action to be flagged for execution when a task performs a change.
+
+By only executing certain tasks during a change, plays are more efficient.
+
+This mechanism is known as a handler in Ansible.
+
+A handler may be called using the notify keyword:
+- name: template configuration file
+  template:
+    src: foo.conf
+    dest: /etc/foo.conf
+  notify:
+  - restart memcached
+
+No matter how many times a handler is flagged in a play, it only runs during a play's final phase.
+
+notify will only flag a handler if a task block makes changes.
+
+A handler
+
+
