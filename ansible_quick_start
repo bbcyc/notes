@@ -13,6 +13,7 @@ The heavy lifting is generally performed on the remote host as that is where Ans
 Ansible Installation and Configuration
 In order to install Ansible, you must configure the EPEL repository on your system.
 yum list epel-release
+sudo yum install epel-release (if necessary)
 
 Once the EPEL repository is configured, your package manager installs Ansible and manages the dependencies:
 sudo yum install ansible
@@ -328,6 +329,60 @@ No matter how many times a handler is flagged in a play, it only runs during a p
 
 notify will only flag a handler if a task block makes changes.
 
-A handler
+A handler may be defined similarly to tasks:
+handlers:
+  - name: restart memcached
+    service:
+      name: memcached
+      state: restarted
+    listen: "restart cache services"
 
+web.yml restructured to use handlers
+--- # Bootstrap Webservers
+- hosts: webservers
+  become: yes
+  gather_facts: yes
+  tasks:
+  - debug:
+      var: target_service
+  - name: install httpd
+    yum:
+      name: "{{ target_service }}"
+      state: latest
+    notify:   # if install httpd is changed, then notify the restart httpd handler
+      - restart httpd
+  - name: create index.html file
+    file:
+      name: /var/www/html/index.html
+      state: touch
+  - name: add web content
+    lineinfile:
+      line: "{{ ansible_hostname }}"
+      path: /var/www/html/index.html
+    notify:
+      - restart httpd
+    register: task_debug
+  - debug:
+      msg: "Output of lineinfile is: {{ task_debug }}"
+  handlers:
+  - name: Attempt to restart httpd
+    service:
+      name: httpd
+      state: restarted
+    listen: "restart httpd"
+
+to test this out remove httpd from a server
+ansible scoldham2 -b -m yum -a "name=httpd state=absent" -> -b become root -m module -a arguments
+check that it worked by trying to curl
+curl scoldham2c.mylabserver.com:80/index.html -> should get Connection refused error
+
+To test the handler run
+ansible-playbook -i inv web.yml -e "target_service=httpd"
+should see that output includes RUNNING HANDLER [Attempt to restart httpd] for scoldham2 but not scoldham3
+
+What's next
+DevOps Essentials
+Git Quick Start
+Red Hat Ansible Automation
+Red Hat Certified Systems Admin
 
