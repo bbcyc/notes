@@ -1,0 +1,388 @@
+Kubernetes the Hard Way
+
+Based on this open source guide https://github.com/kelseyhightower/kubernetes-the-hard-way
+
+Kubernetes Cluster Architecture
+Controller 1        Controller 2
+etcd                etcd
+kube-apiserver      kube-apiserver
+nginx               nginx
+kube-ctlr-mgr       kube-ctlr-mgr
+kube-scheduler      kube-scheduler
+
+remote kubectl -->  kube load balancer
+
+worker 1            worker 2
+containerd          containerd
+kubelet             kubelet
+kube-proxy          kube-proxy
+
+Provisioning Servers
+5 cloud servers
+2 Kubernetes controllers
+2 Kubernetes worker nodes
+1 Kubernetes API load balancer
+All will be Ubuntu 16
+
+Client Tools
+We need 2 client tools for this course
+cfssl and kubectl
+they need to be installed on the machine all of this work with be done on
+
+https://github.com/kelseyhightower/kubernetes-the-hard-way/blob/master/docs/02-client-tools.md
+
+To install on Linux:
+wget -q --show-progress --https-only --timestamping \
+  https://pkg.cfssl.org/R1.2/cfssl_linux-amd64 \
+  https://pkg.cfssl.org/R1.2/cfssljson_linux-amd64
+chmod +x cfssl_linux-amd64 cfssljson_linux-amd64
+sudo mv cfssl_linux-amd64 /usr/local/bin/cfssl
+sudo mv cfssljson_linux-amd64 /usr/local/bin/cfssljson
+cfssl version
+
+wget https://storage.googleapis.com/kubernetes-release/release/v1.10.2/bin/linux/amd64/kubectl
+chmod +x kubectl
+sudo mv kubectl /usr/local/bin/
+kubectl version --client
+
+Why do we need CA and TLS certificates?
+We will be provisioning a certificate authority (CA)
+We will then use the CA to generate several certificates
+
+Certificates are used to confirm (authenticate) identity.
+They are used to prove that you are who you say you are.
+
+A Certificate Authority provides the ability to confirm that a certificate is valid.
+A certificate authority can be used to validate any certificate that was issued using that certificate authority.
+
+Kubernetes uses certificates for a variety of security functions, and the different parts of our cluster will validate certificates using the certificate authority.
+In this section, we will generate all of these certificates and copy the necessary files to the servers that need them.
+
+Client Certificates - These certificates provide client authentication for various users:
+admin, kube-controller-manager, kube-proxy, kube-scheduler, and the kubelet client on each worker node.
+
+Kubernetes API Server Certificate - This is the TLS certificate for the Kubernetes API.
+
+Service Account Key Pair - Kubernetes uses a certificate to sign service account tokens, so we need to provide a certificate for that purpose.
+
+Provisioning the Certificate Authority
+cd ~/
+mkdir kthw/
+cd kthw/
+ls
+
+{
+
+cat > ca-config.json << EOF
+{
+  "signing": {
+    "default": {
+      "expiry": "8760h"
+    },
+    "profiles": {
+      "kubernetes": {
+        "usages": ["signing", "key encipherment", "server auth", "client auth"],
+        "expiry": "8760h"
+      }
+    }
+  }
+}
+EOF
+
+cat > ca-csr.json << EOF
+{
+  "CN": "Kubernetes",
+  "key": {
+    "algo": "rsa",
+    "size": 2048
+  },
+  "names": [
+    {
+      "C": "US",
+      "L": "Portland",
+      "O": "Kubernetes",
+      "OU": "CA",
+      "ST": "Oregon"
+    }
+  ]
+}
+EOF
+
+cfssl gencert -initca ca-csr.json | cfssljson -bare ca
+
+}
+
+Generating Client Certificates
+cd ~/kthw
+Generate Admin Client Certificate:
+{
+
+cat > admin-csr.json << EOF
+{
+  "CN": "admin",
+  "key": {
+    "algo": "rsa",
+    "size": 2048
+  },
+  "names": [
+    {
+      "C": "US",
+      "L": "Portland",
+      "O": "system:masters",
+      "OU": "Kubernetes The Hard Way",
+      "ST": "Oregon"
+    }
+  ]
+}
+EOF
+
+cfssl gencert \
+  -ca=ca.pem \
+  -ca-key=ca-key.pem \
+  -config=ca-config.json \
+  -profile=kubernetes \
+  admin-csr.json | cfssljson -bare admin
+
+}
+admin-csr.json - certificate signing request
+cfssl - used to generate the cert
+
+
+Kubelet Client certificates - be sure to enter actual cloud server values for variables at top
+WORKER0_HOST=<Public hostname of your first worker node cloud server>
+WORKER0_IP=<Private IP of your first worker node cloud server>
+WORKER1_HOST=<Public hostname of your second worker node cloud server>
+WORKER1_IP=<Private IP of your second worker node cloud server>
+
+{
+cat > ${WORKER0_HOST}-csr.json << EOF
+{
+  "CN": "system:node:${WORKER0_HOST}",
+  "key": {
+    "algo": "rsa",
+    "size": 2048
+  },
+  "names": [
+    {
+      "C": "US",
+      "L": "Portland",
+      "O": "system:nodes",
+      "OU": "Kubernetes The Hard Way",
+      "ST": "Oregon"
+    }
+  ]
+}
+EOF
+
+cfssl gencert \
+  -ca=ca.pem \
+  -ca-key=ca-key.pem \
+  -config=ca-config.json \
+  -hostname=${WORKER0_IP},${WORKER0_HOST} \
+  -profile=kubernetes \
+  ${WORKER0_HOST}-csr.json | cfssljson -bare ${WORKER0_HOST}
+
+cat > ${WORKER1_HOST}-csr.json << EOF
+{
+  "CN": "system:node:${WORKER1_HOST}",
+  "key": {
+    "algo": "rsa",
+    "size": 2048
+  },
+  "names": [
+    {
+      "C": "US",
+      "L": "Portland",
+      "O": "system:nodes",
+      "OU": "Kubernetes The Hard Way",
+      "ST": "Oregon"
+    }
+  ]
+}
+EOF
+
+cfssl gencert \
+  -ca=ca.pem \
+  -ca-key=ca-key.pem \
+  -config=ca-config.json \
+  -hostname=${WORKER1_IP},${WORKER1_HOST} \
+  -profile=kubernetes \
+  ${WORKER1_HOST}-csr.json | cfssljson -bare ${WORKER1_HOST}
+
+}
+
+Controller Manager Client Certificate
+{
+
+cat > kube-controller-manager-csr.json << EOF
+{
+  "CN": "system:kube-controller-manager",
+  "key": {
+    "algo": "rsa",
+    "size": 2048
+  },
+  "names": [
+    {
+      "C": "US",
+      "L": "Portland",
+      "O": "system:kube-controller-manager",
+      "OU": "Kubernetes The Hard Way",
+      "ST": "Oregon"
+    }
+  ]
+}
+EOF
+
+cfssl gencert \
+  -ca=ca.pem \
+  -ca-key=ca-key.pem \
+  -config=ca-config.json \
+  -profile=kubernetes \
+  kube-controller-manager-csr.json | cfssljson -bare kube-controller-manager
+
+}
+
+Kube Proxy Client Certificate
+{
+
+cat > kube-proxy-csr.json << EOF
+{
+  "CN": "system:kube-proxy",
+  "key": {
+    "algo": "rsa",
+    "size": 2048
+  },
+  "names": [
+    {
+      "C": "US",
+      "L": "Portland",
+      "O": "system:node-proxier",
+      "OU": "Kubernetes The Hard Way",
+      "ST": "Oregon"
+    }
+  ]
+}
+EOF
+
+cfssl gencert \
+  -ca=ca.pem \
+  -ca-key=ca-key.pem \
+  -config=ca-config.json \
+  -profile=kubernetes \
+  kube-proxy-csr.json | cfssljson -bare kube-proxy
+
+}
+
+Kube Scheduler Client Certificate
+{
+
+cat > kube-scheduler-csr.json << EOF
+{
+  "CN": "system:kube-scheduler",
+  "key": {
+    "algo": "rsa",
+    "size": 2048
+  },
+  "names": [
+    {
+      "C": "US",
+      "L": "Portland",
+      "O": "system:kube-scheduler",
+      "OU": "Kubernetes The Hard Way",
+      "ST": "Oregon"
+    }
+  ]
+}
+EOF
+
+cfssl gencert \
+  -ca=ca.pem \
+  -ca-key=ca-key.pem \
+  -config=ca-config.json \
+  -profile=kubernetes \
+  kube-scheduler-csr.json | cfssljson -bare kube-scheduler
+
+}
+
+Generating the Kubernetes API Server Certificate
+cd ~/kthw
+CERT_HOSTNAME=10.32.0.1,<controller node 1 Private IP>,<controller node 1 hostname>,<controller node 2 Private IP>,<controller node 2 hostname>,<API load balancer Private IP>,<API load balancer hostname>,127.0.0.1,localhost,kubernetes.default
+
+{
+
+cat > kubernetes-csr.json << EOF
+{
+  "CN": "kubernetes",
+  "key": {
+    "algo": "rsa",
+    "size": 2048
+  },
+  "names": [
+    {
+      "C": "US",
+      "L": "Portland",
+      "O": "Kubernetes",
+      "OU": "Kubernetes The Hard Way",
+      "ST": "Oregon"
+    }
+  ]
+}
+EOF
+
+cfssl gencert \
+  -ca=ca.pem \
+  -ca-key=ca-key.pem \
+  -config=ca-config.json \
+  -hostname=${CERT_HOSTNAME} \
+  -profile=kubernetes \
+  kubernetes-csr.json | cfssljson -bare kubernetes
+
+}
+
+Generating the Service Account Key Pair
+cd ~/kthw
+
+{
+
+cat > service-account-csr.json << EOF
+{
+  "CN": "service-accounts",
+  "key": {
+    "algo": "rsa",
+    "size": 2048
+  },
+  "names": [
+    {
+      "C": "US",
+      "L": "Portland",
+      "O": "Kubernetes",
+      "OU": "Kubernetes The Hard Way",
+      "ST": "Oregon"
+    }
+  ]
+}
+EOF
+
+cfssl gencert \
+  -ca=ca.pem \
+  -ca-key=ca-key.pem \
+  -config=ca-config.json \
+  -profile=kubernetes \
+  service-account-csr.json | cfssljson -bare service-account
+
+}
+
+Distributing the Certificate Files
+cd ~/kthw/
+Move the certificates to the worker nodes:
+scp ca.pem <worker 1 hostname>-key.pem <worker 1 hostname>.pem user@<worker 1 public IP>:~/
+scp ca.pem <worker 2 hostname>-key.pem <worker 2 hostname>.pem user@<worker 2 public IP>:~/
+make sure to replace placeholders with actual values
+
+Move certificates to the controller nodes:
+scp ca.pem ca-key.pem kubernetes-key.pem kubernetes.pem \
+    service-account-key.pem service-account.pem user@<controller 1 public IP>:~/
+scp ca.pem ca-key.pem kubernetes-key.pem kubernetes.pem \
+    service-account-key.pem service-account.pem user@<controller 2 public IP>:~/
+
+
