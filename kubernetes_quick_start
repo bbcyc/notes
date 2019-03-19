@@ -1,0 +1,379 @@
+Kubernetes Quick Start
+
+Set up 3 servers - CentOS7, North America, medium (3 units)
+k8smaster, k8snode1, k8snode2
+
+SSH Log into all 3 servers and run the following:
+sudo su
+
+Disable SELinux
+setenforce 0
+sed -i --follow-symlinks 's/SELINUX=enforcing/SELINUX=disabled/g' /etc/sysconfig/selinux
+
+Enable the br_netfilter module for cluster communication
+modprobe br_netfilter
+echo '1' > /proc/sys/net/bridge/bridge-nf-call-iptables
+
+Disable swap to prevent memory allocation issues
+swapoff -a
+vim /etc/fstab -> comment out swap line
+
+Install Docker CE
+Install Docker prereqs
+yum install -y yum-utils device-mapper-persistent-data lvm2
+
+Add the Docker repo and install Docker
+yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+yum install -y docker-ce
+
+Add the Kubernetes repo
+cat <<EOF > /etc/yum.repos.d/kubernetes.repo
+[kubernetes]
+name=Kubernetes
+baseurl=https://packages.cloud.google.com/yum/repos/kubernetes-e17-x86_64
+enabled=1
+gpgcheck=0
+repo_gpgcheck=0
+gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg
+        https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+EOF
+
+Install Kubernetes.
+ yum install -y kubelet kubeadm kubectl
+
+Reboot.
+
+Enable and start Docker and Kubernetes.
+systemctl enable docker
+systemctl enable kubelet
+systemctl start docker
+systemctl start kubelet
+
+Check the group Docker is running in.
+docker info | grep -i cgroup
+
+Set Kubernetes to run in the same group.
+sed -i 's/cgroup-driver=systemd/cgroup-driver=cgroupfs/g' /etc/systemd/system/kubelet.service.d/10-kubeadm.conf
+
+Reload systemd for the changes to take effect, and then restart Kubernetes.
+systemctl daemon-reload
+systemctl restart kubelet
+
+*Note: Complete the following section on the MASTER ONLY!
+
+Initialize the cluster using the IP range for Flannel.
+kubeadm init --pod-network-cidr=10.244.0.0/16
+
+Copy the kubeadmin join command.
+
+Exit sudo and run the following:
+
+mkdir -p $HOME/.kube
+sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+Deploy Flannel.
+kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
+
+Check the cluster state.
+kubectl get pods —all-namespaces
+
+Note: Complete the following steps on the NODES ONLY!
+
+Run the join command that you copied earlier (this command needs to be run as sudo), then check your nodes from the master.
+kubectl get nodes
+
+Masters and Nodes
+What is running on master?
+etcd - This is the key value store for the cluster.
+  When an object is created, that object's state is stored here.
+  Etcd acts as the reference for the cluster state, if the cluster differs from what is indicated here,
+  the cluster is changed to match.
+API server - This is the front end for the Kubernetes control plane.
+  All API calls are sent to this server, and the server sends commands to the other services.
+Scheduler - When a new pod is created, the scheduler determines which node the pod will be run on.
+  This decision is based on many factors, including hardware, workloads, affinity, etc.
+Controller Manager - Operate the cluster controllers.
+  Node Controller - Responsible for noticing and responding when nodes go down.
+  Replication Controller - Responsible for maintaining the correct number of pods for every
+    replication controller object in the system.
+  Endpoints Controller - Populates the Endpoints object (i.e. joins services and pods).
+  Service Account & Token Controllers - Creates default accounts and API access tokens for new namespaces.
+
+Node
+  Proxy - This runs on the nodes and provides networking connectivity for services on the nodes that connect to the pods.
+    Services must be defined via the API in order to configure the proxy.
+  Kubelet - This is the primary node agent that runs on each node. It uses a PodSpec, a provided object that describes a pod,
+    to monitor the pods on its node. The kubelet checks the state of its pods and ensures that they match the spec.
+  Container Runtime - This is the container manager. It can be any container runtime that is compliant with the Open Container
+    Initiative (such as Docker). When Kubernetes needs to instantiate a container inside of a pod, it interfaces with the container
+    runtime to build the correct type of container.
+
+kubectl get nodes
+kubectl get pods --all-namespaces -o wide
+most of the pods are running on master
+proxy and networking are the only pods on worker nodes
+sudo docker ps - kubernetes basically uses an api server to manipulate docker
+
+Pods and Containers
+All containers can communicate with all other containers without NAT.
+All nodes can communicate with all containers (and vice versa) without NAT.
+The IP that a container sees itself as is the IP that others will see it as.
+Containers share the pods port space
+
+kubectl get namespaces
+kubectl create namespace podexample
+cat ./pod-example.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: examplepod
+  namespace: podexample
+spec:
+  volumes:
+  - name: html
+    emptyDir: {}
+  containers:
+  - name: webcontainer
+    image: nginx
+    volumeMounts:
+    - name: html
+      mountPath: /usr/share/nginx/html
+  - name: filecontainer
+    image: debian
+    volumeMounts:
+    - name: html
+      mountPath: /html
+    command: ["/bin/sh", "-c"]
+    args:
+      - while true; do
+          date >> /html/index.html;
+          sleep 1;
+        done
+
+pods need to have a command to run or they will error out and go into CrashLoopBackoff
+if args above is replaced with echo "done", then the debian container will have nothing to do
+
+kubectl --namespace=podexample get pods
+shows 1/2 Ready
+
+delete pod and replace file with example one above
+kubectl create -f ./pod-example.yaml
+kubectl --namespace=podexample get pods -o wide
+get ip from pod
+curl [pod-ip]:80
+displays dates from command in args
+
+Networking
+network installed is flannel
+doesn't have network policy rules
+not for prod
+creates subnet leases out of larger address space
+uses etcd for storage
+Overlay network
+run 'ip route'
+eth0 is default route
+flannel has routes for containers
+flannel runs on each node
+Networking and IP addess management is provided by a network plugin.
+  This can be a CNI plugin or a Kubenet plugin.
+  Implementation varies according to the network plugin
+  that is used. However, all K8s networking must follow these three rules:
+    - All containers can communicate with all other containers without NAT.
+    - All nodes can communicate with all containers (and vice versa) without NAT.
+    - The IP address that the container sees itself as is the IP that others see it as.
+kubectl get pods --all-namespaces -o wide
+all of the primary services - running in host network
+coredns etc is cluster network
+DNS - Once there is a source for IP addresses in the cluster, DNS can start
+Etcd - Etcd is updated with the IP information
+The network plugin configures IPTables on the nodes to set up routing that allows communication
+  between pods and nodes as well as with pods on other nodes within the cluster.
+
+DNS
+Database       namespace: web_data   A Record: Database.web_data.svc.cluster.local
+Webserver      namespace: web_date   A Record: Webserver.web_data.svc.cluster.local
+Logprocessor   namespace: web_logs   A Record: Logprocessor.web_logs.svc.cluster.local
+
+All services that are defined in the cluster get a DNS record. This is true for the DNS service as well.
+
+Pods search DNS relative to their own namespace.
+
+The DNS server schedules a DNS pod on the cluster and configures the kubelets to set the containers to use the cluster's DNS service.
+
+PodSpec DNS policies determine the way that a container uses DNS. Options include Default, ClusterFirst, or None.
+
+kubectl get namespaces - get all namespaces on cluster
+kubectl get pods - grab a pod name
+kubectl exec -it [pod-name] /bin/bash
+cat /etc/resolv.conf
+
+ReplicaSet - set of pods that all share the same labels
+# Descriptor
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: frontend
+  labels:
+    app: guestbook
+    tier: frontend
+# Replica Set Definition
+spec: # modify replicas according to your case
+  replicas: 3
+  selector:
+    matchLabels:
+      tier: frontend
+    matchExpressions:
+    - {Key: tier, operator: In, values: [frontend]}
+  template:
+    metadata:
+      labels:
+        app: guestbook
+        tier: frontend
+# Container Definition
+  spec:
+    containers:
+    - name: php-redis
+      image: gcr.io/google_samples/gb-frontend:v2
+# Resource Limits & Environment Definition
+resources:
+  requests:
+    cpu: 100m
+    memory: 100Mi
+  env:
+  - name: GET_HOSTS_FROM
+    value: dns
+  ports:
+  -containerPort:80
+
+kubectl create -f ./replicas-example.yaml
+kubectl get pods
+kubectl describe rs/frontend
+kubectl describe pods [pod-name]
+curl ip address of pod to make sure nginx is running
+kubectl scale rs/frontend --replicas=4
+you should use a deployment and not a replica set for high availability
+
+Services
+---
+kind: service
+apiVersion: v1
+metadata:
+  name: Web service
+spec:
+  selector:
+    app: Web
+  ports:
+  - protocol: TCP
+  port: 80
+  targetPort: 9376
+
+This service definition selector matches pods with the "Web" label.
+It exposes port 80 and target port 9376 on the pods.
+
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: DB service
+spec:
+  selector:
+    app: DB
+  ports:
+  - protocol: TCP
+  port: 3306
+  targetPort: 8057
+
+Services run through kube-proxy whichs matches pods to selector labels
+
+kubectl create -f ./replicas-example.yaml
+kubectl get pods
+kubectl describe pod [pod-name] - look for selector
+cat ./service-example.yaml
+
+kubectl create -f ./dnstestpod.yaml - creates test pod pod/testbox
+kubectl exec -it testbox /bin/bash
+nslookup my-awesome-service
+returns server and address ips, name, address
+
+Deployments
+kubectl get deployments
+---
+standard meta
+A deployment is a defined object in the Kubernetes cluster
+Deployments can be used to:
+- Roll out replica sets
+- Declare a new state for the pods in a replica set
+- Roll back to an earlier deployment
+- Scale a deployment for load
+- Clean up a replica
+
+Name: nginx-deployment
+Namespace: default
+CreationTimestamp: Thu, 30 Nov 2017
+Labels: app=nginx
+Annotations: deployment.kubernetes.io/revision=2
+---
+Selectors and Replica Sets
+Deployments manage replica sets.
+Deployments can be used to gradually remove and replace the pods defined in a replica set that is managed by the deployment.
+When an update is required, a new replica set is created, and pods are brought up and down by the deployment controller.
+selector is the label the pods have to allow the deployment to control the pods.
+Selector: app=nginx
+Replicas: 3 desired | 3 updated | 3 total | 3 available | 0 unavailable
+---
+Strategy
+Deployments define an update strategy and allow for rolling updates.
+In this case, the pods will be replaced in increments of 25% for the total number of pods.
+StrategyType: RollingUpdate
+MinReadySeconds: -
+RollingUpdateStrategy: 25% max unavailable, 25% max surge
+---
+Deployments contain a PodSpec.
+The PodSpec can be updated to increment the container version or the structure of the pods that are deployed.
+If the PodSpec is updatd and differs from the current spec, this triggers the rollout process.
+  Pod Template:
+    Labels: app=nginx
+    Containers:
+      nginx:
+        Image: nginx:1.9.1
+        Port: 80/TCP
+        Environment: <none>
+        Mount: <none>
+      Volumes: <none>
+
+cat ./deployexample.yaml
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: example-deployment
+  labels:
+    app: ngixn
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: darealmc/nginx-k8s:v1
+        ports:
+        - containerPort: 80
+
+kubectl create -f ./deployexample.yaml
+kubectl get pods
+kubectl create -f service-example.yaml -> this works bc labels are the same
+kubectl describe service my-awesome-service -> grab IP and Port
+curl IP:Port -> should give same nginx output as curling an individual pod
+kubectl set image deployment.v1.apps/example-deployment nginx=darealmc/nginx-k8s:v2
+kubectl get deployment -> 2 up to date
+kubectl describe deployment example-deployment -> down at bottom is history, shows how the new pods
+  deployed without interruption in availability
+curl IP:Port again and see that it is version 2
+
