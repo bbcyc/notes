@@ -1,2 +1,348 @@
 Certified Kubernetes Administrator
 
+Set up your practice cluster
+Playground
+Ubuntu, North America, Medium, Kube Master, Kube Node 1, Kube Node 2
+
+ssh into VMs
+
+Add the Docker Repository on all three servers.
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+sudo add-apt-repository    "deb [arch=amd64] https://download.docker.com/linux/ubuntu \
+   $(lsb_release -cs) \
+   stable"
+
+Add the Kubernetes repository on all three servers.
+curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -
+cat << EOF | sudo tee /etc/apt/sources.list.d/kubernetes.list
+deb https://apt.kubernetes.io/ kubernetes-xenial main
+EOF
+
+Install Docker, Kubeadm, Kubelet, and Kubectl on all three servers.
+sudo apt-get update
+sudo apt-get install -y docker-ce=18.06.1~ce~3-0~ubuntu kubelet=1.12.2-00 kubeadm=1.12.2-00 kubectl=1.12.2-00
+sudo apt-mark hold docker-ce kubelet kubeadm kubectl
+
+Enable net.bridge.bridge-nf-call-iptables on all three nodes.
+echo "net.bridge.bridge-nf-call-iptables=1" | sudo tee -a /etc/sysctl.conf
+sudo sysctl -p
+
+On only the Kube Master server, initialize the cluster and configure kubectl.
+sudo kubeadm init --pod-network-cidr=10.244.0.0/16
+mkdir -p $HOME/.kube
+sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+Install the flannel networking plugin in the cluster by running this command on the Kube Master server.
+kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/bc79dd1505b0c8681ece4de4c0d86c5cd2643275/Documentation/kube-flannel.yml
+
+The kubeadm init command that you ran on the master should output a kubeadm join command containing a token and hash. You will need to copy that command from the master and run it on both worker nodes with sudo.
+sudo kubeadm join $controller_private_ip:6443 --token $token --discovery-token-ca-cert-hash $hash
+
+Now you are ready to verify that the cluster is up and running. On the Kube Master server, check the list of nodes.
+kubectl get nodes
+
+It should look something like this:
+NAME                      STATUS   ROLES    AGE   VERSION
+wboyd1c.mylabserver.com   Ready    master   54m   v1.12.2
+wboyd2c.mylabserver.com   Ready    <none>   49m   v1.12.2
+wboyd3c.mylabserver.com   Ready    <none>   49m   v1.12.2
+
+Make sure that all three of your nodes are listed and that all have a STATUS of Ready.
+
+Architecture Diagram & Explanation
+https://linuxacademy.com/cp/guides/download/refsheets/guides/refsheets/linuxacademy-kubernetesadmin-archdiagrams-1_1516737832.pdf
+Master Node
+  Kube-APISERVER
+    ETCD
+    Kube-Scheduler
+    Cloud-Controller-Manager <-> Cloud
+    Kube-Controller-Manager
+Node
+  Kubelet
+  Kube Proxy
+  Pod
+    Container
+
+How to install Kubernetes on Centos
+Create 3 VMs as with Ubuntu install
+
+Turn off swap on all servers.
+sudo swapoff -a
+sudo vi /etc/fstab
+Look for the line in /etc/fstab that says /root/swap and add a # at the start of that line, so it looks like: #/root/swap. Then save the file.
+
+Install and configure Docker.
+sudo yum -y install docker
+sudo systemctl enable docker
+sudo systemctl start docker
+
+Add the Kubernetes repo.
+cat << EOF | sudo tee /etc/yum.repos.d/kubernetes.repo
+[kubernetes]
+name=Kubernetes
+baseurl=https://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
+enabled=1
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+EOF
+
+Turn off selinux.
+sudo setenforce 0
+sudo vi /etc/selinux/config
+
+Change the line that says SELINUX=enforcing to SELINUX=permissive and save the file.
+
+Install Kubernetes Components.
+sudo yum install -y kubelet kubeadm kubectl
+sudo systemctl enable kubelet
+sudo systemctl start kubelet
+
+Configure sysctl.
+cat << EOF | sudo tee /etc/sysctl.d/k8s.conf
+net.bridge.bridge-nf-call-ip6tables = 1
+net.bridge.bridge-nf-call-iptables = 1
+EOF
+
+sudo sysctl --system
+
+Initialize the Kube Master. Do this only on the master node.
+sudo kubeadm init --pod-network-cidr=10.244.0.0/16
+mkdir -p $HOME/.kube
+sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+Install flannel networking.
+kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/bc79dd1505b0c8681ece4de4c0d86c5cd2643275/Documentation/kube-flannel.yml
+
+The kubeadm init command that you ran on the master should output a kubeadm join command containing a token and hash. You will need to copy that command from the master and run it on all worker nodes with sudo.
+sudo kubeadm join $controller_private_ip:6443 --token $token --discovery-token-ca-cert-hash $hash
+
+Now you are ready to verify that the cluster is up and running. On the Kube Master server, check the list of nodes.
+kubectl get nodes
+
+It should look something like this:
+NAME                      STATUS   ROLES    AGE     VERSION
+wboyd4c.mylabserver.com   Ready    master   3m36s   v1.12.2
+wboyd5c.mylabserver.com   Ready    <none>   23s     v1.12.2
+Make sure that all of your nodes are listed and that all have a STATUS of Ready.
+
+Kubernetes API Primitives (objects) & Cluster Architecture
+API Primtives
+- Persistent entities in the Kubernetes System.
+- Uses these to represent the state of the cluster.
+- Describe:
+    What applications are running
+    Which nodes those applications are running on.
+    Policies around those applications.
+- Kubernetes Objects are "records of intent"
+
+Object Spec:
+- Provided to Kubernetes
+- Describes desired state of objects
+
+Object Status:
+- Provided by Kubernetes
+- Describes the actual state of the object
+
+Kubernetes Yaml
+kubectl turns yaml into json
+apiVersion: v1 -> # required
+kind: Pod # what kind of object is being described
+metadata: # data used to uniquely identify object (maybe name, uid, namespace
+  name: busybox
+spec: # format of spec field is different for every object, kube api reference has format rules
+  containers:
+  - name: busybox
+    image: busybox
+    command:
+      - sleep
+      - "3600"
+
+Common Kube Objects
+- Nodes # hosts that make up cluster
+- Pods # single instances of application containers
+- Deployments # sets of load-balanced pods
+- Services # expose deployments to external networks
+- ConfigMaps # key-value pairs that can be plugged into other objects as needed
+
+Names and UIDs
+Names
+- All objects have a unique name.
+- Client provided.
+- Can be reused.
+- Maximum length of 253 chars
+- Lower case alphanumeric chars
+- - and . allowed
+UIDs
+- All objects have a unique UID.
+- Generated by Kubernetes.
+- Spatially and temporally unique.
+
+Namespaces
+- Multiple virtual clusters backed by the same virtual cluster
+- Generally for large deployments.
+- Provide scope for names.
+- Easy way to divide cluster resources.
+- Allows for multiple teams of users.
+- Allows for resource quotas.
+- Special 'kube-system' namespace
+    Used to differentiate system pods from user pods.
+
+Nodes
+- Might be a VM or physical machine.
+- Services necessary to run pods.
+- Managed by the master.
+- Services necessary
+    Container runtime
+    Kubelet
+    Kube-proxy
+- Not inherently created by Kubernetes, but by Cloud Provide
+- Kubernetes checks the node for validity.
+
+Cloud Controller Managers
+- Route controller (gce clusters only)
+- Service Controller
+- PersistentVolumeLabels controller
+
+Node Controller
+- Assigns CIDR block to a newly registered node.
+- Keeps track of the nodes.
+- Monitors the node health.
+- Evicts pods from unhealthy nodes
+- Can taint nodes based on current conditions in more recent versions.
+
+Kubernetes Services
+- Underlying architecture
+- Pod -- Simplest kubernetes object, represents one or more containers running on a single node.
+- Ephemeral, disposable, and replaceable - Stateless
+- "Cattle vs. Pets"
+- Usually managed via Deployments
+
+- Deployment specifications - refer to details of pods like images and number of replicas
+
+Services refer to Deployments and expose a particular port of IP address
+
+Running the application pods.
+  How you set up a service depends on your networking configuration
+  and how you will handle load balancing and port forwarding.
+  If you use the pod network IP address method, then a deployment gets
+  assigned a single IP address -- even if there are multiple replicas of that pod.
+  The kubernetes service (using kube-proxy on the node) redirects traffic.
+
+Commands can be imperative or declarative
+Imperative
+  kubectl run nginx --image=nginx
+Declarative
+  apiVersion: apps/v1
+  kind: Deployment
+  metadata: ...
+
+Points to remember:
+- Containers are run in Pods, the simplest Kubernetes object representing an application.
+- Pods are (usually) managed by deployments.
+- Services expose deployments.
+- Third parties handle load balancing or port forwarding to those services,
+  though Ingress objects (along with an appropriate ingress controller) are needed to do that work.
+
+sample yaml for a job which uses perl to calculate pi to 2000 digits and stops
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: pi
+spec:
+  template:
+    spec:
+      containers:
+      - name: pi
+        image: perl
+        command: ["perl",  "-Mbignum=bpi", "-wle", "print bpi(2000)"]
+      restartPolicy: Never
+  backoffLimit: 4
+
+yaml for a job to create a busybox pod that sleeps for 10 seconds and stops
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: busybox
+spec:
+  template:
+    spec:
+      containers:
+      - name: busybox
+        image: busybox
+        command: ["sleep", "10"]
+      restartPolicy: Never
+  backoffLimit: 4
+
+kubectl describe job pi -> use that to get pod name and run
+kubectl logs [pod-name]
+
+This pod will cause the alpine linux container to sleep for 3600 seconds (1 hour) and then exit. Kubernetes will then restart the pod.
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: alpine
+  namespace: default
+spec:
+  containers:
+  - name: alpine
+    image: alpine
+    command:
+      - sleep
+      - "3600"
+    imagePullPolicy: IfNotPresent
+  restartPolicy: Always
+
+To create the pod: kubectl create -f alpine.yaml
+To delete the pod: kubectl delete -f alpine.yaml
+  or kubectl delete pod alpine or kubectl delete pod/alpine
+
+yaml example for nginx pod:
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nginx-pod
+spec:
+  containers:
+  -  name: nginx
+      image: nginx
+  restartPolicy: Always
+
+Designing a Kubernetes Cluster
+Use the kubernetes cluser on linux academy playground
+minikube- single node on local- linux, windows, mac
+kubeadm to deploy multinode locally, need your own CNI (flannel)
+Ubuntu on LXD provides nine-instance supported kube cluster on local
+cloud providers - google, azure, stackpoint, etc
+turnkey solutions - up and running fast - google, aws, oracle
+add-on solutions- most important is CNI Container Networking Interface
+  Calico is a secure L3 networking and network policy provider
+  Canal unites Flannel and Calico, providing networking and network policy
+  Cilium is a L3 network and network policy plugin that can enforce HTTP/APL/L7 policies transparently
+    Both routing and overlay/encapsulation mode are supported.
+  CNI-Genie enables Kubernetes to seamlessly connect to a choice of CNI plugins,
+    such as Calico, Canal, Flannel, Romana, or Weave
+Contiv
+  provides configurable networking (native L3 using BGP, overlay using vxlan, classic L2, and Cisco-SDN/ACI)
+  for various uses and rich policy framework.
+  fully open sourced
+  installer provides both kubeadm and non-kubeadm based installation options
+Flannel is an overlay network provider that can be used with Kubernetes, and is the one we're using in our LA servers
+Multus is a Multi plugin for multiple network support in Kubernetes to support all CNI plugins
+  (e.g. Calico, Cilium, Contiv, Flannel), in addition to SRIOV, DPDK, OVS-DPDK, and VPP based workloads in Kubernetes
+NSX-T Container Plug-in (NCP) provides integration between VMWare NSX-T and container orchestrators such as Kube
+  Also provides integrations between NSX-T and container-based CaaS/PaaS platforms such as Pivotal Container Service PKS and Openshift
+Nuage is an SDN platform that provide policy-based networking between Kubernetes Pods and
+  non-Kube environments with visibility and security monitoring
+Romana is a Layer 3 networking solution for pod networks that also supports the NetworkPolicy API
+Weave Net provides networking and network policy, will carry on working on both sides of a network partition,
+  and does not require an external database
+There are also add-ons for service discovery and visualization and control, like the dashboard.
+
+
