@@ -345,4 +345,132 @@ Weave Net provides networking and network policy, will carry on working on both 
   and does not require an external database
 There are also add-ons for service discovery and visualization and control, like the dashboard.
 
+Exercise: Explore the Sandbox
+1. Examine the current status of your cluster. Are all the nodes ready? How do you know?
+The command kubectl get nodes will give the current status of all nodes.
+
+2. Are there any pods running on node 2 of your cluster? How can you tell?
+You can get this information in a variety of ways:
+kubectl describe node node-name
+kubectl get pods --all-namespaces -o wide will list all pods and which nodes they are currently running on.
+
+3. Is the master node low on memory currently? How can you tell?
+kubectl describe node node-2-name will list DiskPressure and MemoryPressure statuses so you can see how it is doing.
+
+4. What pods are running in the kube-system namespace? What command did you use to find out?
+kubectl get pods -n kube-system will provide the desired results.
+
+Hardware and Underlying Infrastructure
+The hardware and infrastructure that k8s will run on is truly staggering
+Many developers run full, 6 node k8s and docker clusters on raspberry pis
+Nodes, including the master, can be physical or virtual machines running k8s componenets
+  and a container manager such as docker or rocket
+The nodes should be connected by a common network, thought he internet will work as long as
+  port 443 and whatever your pod networking system uses are unblocked
+A pod networking application such as Flannel is needed to allow the pods to communicate
+  with one another, and it makes use of an overlay network (by default it's vxlans)
+  to provide that service
+The Linux Academy Kubernetes Lab you built on Cloud Servers in an earlier lab, for example,
+  is made up of two to six VMs. We then used kubeadm to bootstrap the master, and ran
+  a join command on each of the nodes to provision them.
+For the exam, it's important to understand this relationship.
+
+Cluster Communications
+- Cluster communications cover communications to the API server, control-plane communications inside the cluster,
+  and can even include pod-to-pod communications.
+- This is an in-depth topic with a fair amount of detail, so let's start by discussing how to secure
+  communications to the Kubernetes API server.
+- Everything in Kubernetes goes through the API driver, so controlling and limiting who has access
+  to the cluster and what they are allowed to do is arguably the most important task in securing the cluster.
+- The default encryption communication in K8s is TLS
+- Most of the installation methods will handle the certificate creation.
+- Kubeadm created certificates during the Linux Academy Cloud Server Kubernetes Cluster Lab
+- No matter how you've installed k8s, some components and installation methods may enable
+  local ports over HTTP and you should double check the settings of these components to
+  identify potentially unsecured traffic and address these issues.
+- Anything that connects to the API, including nodes, proxies, the scheduler, volume plugins in additions
+  to users, should be authenticated.
+- Again, most installation methods create certificates for those infrastructure pieces, but if you've chosen to install manually,
+  you might need to do this yourself.
+- Once authenticated, every API call should pass an authorization check.
+RBAC
+- Kubernetes has an integrated Role-Based Access Control (RBAC) component
+- Certain roles perform specific actions in the cluster
+- Kubernetes has several well thought out, pre-created roles
+- Simple rules might be fine for smaller clusters
+- If a user doesn't have rights to perform and action, but they do have access to perform a composite
+  action that includes it, the user WILL be able to indirectly create objects.
+- Carefully consider what you want users to be allowed to do prior to making changes to the existing roles.
+
+Securing the Kubelet
+- Secure the kubelet on each node.
+- The Kubelets expose HTTPS endpoints which give access to both data and actions on the nodes.
+  By default, these are open.
+- To secure those endpoints, you can enable Kubelet Authentication and Authorization by starting it
+  with an --anonymous-auth=false flag and assigning it an appropriate x509 client certificate in its configuration.
+
+Securing the Network
+- Network Policies restrict access to the network for a particular namespace.
+- This allows developers to restrict which pods in other namespaces can access pods and port within
+  the current namespace.
+- The pod networking CNI must respect these policies which, fortunately, most of them do
+- Users can also be assigned quotas or limit ranges
+- Use Plug-Ins for more advanced functionality
+- That should secure all the communications in a cluster
+
+Vulnerabilities
+- Kubernetes makes extensive use of etcd for storing configuration and secrets. It acts as the
+  key/value store for the entire cluster.
+- Gaining write access to etcd is very much like gaining root on the whole cluster, and even
+  read access can be used by attackers to cause some serious damage.
+- Strong credentials on your etcd server or cluster is a must.
+- Isolate those behind a firewall that only allows requests from the API servers.
+
+- Audit logging is also critical
+- Records actions taken by the API for later analysis in the event
+- Enable audit logging and archive the audit file on a secure server
+
+- Rotate your infrastructure credentials frequently
+- Smaller lifetime windows for secrets and credentials create bigger problems for attackers attempting to use it.
+- You can even set these up to have short lifetimes and automate their rotation.
+
+Third Party Integrations
+- Always review third party integrations before enabling them.
+- Integrations to Kubernetes can change how secure your cluster is.
+- Add-ons might be nothing more than just more pods in the cluster, but those can be powerful.
+- Don't allow them into the kube-system namespace
+
+- You should also join the kubernetes-announce group for emails about security announcements
+  https://groups.google.com/forum/#!forum/kubernetes-announce
+
+Making Kubernetes Highly Available
+- The challenges associated with making any platform HA are many
+- While the exam isn't going to make you deploy a full HA kubernetes cluster, we should take a look
+  at the process from a high level to gain an understanding of how it should work
+
+The Process
+- Create the reliable nodes that will form our cluster.
+- Set up a redundant and reliable storage service with a multinode deployment of etcd
+- Start replicated and load balanced Kubernetes API servers.
+- Set up a master-elected kubernetes scheduler and controller manager daemons.
+- Here is what our final system is going to look like
+- Notice that everything that needs the API server or any other service on the master goes through
+  the load balancer, including the worker nodes.
+
+Step One
+- Make the Master node reliable
+- Ensure that the services automatically restart if they fail
+- Kubelet already does this, so it's a convenient piece to use
+- If the kubelet goes down, though, we need to restart it
+- Monit on Debian systems or systemctl on systemd-based systems.
+
+Step Two - Storage Layer
+- If we're going to make it HA, then we've got to make sure that persistent storage is rock solid
+- Protect the data
+- If you have the data, you can rebuild almost anything else.
+- Once the data is gone, the cluster is gone too
+- Clustered etcd already replicates the storage to all master instances in your cluster
+- To lose data, all three nodes would need to have their disks fail at the same time.
+- The probability of this is relatively low, so just running a replicated etcd cluster is reliable enough.
+- Add additional reliability by increasing the size of the cluster from three to five nodes.
 
