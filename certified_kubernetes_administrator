@@ -398,6 +398,7 @@ RBAC
 - Certain roles perform specific actions in the cluster
 - Kubernetes has several well thought out, pre-created roles
 - Simple rules might be fine for smaller clusters
+
 - If a user doesn't have rights to perform and action, but they do have access to perform a composite
   action that includes it, the user WILL be able to indirectly create objects.
 - Carefully consider what you want users to be allowed to do prior to making changes to the existing roles.
@@ -522,4 +523,327 @@ Installing Configuration Files
   and kube-controller-manager.yaml into the /etc/kubernetes/manifests/ directory
 - And once that's all done, we've got our cluster highly available! Remember, if a worker node goes down,
   kubernetes will rapidly detect that and spin up replacement pods elsewhere in the cluster.
+
+End-to-End Testing and Validation
+- Provide a mechanism to test end-to-end behavior of the system
+- Last signal to ensure end user operations match specifications
+- Primarily a developer tool
+- Difficult to run against just "any" deployment - many specific tests for cloud providers
+    Ubuntu has its own Juju-deployed tests
+    GCE has its own
+    Many tests offered
+Kubetest Suite
+- Ideal for GCE or AWS users
+- Build
+- Stage
+- Extract
+- Bring up the cluster
+- Test
+- Dump logs
+- Tear down
+Conclusion
+- e2e validation is primarily for developers creating new code
+- Kubetest is a testing suite for Kubernetes e2e testing
+
+Validating Nodes and the Cluster
+Login to Kube Master
+kubectl get nodes
+kubectl describe node [server-name]
+can also log into a worker node and run `ps aux | grep kube` to make sure
+  kubelet, kube-proxy, and networking plugin are running
+
+Deployments, Rolling Updates, and Rollbacks
+nginx-deployment.yaml
+---
+apiVersion: apps/v1beta2
+kind: Deployment
+metadata:
+  name: nginx-deployment
+spec:
+  selector:
+    matchLabels:
+      app: nginx
+  replicas: 2
+  template: # describes the pods that are going to be created
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.7.9
+        ports:
+        - containerPort: 80
+
+kubectl create -f nginx-deployment.yaml
+kubectl get deployments
+kubectl describe deployment nginx-deployment
+kubectl get deployment nginx-deployment -o yaml -> way to get yaml back out
+
+How to do a rollout
+kubectl set image deployment nginx-deployment nginx=nginx:1.8
+kubectl rollout status deployment/nginx-deployment
+kubectl describe deployment nginx-deployment
+vim nginx-deployment -> edit version to 1.9
+kubectl apply -f nginx-deployment.yaml
+kubectl rollout status deployment/nginx-deployment
+kubectl describe deployment nginx-deployment
+kubectl rollout history deployment/nginx-deployment --revision=3
+kubectl rollout undo deployment/nginx-deployment --to-revision=2
+
+Exercise: Deployments
+1. Create the deployment.
+  Create the yaml file and name it something. I chose nginx-deployment.yaml. Create the deployment object by calling:
+  kubectl create -f nginx-deployment.yaml
+
+2. Which nodes are the pods running on. How can you tell?
+  There are many ways to get this, here's one example that gives you the results in one step and uses a label selector:
+  kubectl get pods -l app=nginx -o wide
+
+3. Update the deployment to use the 1.8 version of the nginx container and roll it out.
+  There are many ways. Here are two:
+  This will work just fine but is not the preferredmethod because now the yaml is inconsistent with what you've got running in the cluster. Anyonecomingacrossyouryaml will assume it's what is up and running and it isn't.
+  kubectl set image deployment nginx-deployment nginx=nginx:1.8
+  Updatethelineintheyaml to the 1.8 version of the image, and apply the changes with
+  kubectl apply -f nginx-deployment.yaml
+
+4. Update the deployment to use the 1.9.1 version of the nginx container and roll it out.
+  Same as above. Don't forget you can watch the status of the rollout with the command
+
+5. Roll back the deployment to the 1.8 version of the container.
+  kubectl rollout status deployment nginx-deployment
+  kubectl rollout undo deployment nginx-deployment
+  will undo the previous rollout, or if you want to go to a specific point in history, you can view the history and roll back to a specific state with:
+  kubectl rollout history deployment nginx-deployment
+  kubectl rollout undo deployment nginx-deployment --to-revision=x
+
+6. Remove the deployment
+  kubectl delete -f nginx-deployment.yaml
+
+How Kubernetes Configures Applications
+ConfigMaps
+kubectl create configmag my-map --from-literal=LinuxAcademy
+kubectl get configmaps
+kubectl describe configmaps my-map
+kubectl get configmap my-map -o yaml
+cat pod-config.yaml
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: config-test-pod
+spec:
+  containers:
+    - name: test-container
+      image: busybox
+      command: [ "/bin/sh", "-c", "env" ]
+      env:
+        - name: WHAT_SCHOOL
+          valueFrom:
+            configMapKeyRef:
+              name: my-map
+              key: school
+  restartPolicy: never
+
+kubectl create -f pod-config.yaml
+kubectl logs config-test-pod
+
+Exercise: Using ConfigMaps to Set Environment Variables
+1. Write yaml for a ConfigMap that will create a data key called "myKey" with the value "myValue"
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-config-map
+data:
+  myKey: myValue
+
+2. Create the ConfigMap using the kubectl command-line tool
+kubectl apply -f my-config-map.yaml to create the ConfigMap
+
+3. Write a pod yaml to pass the ConfigMap data to the pod, so that the pod can use it as an environment variable
+Here is a yaml file named "my-configmap-pod.yaml" that will pass the ConfigMap data to the pod so the container can use it as an environment variable:
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-configmap-pod
+spec:
+  containers:
+  - name: myapp-container
+    image: busybox
+    command: ['sh', '-c', "echo $(MY_VAR) && sleep 3600"]
+    env:
+    - name: MY_VAR
+      valueFrom:
+        configMapKeyRef:
+          name: my-config-map
+          key: myKey
+
+4. Create the pod using kubectl
+kubectl apply -f my-configmap-pod.yaml to create a pod that will use the ConfigMap data as an environment variable
+
+5. Echo the value of the environment variable to the console
+kubectl logs my-configmap-pod to display the "echo $(MY_VAR)" command from the container
+
+Scaling Applications
+got a deployment with 2 replicas
+to scale it to 3 replicas:
+kubectl scale deployment/nginx-deployment --replicas=3
+kubectl get deployments
+kubectl get pods
+kubectl scale deployment/nginx-deployment --replicas=1 -> to scale down
+Autoscaling is possible with metrics and heapster, but not part of the exam
+
+Scaling practice
+---
+apiVersion: apps/v1beta2
+kind: Deployment
+metadata:
+  name: nginx-deployment
+spec:
+  selector:
+    matchLabels:
+      app: nginx
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx
+        ports:
+        - containerPort: 80
+
+Scale the deployment up to 4 pods without editing the YAML.
+kubectl scale deployment/nginx-deployment --replicas=4
+
+Edit the YAML so that 3 pods are available and can apply the changes to the existing deployment.
+edit the replicas line to 3 from 2 and
+kubectl apply -f nginx-deployment.yaml
+
+Which of these methods do you think is preferred and why?
+  Performing the edit in the YAML is the preferred one,
+  as it keeps the YAML on disk in sync with the state of the cluster.
+
+Self-Healing Applications
+all apps in kube are self-healing as kube changes things to match specs
+kubectl get deployments
+kubectl get pods
+kubectl delete pod nginx-deployment-8989234
+kubectl get pods -> a new pod is getting created
+what if a node dies
+shut off a node
+kubectl get deployments -> shows 2 of 3 available
+kubectl get pods -> still shows 3 pods, kube takes 5 mins to evict a pod it cant find
+kubectl describe pod nginx-deployment-8989234 -> shows Tolerations: node-kubernetes.io/not-ready:NoExecute for 300s
+kubectl get pods -> after 300s shows Status Unknown for the pod in node that was stopped
+power back up the node -> shows ready -> no new pods started up, still at 3 replicas
+
+Exercise: Replication Controllers, Replica Sets, and Deployments
+Write a YAML file that will create a Replication Controller that will maintain three copies of an nginx container.
+  Execute your YAML and make sure it works.
+A Replica Set is a more advanced version of a Replication Controller that is used when more low-level control is needed.
+  While these are commonly managed with deployments in modern K8s, it's good to have experience with them.
+To create the replication controller, write the following YAML file:
+
+Replication Controller:
+
+apiVersion: v1
+kind: ReplicationController
+metadata:
+  name: nginx
+spec:
+  replicas: 3
+  selector:
+    app: nginx
+  template:
+    metadata:
+      name: nginx
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx
+        ports:
+        - containerPort: 80
+
+
+Write the YAML that will maintain three copies of an nginx container using a Replica Set.  Test it to be sure it works, then delete it.
+A deployment is used to manage Replica Sets.
+To maintain three copies of an nginx container in a replica set, write the following YAML file:
+
+Replication Set:
+
+apiVersion: apps/v1beta2
+kind: ReplicaSet
+metadata:
+  name: nginx
+  labels:
+    app: nginx
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx
+        ports:
+        - containerPort: 80
+
+Write the YAML for a deployment that will maintain three copies of an nginx container.
+  Test it to be sure it works, then delete it.
+To perform a deployment for the Replica Set, write the following YAML file:
+
+Deployment:
+
+apiVersion: apps/v1beta2 # for versions before 1.8.0 use apps/v1beta1
+kind: Deployment
+metadata:
+  name: nginx-deployment
+  labels:
+    app: nginx
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx
+        ports:
+        - containerPort: 80
+
+Labels & Selectors
+Enable to map their own organizational structure onto Kube objects
+Example labels
+"release" : "stable", "release" : "canary"
+"environment" : "dev", "environment" : "qa", "environment" : "production"
+"partition" : "customerA", "partition" : "customerB"
+"tier" : "backend", "tier" : "frontend", "tier" : "cache"
+"track" : "daily", "track": "weekly"
+
+Key must be unique for a given object
+
+kubectl get pods -l app=nginx
+kubectl get pods -l app=mysql
+kubectl label pod mysql-544bbdcd6f-grftk test=sure
+kubectl label pod mysql-544bbdcd6f-grftk test=sure --overwrite
+kubectl describe pod -l test=sure
+kubectl label pods -l app=nginx tier=frontend
+kubectl delete pods -l test=sure
+
 
