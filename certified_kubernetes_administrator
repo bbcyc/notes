@@ -846,4 +846,187 @@ kubectl describe pod -l test=sure
 kubectl label pods -l app=nginx tier=frontend
 kubectl delete pods -l test=sure
 
+Exercise: Label ALL THE THINGS!
+1. Label each of your nodes with a "color" tag. The master should be black; node 2 should be red; node 3 should be green and node 4 should be blue.
+  kubectl label node [kube-master-name] color=black
+  kubectl label node [node1-name] color=red
+  kubectl label node [node2-name] color=green
+  kubectl label node [node3-name] color=blue
+
+2. If you have pods already running in your cluster in the default namespace, label them with the key/value pair running=beforeLabels.
+  kubectl label pods -n default running=beforeLabels --all
+
+3. Create a new alpine deployment that sleeps for one minute and is then restarted from a yaml file that you write that labels these container with the key/value pair running=afterLabels.
+  name: alpine
+  namespace: default
+  labels:
+    running: afterLabels
+spec:
+  containers:
+  - name: alpine
+    image: alpine
+    command:
+      - sleep
+      - "60"
+  restartPolicy: Always
+
+4. List all running pods in the default namespace that have the key/value pair running=beforeLabels.
+  kubectl get pods -l running=beforeLabels -n default
+
+5. Label all pods in the default namespace with the key/value pair tier=linuxAcademyCloud.
+  kubectl label pods --all -n default tier=linuxAcademyCloud
+
+6. List all pods in the default namespace with the key/value pair running=afterLabels and tier=linuxAcademyCloud.
+  kubectl get pods -l running=afterLabels,tier=linuxAcademyCloud
+
+DaemonSets
+kubectl get daemonsets -n kube-system
+kube-flannel-ds and kube-proxy
+run everytime we require a pod to be on every node in cluster
+kubectl describe daemonset kube-flannel-ds -n kube-system
+used for networking, monitoring, etc
+
+Exercise: Raise a DaemonSet
+Write the yaml to deploy a DaemonSet (just use an nginx image) and
+  then test it to be sure it gets deployed on each node.
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: cthulu
+  labels:
+    daemon: "yup"
+spec:
+  selector:
+    matchLabels:
+      daemon: "pod"
+  template:
+    metadata:
+      labels:
+        daemon: pod
+  spec:
+    tolerations:
+    - key: node-role.kubernetes.io/master
+      effect: NoSchedule
+  containers:
+  - name: cthulu-jr
+    image: nginx
+
+Resource Limits & Pod Scheduling
+if scheduler cant find node with enough resources for a pod,
+  the pod will remain in pending state until resources become available
+taints allow nodes to repel work
+kubectl get nodes
+kubectl describe node [master-node-name]
+shows the value
+Taints: node-role.kubernetes.io/master:NoSchedule
+Taints have a key, value, and an effect, represented as
+  <key>=<value>:<effect>. The key 'node-role.kubernetes.io/master'
+  is a null value and is not shown here in the taint.
+NoSchedule means it wont schedule a node without a tolerance
+tolerations make it possible for a pod to be scheduled to a node with a taint
+You can remove taints by key, key-value, or key-effect. Here, the taint is removed by key
+kubectl taint node [master-node-name] master-
+To retaint the node:
+The null value cannot be reapplied, but the taint 'node-role.kubernetes.io=master:NoSchedule'
+  has the same effect
+kubectl taint nodes [master-node-name] node-role.kubernetes.io/master-
+If a toleration and a taint match during scheduling, the taint is ignored
+  and the pod might be scheduled to the node.
+Taints and tolerations work together to ensure that pods are not scheduled onto inappropriate nodes. One or more taints are applied to a node; this marks that the node should not accept any pods that do not tolerate the taints. Tolerations are applied to pods, and allow (but do not require) the pods to schedule onto nodes with matching taints.
+
+Manually Scheduling a Pod
+To schedule to a particular node, gonna need labels
+kubectl get nodes
+if i want a pod on node 3, put a label on it
+kubectl label node [node3-name] net=gigabit
+kubectl describe node [node3-name] -> look in Labels section for new label
+pod needs node selector on it for this node
+do that in the yaml
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: webhead
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      run: webhead
+  template:
+    metadata:
+      labels:
+        run: webhead
+    spec:
+      containers:
+      - image: nginx
+        name: webhead
+        ports:
+        - containerPort: 80
+          protocol: TCP
+      nodeSelector:
+          net: gigabit
+
+kubectl create -f webhead.yaml
+kubectl get pods
+kubectl describe pods -> can see it is on node 3
+
+Exercise: Label a Node and Schedule a Pod
+1. Pretend that node 3 is your favorite node.  Maybe it's got all SSDs.  Maybe it's got a fast network or a GPU.  Or maybe it sent you a nice tweet.  Label this node in some way so that you can schedule a pod to it.
+  kubectl label node [node3-name] node=awesome
+
+2. Create a yaml for a busybox sleeper/restarter that will get scheduled to your favorite node from #1.
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: busybox
+  namespace: default
+spec:
+  containers:
+  - image: busybox
+    name: busybox
+    command:
+      - "sleep"
+      - "300"
+    imagePullPolicy: IfNotPresent
+  restartPolicy: Always
+  nodeSelector:
+    node: awesome
+
+Exercise: Multiple Schedulers
+
+
+Pods generally are scheduled by the default scheduler, and their yaml might look like this:
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: annotation-default-scheduler
+  labels:
+    name: multischeduler
+spec:
+  schedulerName: default-scheduler
+  containers:
+  - name: pod-container
+    image: k8s.gcr.io/pause:2.0
+
+Ordinarily, we don't need to specify the scheduler's name in the spec because everyone uses a single default one. Sometimes, however, developers need to have custom schedulers in charge of placing pods due to legacy or specialized hardware constraints.
+
+Rewrite the yaml for this pod so it makes use of a scheduler called custom-scheduler, and annotate the pod accordingly.
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: annotation-default-scheduler
+  labels:
+    name: multischeduler
+  annotations:
+    scheduledBy: custom-scheduler
+spec:
+  schedulerName: custom-scheduler
+  containers:
+  - name: pod-container
+    image: k8s.gcr.io/pause:2.0
+
 
