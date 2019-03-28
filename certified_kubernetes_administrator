@@ -1162,3 +1162,22 @@ sudo apt upgrade kubelet
 kubectl get nodes
 kubectl uncordon [node2-name]
 
+Upgrading the Underlying Operating System
+Let's say we need to reinstall OS on a node, here's how
+kubectl get nodes -> we're gonna do node4
+kubectl drain [node4-name] --ignore-daemonsets -> cordons node
+turn off node
+kubectl get nodes -> eventually node shows as NotReady
+kubectl delete node [node4-name] -> might as well delete it, its not coming back
+to put a new node back on
+kubeadm join comman is not around and the token is probably expired
+sudo kubeadm token list -> check out tokens
+sudo kubeadm token generate -> make a new token
+sudo kubeadm create [token-from-command-above] --ttl 3h --print-join-command
+  -> generates new kubeadm join command
+ssh into new node and run kubeadm join command from above
+
+
+
+
+
