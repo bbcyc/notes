@@ -1029,4 +1029,136 @@ spec:
   - name: pod-container
     image: k8s.gcr.io/pause:2.0
 
+Monitoring Cluster and Application Components
+- Monitoring is essential for a production system!
+- Must monitor nodes, containers, pods, services, and the entire cluster.
+- Provide end-users resource usage information
+
+Heapster - Cluster-wide aggregator of monitoring and event data
+Note: Support for installing Heapster has been removed from the Kubernetes setup
+  scripts as of 1.12.0
+Kubelet/cAdvisor on the Node
+  Many nodes make up the cluster
++
+Heapster runs on single node with Kubelet/Cadvisor
+  Communicates with master
+->
+Storage Backend
+Stores data from Heapster
+  InfluxDB with Grafana
+  Google Cloud Monitoring
+
+cAdvisor is an open source container resource usage and performance analysis agent.
+- Auto-discovers all containers on a node and collects CPU, memory, file system, and network usage stats.
+- Provide the overall machine usage by analyzing the 'root' container on the machine.
+- Exposes a simple UI for local containers on port 4194.
+
+The Kubelet acts as a bridge between the Kubernetes master and the nodes.
+Manages the pods and containers running on a node.
+Translates each pod into the container making it up.
+Obtains usage statistics from cAdvisor.
+Exposes the aggregated pod resource usage statistics via a REST API
+
+Grafana with InfluxDB
+Heapster is setup to use this storage backend by default on most Kubernetes clusters.
+InfluxDB and Grafana run in Pods.
+The pod exposes itself as a Kubernetes service which is how Heapster then discovers it.
+The Grafana container serves Grafana's UI which provides a dashboard.
+The default dashboard for Kubernetes contains an example dashboard that monitors resource
+  usage of the cluster and the pods inside it. This dashboard can, of course, be fully customized and expanded.
+Google Cloud Monitoring is a hosted monitoring service that allows you to visualize
+  and alert important metrics in your application
+Heapster can be set up to automatically push all collected metrics to Google Cloud Monitoring
+These metrics are then available in the Cloud Monitoring Console
+This storage backend is the easiest to setup and maintain
+The monitoring console allows you to easily create and customize dashboards using the exposed data
+
+Managing Logs
+kubectl get pods
+kubectl logs [pod-name] -> shows stdout
+kubectl get pods --all-namespaces
+logs for most kube system pods are stored in the node at /var/log/containers
+To check old logs with 'kubectl logs' use the --previous flag
+can use stackdriver or fluentd to send all those logs to one place
+
+Exercise: View the Logs
+Create this object in your cluster:
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: counter
+  labels:
+    demo: logger
+spec:
+  containers:
+  - name: count
+    image: busybox
+    args: [/bin/sh, -c, 'i=0; while true; do echo "$i: $(date)"; i=$((i+1)); sleep 3; done']
+
+This is a small container which wakes up every three seconds and logs the date and a count to stdout.
+
+1. View the current logs of the counter.
+  kubectl logs counter
+
+2. Allow the container to run for a few minutes while viewing the log interactively.
+  kubectl logs counter -f
+
+3. Have the command only print the last 10 lines of the log.
+  kubectl logs counter --tail=10 (--tail defaults to 10, so the 10 can be omitted in this case)
+
+4. Look at the logs for the scheduler. Have there been any problems lately that you can see?
+  This question really wants to know if you can find the logs for the scheduler.
+  They're in the master in the /var/log/containers directory.
+  There, a symlink has been create to the appropriate container's log file,
+  and the symlink will have a name that begins with "kube-scheduler-"
+  These logs belong to root, so you will have to sudo to view them.
+
+5. Kubernetes uses etcd for its key-value store. Take a look at its logs and see if it has had any problems lately.
+  The etcd logs are in the same directory as the logs for the previous question,
+  only the name of the symlink begins with "etcd-", and also belongs to root.
+
+6. Kubernetes API server also runs as a pod in the cluster. Find and examine its logs.
+  The API server also lives in the same directory and begins with "kube-apiserver-", and also belongs to root.
+
+I'm troubleshooting an application issue and would love to see the application's logs,
+  which are in a file in the container "appctn" in the pod "apppod-abcdef123-45678" at /var/log/applog.
+  Which of these commands would list that for me?
+kubectl exec apppod-abcdef123-45678 -- cat /var/log/applog
+kubectl logs only work for STDOUT, so if your logs are elsewhere, you'll need to pull them with something like the command here.
+
+kubectl top, along with the object you'd like to watch, gives some in-depth information right on the command line. Who needs a GUI?
+kubectl top [nodes | pods]
+
+Is it possible to get a shell prompt to a Ubuntu 16.04 based container called "sidecar1" in the pod "star-aaaaaaaaaa-bbbbb"?
+There are several containers in the pod. If so, how?
+Yes! kubectl exec -it star-aaaaaaaaaa-bbbbb --container sidecar1 -- /bin/bash
+
+Upgrading Kubernetes Components
+without taking down the cluster
+kubectl get nodes -> shows version
+upgrade control plane
+sudo apt upgrade kubeadm
+kubeadm version
+sudo kubeadm upgrade plan
+sudo kubeadm upgrade apply v1.9.1
+upgrade CNI, if possible
+kubectl get deployment
+kubectl get pods -o wide -> see nodes
+kubectl drain [node-name] ignore-daemonsets
+update kubelet
+sudo apt update
+sudo apt upgrade kubelet
+systemctl status kubelet
+kubectl get nodes -> master in status Ready, SchedulingDisabled
+kubectl uncordon [master-node-name]
+kubectl get nodes
+moving on to second node, need to evict pod to run somewhere else
+kubectl drain [node2-name] --ignore-daemonsets
+kubectl get nodes
+ssh into node2
+sudo apt update
+sudo apt upgrade kubelet
+kubectl get nodes
+kubectl uncordon [node2-name]
 
