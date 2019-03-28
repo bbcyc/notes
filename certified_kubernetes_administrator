@@ -1177,6 +1177,267 @@ sudo kubeadm create [token-from-command-above] --ttl 3h --print-join-command
   -> generates new kubeadm join command
 ssh into new node and run kubeadm join command from above
 
+1. Prepare node 3 for maintenance by preventing the scheduler from putting new pods on to it and evicting any existing pods.
+  Ignore the DaemonSets -- those pods are only providing services to other local pods and will come back up when the node comes back up.
+kubectl drain [node3-name] --ignore-daemonsets
+
+2. When you think you've done everything correctly, go to the Cloud Servers page and shut node 3 down.
+  Don't delete it! Just stop it. While it's down, we'll pretend that it's getting that new multiverse battery.
+  While you wait for the cluster to stabilize, practice your yaml writing skills by creating yaml for a new deployment
+  that will run six replicas of an image called k8s.gcr.io/pause:2.0. Name this deployment "lots-of-nothing".
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lots-of-nothing
+spec:
+  selector:
+    matchLabels:
+      timeToGet: schwifty
+  replicas: 6
+  template:
+    metadata:
+      labels:
+        timeToGet: schwifty
+    spec:
+      containers:
+      - name: pickle-rick
+        image: k8s.gcr.io/pause:2.0
+
+3. Bring the "lots-of-nothing" deployment up on your currently 75% active cluster. Notice where the pods land.
+  kubectl create -f nothing-deployment.yaml
+  kubectl get nodes
+  kubectl get pods -o wide -l timeToGet=schwifty
+
+4. Imagine you just got a text message from the server maintenance crew saying that the installation is complete.
+  Go back to the Cloud Server tab and start Node 3 up again. Fiddle with your phone and send someone a text message
+  if it helps with the realism.  Once Node 3 is back up and running and showing a "Ready" status, allow the scheduler to use it again.
+  kubectl uncordon [node3-name]
+
+5. Did any of your pods move to take advantage of the additional power?
+  No, the uncordon only affects pods being scheduled and won't move any back unless other nodes are experiencing MemoryPressure or DiskPressure.
+
+Node Networking Configuration
+Inbound Node Port Requirements
+Master Node(s)
+TCP 6443 - Kubernetes API Server
+TCP 2379-2380 - etcd server client API
+TCP 10250 - Kubelet API
+TCP 10251 - kube-scheduler
+TCP 10252 - kube-controller-manager
+TCP 10256 - Read-only Kubernetes API
+Worker Nodes
+TCP 10250 - Kubelet API
+TCP 10255 - Read-only Kubelet API
+TCP 30000-32767 - NodePort Services
+
+Service Networking
+kubectl get pods -o wide
+kubectl get deployments
+service networking exposes pods to the outside world
+kubectl expose deployment webhead --type="NodePort" --port=80
+kubectl get services
+curl localhost:[port listed above]
+
+Ingress
+Ingress is an API object that manages external access to the services in a cluster, usually HTTP
+It can provide load balancing, SSL termination, and name-based virtual hosting.
+For our purposes, an Edge router is a router that enforces the firewall policy of your cluster.
+This could be a gateway managed by a cloud provider or a physical piece of hardware.
+Our cluster network is a set of links, either logical or physical, that facilitate communication within a
+  cluster according to the Kubernetes networking model. Examples of a Cluster network include
+  Overlays such as flannel, like we're using in our Linux Academy Cloud server cluster, or SDNs such as OpenVSwitch
+A Service is a Kubernetes Service that identifies a set of pods using label selectors.
+Unless mentioned otherwise, Services are assumed to have virtual IPs only routable within the cluster network.
+What is Ingress?
+Services and Pods have IPs only routable by the cluster network
+So an Ingress is a collection of rules that allow inbound connections.
+Can be configured to give services externally-reachable URLs, load balance traffic, terminate SSL,
+  offers name-based virtual hosting, and the like.
+Users request ingress by POSTing the Ingress resources to the API server. An Ingress controller is
+  responsible for fulfilling the Ingress, usually by way of a load balancer, though it may also configure the
+  edge router or additional front ends to help handle the traffic in a Highly Available manner.
+Relatively new resource and not available in any Kubernetes release prior to 1.1
+Ingress controller to satisfy an Ingress object
+Most cloud providers deploy an ingress controller on the master.
+Each ingress pod must be annotated with the appropriate class.
+---
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: test-ingress
+  annotations:
+    ingress.kubernetes.io/rewrite-target: /
+spec:
+  rules:
+  - http:
+      paths:
+      - path: /path
+        backend:
+          serviceName: test
+          servicePort: 80
+
+cluster must have an ingress controller running for ingresses to work
+---
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: test-ingress
+spec:
+  backend:
+    serviceName: testsvc
+    servicePort: 80
+
+kubectl create -f <filename.yaml>
+kubectl get ing
+NAME            RULE   BACKEND      ADDRESS
+test-ingress    -      testsvc:80   107.178.254.228
+Where 107.178.254.228 is the IP allocated by the Ingress controller to satisfy this Ingress. The RULE
+  column shows that all traffic to the IP is directed to the Kubernetes Service listed under BACKEND
+
+---
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: test
+  annotations: ingress.kubernetes.io/rewrite-target: /
+spec:
+  rules:
+  - host: some.example.com
+    http:
+      paths:
+      - path: /service1
+        backend:
+          serviceName: s1
+          servicePort: 80
+      - path: /service2
+        backend:
+          serviceName: s2
+          servicePort: 80
+requests to some.example.com/service1 go to the service s1
+and reqs to some.example.com/service2 go to service s2
+
+kubectl get ing
+NAME RULE         BACKEND ADDRESS
+test -
+     some.example.com
+     /service1    s1:80
+     /service2    s2:80
+
+---
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: test
+spec:
+  rules:
+  - host: service1.example.com
+    http:
+      paths:
+      - backend:
+          serviceName: s1
+          servicePort: 80
+  - host: service2.example.com
+    http:
+      paths:
+      - backend:
+          serviceName: s2
+          servicePort: 80
+
+tells backend to route requests based on host header
+an ingress with no rules will send all traffic to single default backend
+can be used for serving 404 page
+
+How to secure an Ingress:
+Specify secret
+  TLS private key
+  Certificate
+Port 443 (Assumes TLS Termination)
+Multiple hosts are multiplexed on the same port by hostnames specified through the SNI TLS extension
+The TLS secret must contain keys named tls.crt and tls.key that contain the certificate
+  and private key to use for TLS
+---
+apiVersion: v1
+data:
+  tls.crt: base64 encoded cert
+  tls.key: base64 encoded key
+kind: Secret
+metadata:
+  name: supersecret
+  namespace: default
+type: Opaque
+---
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: no-rules-map
+spec:
+  tls:
+  - secretName: supersecret
+  backend:
+    serviceName: s1
+    servicePort: 80
+
+An Ingress controller is bootstrapped with a load balancing policy that it applies to all Ingress objects
+  (e.g. load balancing algorithm, backend weight scheme, etc.)
+Persistent sessions and dynamic weights not yet exposed
+The service load balancer may provide some of this
+Health checks are not exposed directly through the Ingress
+Readiness probes allow for similar functionality
+
+can also update a running ingress
+kubectl get ing
+kubectl edit ing test -> opens editor and can add a host
+Alternatively, kubectl replace -f on a modified Ingress yaml file.
+This command updates a running Kubernetes object.
+
+Remember that Ingress is a relatively new concept in Kubernetes
+Other ways to expose a service that doesn't directly involve the Ingress resource:
+Use Service.Type=LoadBalancer
+Use Service.Type=NodePort
+Use a Port Proxy
+
+Deploying a Load Balancer
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: la-lb-service
+spec:
+  selector:
+    app: la-lb
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 9376
+  clusterIP: 10.0.171.223
+  loadBalancerIP: 78.12.23.17
+  type: LoadBalancer
+
+Configure and Use Cluster DNS
+allows us to use hostnames from applications to connect to other services
+handled by kube-dns
+kubectl get pods -n kube-system
+kubernetes get pods -> got a busybox pod running
+kubernetes get services -> kubernetes and webhead are running
+kubectl exec -it busybox -- nslookup kubernetes -> looks up kubernetes address from within busybox
+kubectl get deployments -> there is one called dns-target
+kubectl exec -it busybox -- nslookup dns-target -> cant find anything
+kubectl expose deployment dns-target -> creates a service from the deployment, so it can be found by other pods
+kubectl exec -it busybox -- nslookup dns-target -> finds the dns-target service
+could also use a configMap to pass the addresses of upstream servers to individual pods
+Troubleshooting:
+check dns resolution as local level
+  kubectl exec -it busybox -- cat /etc/resolv.conf
+check that dns pod is running
+  kubectl get pods -n kube-system
+check logs in dns pod
+  kubectl logs -n kube-system $(kubectl get pods -n kube-system -l k8s-app=kube-dns -o name) -c kubedns
+  kubectl logs -n kube-system $(kubectl get pods -n kube-system -l k8s-app=kube-dns -o name) -c dnsmasq
+  kubectl logs -n kube-system $(kubectl get pods -n kube-system -l k8s-app=kube-dns -o name) -c sidecar
+kubectl get svc -n kube-system
+kubectl get endpoints kube-dns -n kube-system
+
 
 
 
