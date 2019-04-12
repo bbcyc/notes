@@ -1,0 +1,786 @@
+Cloud Native Certified Kubernetes Administrator
+
+Core Concepts
+Understanding Kubernetes Architecture
+Kubernetes Cluster Architecture
+The Master and Worker
+node is a machine on which kubernetes and a container runtime can be installed
+Master (the control plane)
+  API server - The communication hub for all cluster components. It exposes the Kubernetes API
+  Scheduler - Assigns your app to a worker node. Auto-detects which pod to assign to which node
+    based on resource requirements, hardware constraints, etc.
+  Controller Manager - Maintains the cluster. Handles node failures, replicating components, maintaining the correct ammount of pods, etc.
+  etcd - Data store that stores the cluster configuration
+
+Worker - node 1
+  kubelet - Runs and manages the containers of the nodes and talks to the API server
+  kube-proxy - Load balances traffic between application components
+  container runtime - The program the runs your containers (Docker, rkt, containerd)
+
+kubectl get componentstatus
+kubectl get deployment nginx-deployment -o yaml -> get the full YAML back
+kubectl get pods --show-labels -> show all pod labels
+kubectl label pods <pod-name> env=prod -> apply a label to a pod
+kubectl get pods -L env -> see specific labels
+kubectl annotate deployment nginx-deployment mycompany.com/someannotation="chad" -> annotate a deployment
+kubectl get pods --field-selector status.phase=Running -> use field selectors
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-deployment
+spec:
+  selector:
+    matchLabels:
+      app: nginx
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.7.9
+        ports:
+        - containerPort: 80
+status:
+
+apiVersion - Kubernetes API version, which indicates the path to ensure the API
+  presents a clear, consistent view of system resources and behavior
+  note: the software version and the API version are not directly related
+kind - represents the kind of object you want to create. This is a required field.
+  examples of kinds of objects include pod, deployment, job, DaemonSet, ReplicaSet, ReplicationController
+metadata - data that helps uniquely identify the object, including a name string, UID, and optional namespace
+spec - describes your desired state for the object and the characteristics you want the object to have.
+  The format of the object spec is different for every object and contains nested fields specific to the object
+container spec - specifies the pod's container image, volumes, and exposed ports for the container
+status - describes the actual state of the object and is supplied and updated by the kubernetes system. at any
+  time, the kubernetes control plane actively manages an object's actual state to match the desired state you supplied
+
+Kubernetes Services and Network Primitives
+kubectl get pods -o wide
+shows IP addresses
+use services to connect to a type of pod
+Kubernetes services allow you to dynamically access a group of replica pods without having to keep track of which pods are moved,
+  changed, or deleted. In this lesson, we will go through how to create a service and communicate from one pod to another.
+
+The YAML to create the service and associate it with the label selector:
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-nodeport
+spec:
+  type: NodePort
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 80
+    nodePort: 30080
+  selector:
+    app: nginx
+To create the busybox pod to run commands from:
+
+cat << EOF | kubectl create -f -
+apiVersion: v1
+kind: Pod
+metadata:
+  name: busybox
+spec:
+  containers:
+  - name: busybox
+    image: radial/busyboxplus:curl
+    args:
+    - sleep
+    - "1000"
+EOF
+
+Hands-On Lab: Exploring the Kubernetes Cluster via the Command Line
+List all the nodes in the cluster.
+  kubectl get nodes
+
+List all the pods within all the namespaces.
+  kubectl get pods --all-namespaces
+
+List all the namespaces.
+  kubectl get namespaces
+
+See if there are any pods running in the default namespace.
+  kubectl get pods
+
+Find the IP address of the API server running on the master node.
+  kubectl get pods -n kube-system -o wide
+
+See if there are any deployments.
+  kubectl get deployments
+
+Find the label applied to the etcd pod on the master node.
+  kubectl get pods --all-namespaces --show-labels -o wide
+
+Installation, Configuration, Validation (12%)
+Building the Kubernetes Cluster
+Release Binaries, Provisioning, and Types of Clusters
+Picking the Right Solution
+  Install Kubernetes from scratch or with a pre-built solution. On bare-metal or in the cloud
+Custom
+  Install manually
+  Configure your own network fabric
+  Locate the release binaries
+  Build your own images
+  Secure cluster communication
+Pre-built
+  Minikube
+  Minishift
+  MicroK8s
+  Ubuntu on LXD
+  AWS, Azure or Google Cloud
+
+kubectl cluster-info -> view address of master and services
+kubectl config view -> show kubeconfig settings
+kubectl describe nodes -> show all nodes detail
+kubectl describe pods -> show all pod details
+kubectl get services --all-namespaces -> show all services
+kubectl api-resources -o wide -> view all resources
+
+Kubernetes Binaries at https://github.com/kubernetes/kubernetes/releases/latest
+Minikube http://github.com/kubernetes/minikube
+All Kubernetes Solutions https://kubernetes.io/docs/setup/pick-right-solution/
+
+Installing Kubernetes Master and Nodes
+Steps to create a 3 node kube cluster
+
+Get the Docker gpg key:
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+
+Add the Docker repository:
+sudo add-apt-repository    "deb [arch=amd64] https://download.docker.com/linux/ubuntu \
+   $(lsb_release -cs) \
+   stable"
+
+Get the Kubernetes gpg key:
+curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -
+
+Add the Kubernetes repository:
+cat << EOF | sudo tee /etc/apt/sources.list.d/kubernetes.list
+deb https://apt.kubernetes.io/ kubernetes-xenial main
+EOF
+
+Update your packages:
+sudo apt-get update
+
+Install Docker, kubelet, kubeadm, and kubectl:
+sudo apt-get install -y docker-ce=18.06.1~ce~3-0~ubuntu kubelet=1.13.5-00 kubeadm=1.13.5-00 kubectl=1.13.5-00
+
+Hold them at the current version:
+sudo apt-mark hold docker-ce kubelet kubeadm kubectl
+
+Add the iptables rule to sysctl.conf:
+echo "net.bridge.bridge-nf-call-iptables=1" | sudo tee -a /etc/sysctl.conf
+
+Enable iptables immediately:
+sudo sysctl -p
+
+Initialize the cluster (run only on the master):
+sudo kubeadm init --pod-network-cidr=10.244.0.0/16
+
+Set up local kubeconfig:
+mkdir -p $HOME/.kube
+
+sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+
+sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+Apply Flannel CNI network overlay:
+kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/bc79dd1505b0c8681ece4de4c0d86c5cd2643275/Documentation/kube-flannel.yml
+
+Join the worker nodes to the cluster:
+kubeadm join [your unique string from the kubeadm init command]
+
+Verify the worker nodes have joined the cluster successfully:
+kubectl get nodes
+
+Compare this result of the kubectl get nodes command:
+
+NAME                            STATUS   ROLES    AGE   VERSION
+chadcrowell1c.mylabserver.com   Ready    master   4m18s v1.13.5
+chadcrowell2c.mylabserver.com   Ready    none     82s   v1.13.5
+chadcrowell3c.mylabserver.com   Ready    none     69s   v1.13.5
+
+Building a Highly Available Kubernetes Cluster
+You can provide high availability for cluster components by running multiple instances —
+  however, some replicated components must remain in standby mode. The scheduler and the controller manager are
+  actively watching the cluster state and take action when it changes. If multiples are running, it creates the possibility of unwarranted duplicates of pods.
+
+View the pods in the default namespace with a custom view:
+
+kubectl get pods -o custom-columns=POD:metadata.name,NODE:spec.nodeName --sort-by spec.nodeName -n kube-system
+View the kube-scheduler YAML:
+
+kubectl get endpoints kube-scheduler -n kube-system -o yaml
+Create a stacked etcd topology using kubeadm:
+
+kubeadm init --config=kubeadm-config.yaml
+Watch as pods are created in the default namespace:
+
+kubectl get pods -n kube-system -w
+
+Setting a Scheduler and Controller Manager to active or standby is controlled by the leaderElect option
+It is used by creating an endpoint resource
+Annotation shows current leader and holderIdentity for name of leader node
+
+Replicating etcd
+There must be consistency in the majority of etcd clusters in order to maintain a quorum
+etcd is distributed and needs an odd number of servers to function properly
+Steps
+  Download the etcd binaries
+  Extract and move the binarie to /usr/local/bin
+  Create two directories: /etc/etcd and /var/lib/etcd
+  Create the systemd unit file for etcd
+  Enable and start the etcd service
+
+Creating Highly available Kubernetes Clusters with kubeadm https://kubernetes.io/docs/setup/independent/high-availability/
+Highly Available Topologies in Kubernetes https://kubernetes.io/docs/setup/independent/ha-topology/
+Operating a Highly Available etcd Cluster https://kubernetes.io/docs/tasks/administer-cluster/configure-upgrade-etcd/
+
+Configuring Secure Cluster Communications
+Securing Kubernetes API Access
+The Kubernetes API server provides a CRUD interface for querying and modifying
+  the cluster state over a RESTful API
+kubectl / pod -> API Server [ authentication -> authorization -> admission -> resource validation ] -> etcd
+
+cat .kube/config | more -> view the kubeconfig
+kubectl get secrets -> view the service account token
+
+To prevent unauthorized users from modifying the cluster state, RBAC is used, defining roles and role bindings for a user.
+  A service account resource is created for a pod to determine how it has control over the cluster state.
+  For example, the default service account will not allow you to list the services in a namespace.
+
+Create a new namespace named my-ns:
+
+kubectl create ns my-ns
+Run the kube-proxy pod in the my-ns namespace:
+
+kubectl run test --image=chadmcrowell/kubectl-proxy -n my-ns
+List the pods in the my-ns namespace:
+
+kubectl get pods -n my-ns
+Run a shell in the newly created pod:
+
+kubectl exec -it <name-of-pod> -n my-ns sh
+List the services in the namespace via API call:
+
+curl localhost:8001/api/v1/namespaces/my-ns/services
+View the token file from within a pod:
+
+cat /var/run/secrets/kubernetes.io/serviceaccount/token
+List the service account resources in your cluster:
+
+kubectl get serviceaccounts
+
+RBAC
+user can be associated with one or more roles
+Roles and ClusterRoles - what can be done
+RoleBindings and ClusterRoleBindings -  who can do it
+Roles and RoleBindings are namespaced
+ClusterRoles and ClusterRoleBindings are cluster wide
+service account is created per pod - represents identity of app running in the pod
+
+Running End-to-End Tests on your cluster
+Running end-to-end tests ensures your application will run efficiently without having to worry about cluster health problems.
+  Kubetest is a useful tool for providing end-to-end tests — however, it is beyond the scope of this exam. In this lesson,
+  we will go through the practice of testing our ability to run deployments, run pods, expose a container,
+  execute a command from a container, run a service, and check the overall health of our nodes and pods for conditions.
+
+Checklist:
+  Deployments can run
+  Pods can run
+  Pods can be directly accessed
+  Logs can be collected
+  Commands can be run from pod
+  Services can provide access
+  Nodes are healthy
+  Pods are healthy
+
+Run a simple nginx deployment:
+kubectl run nginx --image=nginx
+
+View the deployments in your cluster:
+kubectl get deployments
+
+View the pods in the cluster:
+kubectl get pods
+
+Use port forwarding to access a pod directly:
+kubectl port-forward $pod_name 8081:80
+
+Get a response from the nginx pod directly:
+curl --head http://127.0.0.1:8081
+
+View the logs from a pod:
+kubectl logs $pod_name
+
+Run a command directly from the container:
+kubectl exec -it nginx -- nginx -v
+
+Create a service by exposing port 80 of the nginx deployment:
+kubectl expose deployment nginx --port 80 --type NodePort
+
+List the services in your cluster:
+kubectl get services
+
+Get a response from the service:
+curl -I localhost:$node_port
+
+List the nodes' status:
+kubectl get nodes
+
+View detailed information about the nodes:
+kubectl describe nodes
+
+View detailed information about the pods:
+kubectl describe pods
+
+Kubetest: https://github.com/kubernetes/community/blob/master/contributors/devel/sig-testing/e2e-tests.md
+Test a Juju Cluster https://kubernetes.io/docs/getting-started-guides/ubuntu/validation/
+
+Maintaining the Kubernetes Cluster
+Upgrading the Kubernetes Cluster
+
+kubeadm allows us to upgrade our cluster components in the proper order, making sure to include important feature
+  upgrades we might want to take advantage of in the latest stable version of Kubernertes.
+  In this lesson, we will go through upgrading our cluster from version 1.13.5 to 1.14.1.
+
+View the version of the server and client on the master node:
+
+kubectl version --short
+View the version of the scheduler and controller manager:
+
+kubectl get pods -n kube-system kube-controller-manager-chadcrowell1c.mylabserver.com -o yaml
+View the name of the kube-controller pod:
+
+kubectl get pods -n kube-system
+Set the VERSION variable to the latest stable release of Kubernetes:
+
+export VERSION=$(curl -sSL https://dl.k8s.io/release/stable.txt)
+Set the ARCH variable to the amd64 system:
+
+export ARCH=amd64
+View the latest stable version of Kubernetes using the variable:
+
+echo $VERSION
+Curl the latest stable version of Kubernetes:
+
+curl -sSL https://dl.k8s.io/release/${VERSION}/bin/linux/${ARCH}/kubeadm > kubeadm
+Install the latest version of kubeadm:
+
+sudo install -o root -g root -m 0755 ./kubeadm /usr/bin/kubeadm
+Check the version of kubeadm:
+
+sudo kubeadm version
+Plan the upgrade:
+
+sudo kubeadm upgrade plan
+Apply the upgrade to 1.14.1:
+
+kubeadm upgrade apply v1.14.1
+View the differences between the old and new manifests:
+
+diff kube-controller-manager.yaml /etc/kubernetes/manifests/kube-controller-manager.yaml
+Curl the latest version of kubelet:
+
+curl -sSL https://dl.k8s.io/release/${VERSION}/bin/linux/${ARCH}/kubelet > kubelet
+Install the latest version of kubelet:
+
+sudo install -o root -g root -m 0755 ./kubelet /usr/bin/kubelet
+Restart the kubelet service:
+
+sudo systemctl restart kubelet.service
+Watch the nodes as they change version:
+
+kubect get nodes -w
+
+Upgrading Kubernetes docs https://kubernetes.io/docs/getting-started-guides/ubuntu/upgrades/
+
+Operating System Upgrades within a Kubernetes Cluster
+When we need to take a node down for maintenance, Kubernetes makes it easy to evict the pods on that node, take it down,
+  and then continue scheduling pods after the maintenance is complete. Furthermore, if the node needs to be decommissioned,
+  you can just as easily remove the node and replace it with a new one, joining it to the cluster.
+
+Due to pod eviction timeout set by the contoller manager, pods are terminated after 5 minutes by default,
+  unless you are using ReplicaSets.
+
+See which pods are running on which nodes:
+kubectl get pods -o wide
+
+Evict the pods on a node:
+kubectl drain [node_name] --ignore-daemonsets
+
+Watch as the node changes status:
+kubectl get nodes -w
+
+Schedule pods to the node after maintenance is complete:
+kubectl uncordon [node_name]
+
+Remove a node from the cluster:
+kubectl delete node [node_name]
+
+Generate a new token:
+sudo kubeadm token generate
+
+List the tokens:
+sudo kubeadm token list
+
+Print the kubeadm join command to join a node to the cluster:
+sudo kubeadm token create [token_name] --ttl 2h --print-join-command
+
+Maintenance on a Node https://kubernetes.io/docs/tasks/administer-cluster/cluster-management/#maintenance-on-a-node
+
+Backing Up and Restoring a Kubernetes Cluster
+
+Backing up your cluster can be a useful exercise, especially if you have a single etcd cluster, as all the cluster state is stored there.
+  The etcdctl utility allows us to easily create a snapshot of our cluster state (etcd) and save this to an external location.
+  In this lesson, we’ll go through creating the snapshot and talk about restoring in the event of failure.
+
+Back up etcd
+etcd is where all cluster updates exist. If you're not replicating etcd, it's a good idea to take a periodic snapshot
+
+For a Kubernetes cluster created with kubeadm, the etcdctl command line tool can back up your etcd datastore in a single command.
+  After the snapshot is taken, make sure to copy the snapshot to a secure location in the event of failure.
+  Restoring from this snapshot will initialize an entirely new cluster
+
+Get the etcd binaries:
+wget https://github.com/coreos/etcd/releases/download/v3.2.0/etcd-v3.2.0-linux-amd64.tar.gz
+
+Unzip the compressed binaries:
+tar xvf etcd-v3.2.0-linux-amd64.tar.gz
+
+Move the files into /usr/local/bin:
+sudo mv etcd-v3.2.0-linux-amd64/etcd* /usr/local/bin/
+
+Take a snapshot of the etcd datastore using etcdctl:
+ETCDCTL_API=3 etcdctl snapshot save snapshot.db --cacert /etc/kubernetes/pki/etcd/server.crt --cert /etc/kubernetes/pki/etcd/ca.crt --key /etc/kubernetes/pki/etcd/ca.key
+
+View the help page for etcdctl:
+ETCDCTL_API=3 etcdctl --help
+
+Browse to the folder that contains the certificate files:
+cd /etc/kubernetes/pki/etcd/
+
+View that the snapshot was successful:
+ETCDCTL_API=3 etcdctl --write-out=table snapshot status snapshot.db
+
+Zip up the contents of the etcd directory:
+sudo tar -zcvf etcd.tar.gz etcd
+
+Copy the etcd directory to another server:
+scp etcd.tar.gz cloud_user@18.219.235.42:~/
+
+Networking
+Cluster Communications
+Pod and Node Networking
+Networking within a Node
+A virtual ethernet interface pair is created for the container: one for the node's namespace
+  and one for the container's network namespace
+
+Kubernetes keeps networking simple for effective communication between pods, even if they are located on a different node.
+  In this lesson, we’ll talk about pod communication from within a node, including how to inspect the virtual interfaces,
+  and then get into what happens when a pod wants to talk to another pod on a different node.
+
+See which node our pod is on:
+kubectl get pods -o wide
+
+Log in to the node:
+ssh [node_name]
+
+View the node's virtual network interfaces:
+ifconfig
+
+View the containers in the pod:
+docker ps
+
+Get the process ID for the container:
+docker inspect --format '{{ .State.Pid }}' [container_id]
+
+Use nsenter to run a command in the process's network namespace:
+nsenter -t [container_pid] -n ip addr
+
+Container Network Interface
+A Container Network Interface (CNI) is an easy way to ease communication between containers in a cluster.
+  The CNI has many responsibilities, including IP management, encapsulating packets, and mappings in userspace.
+  In this lesson, we will cover the details of the Flannel CNI we used in our Linux Academy cluster and talk about the ways in which we simplified communication in our cluster.
+
+Apply the Flannel CNI plugin:
+kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/bc79dd1505b0c8681ece4de4c0d86c5cd2643275/Documentation/kube-flannel.yml
+
+CNI aids in communication between nodes
+network overlay, goes on top of existing network, puts header on top of packet
+changes pod to pod addresses to node to node addresses and when it gets to other node
+  the bridge changes it back and it goes to the pod as though it originated from that node
+
+kubelet needs to know that you are using a CNI
+it sets a network plugin flag equal to the CNI
+in the kubeadm init command, you can see this flag getting set with --pod-network-cidr=10.244.0.0/16
+
+there are different instructions for each CNI plugin
+container runtime calls the CNI to add or remove an instance to or from our network's namespace
+CNI responsible for creating IP address and assigning it to a pod
+
+Service Networking
+Services allow our pods to move around, get deleted, and replicate, all without having to manually keep track of their IP addresses in the cluster.
+  This is accomplished by creating one gateway to distribute packets evenly across all pods.
+  In this lesson, we will see the differences between a NodePort service and a ClusterIP service and see how the iptables rules take effect when traffic is coming in.
+
+With each service, an endpoint is created and kube-proxy updates the iptables rules.
+
+YAML for the nginx NodePort service:
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-nodeport
+spec:
+  type: NodePort
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 80
+    nodePort: 30080
+  selector:
+    app: nginx
+
+Get the services YAML output for all the services in your cluster:
+kubectl get services -o yaml
+
+A ClusterIP is created upon generation of the cluster to allow for proper routing within the cluster
+
+Try and ping the clusterIP service IP address:
+ping 10.96.0.1
+
+Pinging doesn't respond because it's not assigned to any network interface and it's never listed as a source or destination IP address
+it is just a logical grouping
+
+when a service is created in the apiserver, the apiserver notifies all kube-proxy agents that a new service has been created
+kube-proxy is not a proxy, but rather a kube controller to keep track of endpoints and update iptables
+
+View the list of services in your cluster:
+kubectl get services
+
+View the list of endpoints in your cluster that get created with a service:
+kubectl get endpoints
+
+Look at the iptables rules for your services:
+sudo iptables-save | grep KUBE | grep nginx
+
+Services in Kubernetes https://kubernetes.io/docs/concepts/services-networking/service/
+
+Ingress Rules and Load Balancers
+When handling traffic from outside sources, there are two ways to direct that traffic to your pods: deploying a load balancer,
+  and creating an ingress controller and an Ingress resource. In this lesson, we will talk about the benefits of each
+  and how Kubernetes distributes traffic to the pods on a node to reduce latency and direct traffic to the appropriate services within your cluster.
+
+The load balancer redirects traffic to all the nodes and their node ports. The clients trying access
+  your application only talk to the loadbalancer's IP address. load balancer is an extension of a node port
+  nodeport not available externally and only has one IP address
+
+can create a load balancer on a cloud provider, but not on linux acad servers
+
+View the list of services:
+kubectl get services
+
+The load balancer YAML spec:
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-loadbalancer
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 80
+    targetPort: 80
+  selector:
+    app: nginx
+
+Create a new deployment:
+kubectl run kubeserve2 --image=chadmcrowell/kubeserve2
+
+View the list of deployments:
+kubectl get deployments
+
+Scale the deployments to 2 replicas:
+kubectl scale deployment/kubeserve2 --replicas=2
+
+View which pods are on which nodes:
+kubectl get pods -o wide
+
+Create a load balancer from a deployment:
+kubectl expose deployment kubeserve2 --port 80 --target-port 8080 --type LoadBalancer
+
+View the services in your cluster:
+kubectl get services
+
+Watch as an external port is created for a service:
+kubectl get services -w
+
+Look at the YAML for a service:
+kubectl get services kubeserve2 -o yaml
+
+Curl the external IP of the load balancer:
+curl http://[external-ip]
+
+View the annotation associated with a service:
+kubectl describe services kubeserve
+
+Set the annotation to route load balancer traffic local to the node:
+kubectl annotate service kubeserve2 externalTrafficPolicy=Local
+
+
+The loadbalancer redirects traffic to all the nodes and their node ports. The clients trying to access your application
+  only talk to the loadbalancer's IP address.
+
+Ingress is like a load balancer, but you can access multiple services with a single IP address.
+Load balancer has only one IP address for each service
+Ingress exposes HTTP and HTTPS routes from outside the cluster to services within the cluster.
+Ingress works at application level
+
+The YAML for an Ingress resource:
+
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: name-virtual-host-ingress
+spec:
+  rules:
+  - host: first.bar.com
+    http:
+      paths:
+      - backend:
+          serviceName: service1
+          servicePort: 80
+  - host: second.foo.com
+    http:
+      paths:
+      - backend:
+          serviceName: service2
+          servicePort: 80
+  - http:
+      paths:
+      - backend:
+          serviceName: service3
+          servicePort: 80
+
+Edit the ingress rules:
+kubectl edit ingress
+
+View the existing ingress rules:
+kubectl describe ingress
+
+Curl the hostname of your Ingress resource:
+curl http://kubeserve2.example.com
+this doesn't work bc there is no dns
+
+Helpful Links
+Create an External Load Balancer - https://kubernetes.io/docs/tasks/access-application-cluster/create-external-load-balancer/
+Ingress - https://kubernetes.io/docs/concepts/services-networking/ingress/
+
+Cluster DNS
+
+CoreDNS is now the new default DNS plugin for Kubernetes. In this lesson, we’ll go over the hostnames for pods and services. We will also discover how you can customize DNS to include your own nameservers.
+
+Every service defined in the cluster is assigned a DNS name. A pod's DNS search list will include the pods's
+  own namespace and the cluster's default domain.
+
+ServiceName Namespace BaseDomainName
+kubernetes.  default.  svc.cluster.local
+
+Pod IP         Namespace  Base Domain Name
+10-24-3-20.    default.   pod.cluster.local
+
+View the CoreDNS pods in the kube-system namespace:
+kubectl get pods -n kube-system
+
+View the CoreDNS deployment in your Kubernetes cluster:
+kubectl get deployments -n kube-system
+
+View the service that performs load balancing for the DNS server:
+kubectl get services -n kube-system
+
+Spec for the busybox pod:
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: busybox
+  namespace: default
+spec:
+  containers:
+  - image: busybox:1.28.4
+    command:
+      - sleep
+      - "3600"
+    imagePullPolicy: IfNotPresent
+    name: busybox
+  restartPolicy: Always
+
+View the resolv.conf file that contains the nameserver and search in DNS:
+kubectl exec -it busybox -- cat /etc/resolv.conf
+
+Look up the DNS name for the native Kubernetes service:
+kubectl exec -it busybox -- nslookup kubernetes
+
+Look up the DNS names of your pods:
+kubectl exec -ti busybox -- nslookup [pod-ip-address].default.pod.cluster.local
+
+Look up a service in your Kubernetes cluster:
+kubectl exec -it busybox -- nslookup kube-dns.kube-system.svc.cluster.local
+
+Get the logs of your CoreDNS pods:
+kubectl logs [coredns-pod-name]
+
+Headless Service is a service without a cluster IP
+responds with a set of IPs instead of one, each corresponding to a pod
+YAML spec for a headless service:
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: kube-headless
+spec:
+  clusterIP: None
+  ports:
+  - port: 80
+    targetPort: 8080
+  selector:
+    app: kubserve2
+
+YAML spec for a custom DNS pod:
+
+apiVersion: v1
+kind: Pod
+metadata:
+  namespace: default
+  name: dns-example
+spec:
+  containers:
+    - name: test
+      image: nginx
+  dnsPolicy: "None"
+  dnsConfig:
+    nameservers:
+      - 8.8.8.8
+    searches:
+      - ns1.svc.cluster.local
+      - my.dns.search.suffix
+    options:
+      - name: ndots
+        value: "2"
+      - name: edns0
+
+Helpful Links
+DNS for Services and Pods https://kubernetes.io/docs/concepts/services-networking/dns-pod-service/
+Debugging DNS Resolution https://kubernetes.io/docs/tasks/administer-cluster/dns-debugging-resolution/
+Customizing DNS https://kubernetes.io/docs/tasks/administer-cluster/dns-custom-nameservers/
+CoreDNS GitHub https://github.com/coredns/deployment/tree/master/kubernetes
+Kubernetes DNS-Based Service Discovery https://github.com/kubernetes/dns/blob/master/docs/specification.md
+Deploying CoreDNS using kubeadm https://coredns.io/2018/01/29/deploying-kubernetes-with-coredns-using-kubeadm/

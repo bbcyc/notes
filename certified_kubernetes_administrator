@@ -1438,7 +1438,220 @@ check logs in dns pod
 kubectl get svc -n kube-system
 kubectl get endpoints kube-dns -n kube-system
 
+Container Network Interface
+All pods can communicate with all other pods
+Each pod has its own IP address
+No need for mapping container ports
+Backward compatible model with VMs
+  Port allocation
+  Naming
+  Service discovery
+  Load balancing
+  Application Configuration
+  Migration
 
+Kubernetes Network Model
+Dynamic Port Allocation Problems:
+  Every application must be configured to know which ports, etc.
+  API services must inject dynamic port numbers into containers
+  Services must be able to find one another or be configured to do so
+The Kubernetes Way
+  All containers can communicate with each other without NAT
+  All nodes can communicate with all containers (& vice versa) without NAT
+  The IP of a container is the same regardless of which container views it
+  K8s applies IP addresses at the pod level
+  "IP-per-Pod" -- Containers in a pod share a single IP address, like processes in a VM
+But...How?
+CNI - Container Network Interface
+  Must be implemented as an executable invoked by the container management system (in our case, Kubernetes)
+  Plugin is responsible for:
+    Inserting the network interface into the container network namespace
+    Making necessary changes to the host
+    Assign IP addresses to the interface
+    Set up routes consistent with IP address management
+Kubelet
+Default network plugin
+Default cluster-wide network
+Probes for network plugins on startup
 
+Flannel
+Simple and easy Layer 3 network fabric
+flanneld runs on each host (via a DaemonSet)
+  Allocates subnet lease to each host
+  Stores network configuration, allocated subnets, other data
+  Packets forwarded using VxLANs
+  Does not offer support for network policies
 
+Calico
+Free and Open Source
+Simplified networking model
+Scalable, distributed control plane
+Policy-driven network security
+Uses overlay networks sparingly
+Widely deployed
+Can be run in policy enforcement mode
+
+Other worth mentioning
+Cilium
+Contiv
+Contrail
+Multus
+NSX-T
+Nuage Networks VCS
+OpenVSwitch
+OVN
+Romana
+Weave Net
+CNI-Genie
+
+Kubernetes requires its networking model to be implemented by a third-party plugin, called a CNI
+Different CNIs feature support for different hardware, software, overlay networks, policies, and features
+Administrators must select a CNI appropriate to their environment
+
+Quiz
+Think about the YAML for a network policy. If you had to create one, what is the pattern?
+  Preamble, podSelector, ingress, and/or egress rules
+  Preamble contains apiVersion, Kind, and Metadata; then comes the podSelector to determine which pods this policy oversees; and, finally, the rules.
+
+What is an Ingress as it relates to Kubernetes?
+  An API object that manages external access to the services in a cluster, usually HTTP.
+  A fairly new concept in Kubernetes, an Ingress allows us to abstract away the implementation details of routes into the cluster, such as Load Balancers.
+
+When a service type of "ClusterIP" is used, what is the result?
+  A single IP address within the cluster that redirects traffic to a pod (possibly on a different node) serving the application (the pod).
+  ClusterIP is most commonly used with third-party load balancers.
+
+Exercise: Cluster DNS & Service Discovery
+In a Kubernetes cluster, services discover one another through the Cluster DNS.  Names of services resolve to their ClusterIP, allowing application developers to only know the name of the service deployed in the cluster and not have to figure out how to get all the right IP addresses into the right containers at deploy time.
+
+Here is yaml for a deployment:
+
+apiVersion: apps/v1beta2
+kind: Deployment
+metadata:
+  name: bit-of-nothing
+spec:
+  selector:
+    matchLabels:
+      app: pause
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        app: pause
+    spec:
+      containers:
+      - name: bitty
+        image: k8s.gcr.io/pause:2.0
+Create this file and name it bit-of-nothing.yaml.
+
+1. Run the deployment and verify that the pods have started.
+  kubectl create -f bit-of-nothing.yaml
+
+2. Start a busybox pod you can use to check DNS resolution (you can use my yaml, below, if you like, but it's good practice to write your own!)
+  kubectl create -f busybox-pod.yaml
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: busybox
+  namespace: default
+spec:
+  containers:
+  - name: busybox
+    image: busybox:1.28
+    command:
+      - sleep
+      - "3600"
+    imagePullPolicy: IfNotPresent
+  restartPolicy: Always
+3. Check to see whether or not bit-of-nothing is currently being resolved in the cluster via your busybox container.
+  kubectl exec -it busybox -- nslookup bit-of-nothing
+
+4. Expose the bit-of-nothing deployment as a ClusterIP service.
+  kubectl expose deployment bit-of-nothing --type=clusterIP --port 80
+
+5. Verify that "bit-of-nothing" is now being resolved to an IP address in your cluster.
+  kubectl exec -it busybox -- nslookup bit-of-nothing
+
+Kubernetes and Persistent Volumes
+Native Pod Storage is Ephemeral -- Like a Pod
+What happens when a container crashes:
+  Kubelet restarts it (possibly on another node)
+  File system is recreated from image
+  Ephemeral files are gone
+Docker Volumes
+  Directory on disk
+  Possibly in another container
+  New Volume Drivers
+Kubernetes Volumes
+  Same lifetime as its pod
+  Data preserved across container restarts
+  Pod goes away -> Volume goes away
+  Directory with data
+  Accessible to containers in a pod
+  Implementation details determined by volume types
+Using volumes
+  Pod spec indicates which volumes to provide for the pod (spec.volumes)
+  Pod spec indicates where to mount these volumes in containers (spec.containers.volumeMounts)
+  Seen from the container's perspective as the file system
+  Volumes cannot mount onto other volumes
+  No hard links to other volumes
+  Each pod must specify where each volume is mounted
+Kubernetes Supported Volume Types
+  awsElasticBlockStore
+    Mounts an AWS EBS volume to a pod
+    EBS volume is preserved when unmounted
+    Must be created prior to use
+    Nodes must be on AWS EC2 instances in the same region
+    Single instance mounting only
+    Created via a command like:
+    aws ec2 create-volume --availability-zone=eu-west-la --size=10 --volume-type=gp2
+    example yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-ebs
+spec:
+  containers:
+  - image: k8s.gcr.io/test-webserver
+    name: test-container
+    volumeMounts:
+    - mountPath: /test-ebs
+      name: test-volume
+    volumes:
+    - name: test-volume
+      # this AWS EBS volume must already exist
+      awsElasticBlockStore:
+        volumeID: <volume-id>
+        fsType: ext4
+
+azureDisk and azureFile
+  An azureDisk is used to mount a Microsoft Azure Data Disk into a pod.
+  An azureFile is used to mount a Microsoft Azure File Volume (SMB 2.1 and 3.0) into a pod.
+cephfs
+  Allows mounting a CephFS volume to a pod
+  Contents of volume are preserved when unmounted
+  Must have a Ceph server running
+  Share must be exported
+csi
+  Container Storage Interface
+  In-tree CSI volume plugin for volumes on the same node
+  Kubernetes 1.9+
+    --feature-gates=CSIPersistentVolume=true
+  Metadata field specify what is used and how
+  Driver fields specify the name of the driver
+  volumeHandle identifies volume name
+  readOnly is supported
+downwardAPI
+  Mounts a directory and writes data in plain text files
+emptyDir
+  Created when a pod is assigned to a node
+  Exists while pod runs on a particular node
+  Initially empty
+  Multiple containers can read/write the same volume
+  Volume can be mounted per container -- same or different mount points
+  Pod removed -> volume removed
+  Stored on node's local medium
+  Optional - set emptyDir.medium = Memory for RAM based tmpfs
 
