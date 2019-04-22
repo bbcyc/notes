@@ -784,3 +784,1292 @@ Customizing DNS https://kubernetes.io/docs/tasks/administer-cluster/dns-custom-n
 CoreDNS GitHub https://github.com/coredns/deployment/tree/master/kubernetes
 Kubernetes DNS-Based Service Discovery https://github.com/kubernetes/dns/blob/master/docs/specification.md
 Deploying CoreDNS using kubeadm https://coredns.io/2018/01/29/deploying-kubernetes-with-coredns-using-kubeadm/
+
+Hands-On Lab: Creating a Service and Discovering DNS Names in Kubernetes
+Create and nginx deployment and verify it was successful
+kubectl run nginx --image=nginx
+kubectl get deployments
+
+Create a service, and verify the service was successful
+kubectl expose deployment nginx --port 80 --type NodePort
+kubectl get services
+
+Create a pod that will allow you to query DNS, and verify that it's been created
+busybox.yaml
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: busybox
+spec:
+  containers:
+  - image: busybox:1.28.4
+    command:
+      - sleep
+      - "3600"
+    imagePullPolicy: IfNotPresent
+    name: busybox
+  restartPolicy: Always
+
+kubectl create -f busybox.yaml
+kubectl get pods
+
+Perform a DNS query to the service
+kubectl exec -it busybox -- nslookup nginx
+
+Record the DNS name
+nginx.default.svc.cluster.local
+
+Scheduling (5%)
+Pod Scheduling within the Kubernetes Cluster
+Configuring the Kubernetes Scheduler
+The default scheduler in Kubernetes attempts to find the best node for your
+  pod by going through a series of steps. In this lesson, we will cover the
+  steps in detail in order to better understand the scheduler’s function when
+  placing pods on nodes to maximize uptime for the applications running in
+  your cluster. We will also go through how to create a deployment with node affinity.
+
+The default scheduler goes through a series of steps to determine the right node for the pod.
+  Does the node have adequate hardware resources?
+  Is the node running out of resources?
+  Does the pod request a specific node?
+  Does the node have a matching label?
+  If the pod requests a port, is it available?
+  If the pod requests a volume, can it be mounted?
+  Does the pod tolerate the taints of the node?
+  Does the pod specify node or pod affinity?
+
+Label your node as being located in availability zone 1:
+kubectl label node chadcrowell1c.mylabserver.com availability-zone=zone1
+
+Label your node as dedicated infrastructure:
+kubectl label node chadcrowell1c.mylabserver.com share-type=dedicated
+
+Here is the YAML for the deployment to include the node affinity rules:
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: pref
+spec:
+  replicas: 5
+  template:
+    metadata:
+      labels:
+        app: pref
+    spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 80
+            preference:
+              matchExpressions:
+              - key: availability-zone
+                operator: In
+                values:
+                - zone1
+          - weight: 20
+            preference:
+              matchExpressions:
+              - key: share-type
+                operator: In
+                values:
+                - dedicated
+      containers:
+      - args:
+        - sleep
+        - "99999"
+        image: busybox
+        name: main
+
+Create the deployment:
+kubectl create -f pref-deployment.yaml
+
+View the deployment:
+kubectl get deployments
+
+View which pods landed on which nodes:
+kubectl get pods -o wide
+
+Helpful Links
+Assigning a Pod to a Node https://kubernetes.io/docs/concepts/configuration/assign-pod-node/
+Pod and Node Affinity Rules https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity
+
+Running Multiple Schedulers for Multiple Pods
+In Kubernetes, you can run multiple schedulers simultaneously.
+  You can then use different schedulers to schedule different pods.
+  You may, for example, want to set different rules for the scheduler
+  to run all of your pods on one node. In this lesson, I will show you
+  how to deploy a new scheduler alongside your default scheduler and
+  then schedule three different pods using the two schedulers.
+
+The YAML for the new scheduler:
+
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  labels:
+    component: scheduler
+    tier: control-plane
+  name: my-scheduler
+  namespace: kube-system
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        component: scheduler
+        tier: control-plane
+        version: second
+    spec:
+      containers:
+      - command: [/usr/local/bin/kube-scheduler, --address=0.0.0.0,
+                  --scheduler-name=my-scheduler, --leader-elect=false]
+        image: chadmcrowell/kube-scheduler
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 10251
+          initialDelaySeconds: 15
+        name: kube-second-scheduler
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 10251
+        resources:
+          requests:
+            cpu: '0.1'
+        securityContext:
+          privileged: false
+        volumeMounts: []
+      hostNetwork: false
+      hostPID: false
+      volumes: []
+
+Run the deployment for my-scheduler:
+kubectl create -f my-scheduler.yaml
+
+View your new scheduler in the kube-system namespace:
+kubectl get pods -n kube-system
+
+The pod YAML for pod 1:
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: no-annotation
+  labels:
+    name: multischeduler-example
+spec:
+  containers:
+  - name: pod-with-no-annotation-container
+    image: k8s.gcr.io/pause:2.0
+
+The pod YAML for pod 2:
+apiVersion: v1
+kind: Pod
+metadata:
+  name: annotation-default-scheduler
+  labels:
+    name: multischeduler-example
+spec:
+  schedulerName: default-scheduler
+  containers:
+  - name: pod-with-default-annotation-container
+    image: k8s.gcr.io/pause:2.0
+
+The pod YAML for pod 3:
+apiVersion: v1
+kind: Pod
+metadata:
+  name: annotation-second-scheduler
+  labels:
+    name: multischeduler-example
+spec:
+  schedulerName: my-scheduler
+  containers:
+  - name: pod-with-second-annotation-container
+    image: k8s.gcr.io/pause:2.0
+
+View the pods as they are created:
+kubectl get pods -o wide
+
+Helpful Links
+Configure Multiple Schedulers https://kubernetes.io/docs/tasks/administer-cluster/configure-multiple-schedulers/
+
+Scheduling Pods with Resource Limits and Label Selectors
+In order to share the resources of your node properly, you can set resource limits and requests in Kubernetes.
+  This allows you to reserve enough CPU and memory for your application while still maintaining system health.
+  In this lesson, we will create some requests and limits in our pod YAML to show how it’s used by the node.
+
+Node are tainted to repel work, for example, no worker pods are scheduled to the master node
+Tolerations allow you to tolerate a taint, pods from kube-system namespace have these to run on master
+
+View the capacity and the allocatable info from a node:
+kubectl describe nodes
+
+The pod YAML for a pod with requests:
+apiVersion: v1
+kind: Pod
+metadata:
+  name: resource-pod1
+spec:
+  nodeSelector:
+    kubernetes.io/hostname: "chadcrowell3c.mylabserver.com"
+  containers:
+  - image: busybox
+    command: ["dd", "if=/dev/zero", "of=/dev/null"]
+    name: pod1
+    resources:
+      requests:
+        cpu: 800m
+        memory: 20Mi
+
+Create the requests pod:
+kubectl create -f resource-pod1.yaml
+
+View the pods and nodes they landed on:
+kubectl get pods -o wide
+
+The YAML for a pod that has a large request:
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: resource-pod2
+spec:
+  nodeSelector:
+    kubernetes.io/hostname: "chadcrowell3c.mylabserver.com"
+  containers:
+  - image: busybox
+    command: ["dd", "if=/dev/zero", "of=/dev/null"]
+    name: pod2
+    resources:
+      requests:
+        cpu: 1000m
+        memory: 20Mi
+
+Create the pod with 1000 millicore request:
+kubectl create -f resource-pod2.yaml
+
+See why the pod with a large request didn’t get scheduled:
+kubectl describe resource-pod2
+
+Look at the total requests per node:
+kubectl describe nodes chadcrowell3c.mylabserver.com
+
+Delete the first pod to make room for the pod with a large request:
+kubectl delete pods resource-pod1
+
+Watch as the first pod is terminated and the second pod is started:
+kubectl get pods -o wide -w
+
+The YAML for a pod that has limits:
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: limited-pod
+spec:
+  containers:
+  - image: busybox
+    command: ["dd", "if=/dev/zero", "of=/dev/null"]
+    name: main
+    resources:
+      limits:
+        cpu: 1
+        memory: 20Mi
+
+Create a pod with limits:
+kubectl create -f limited-pod.yaml
+
+Use the exec utility to use the top command:
+kubectl exec -it limited-pod top
+
+Helpful Links
+Configure Default CPU Requests and Limits https://kubernetes.io/docs/tasks/administer-cluster/manage-resources/cpu-default-namespace/
+Configure Default Memory Requests and Limits https://kubernetes.io/docs/tasks/administer-cluster/manage-resources/memory-default-namespace/
+
+DaemonSets and Manually Scheduled Pods
+DaemonSets do not use a scheduler to deploy pods. In fact, there are currently
+  DaemonSets in the Kubernetes cluster that we made. In this lesson, I will show
+  you where to find those and how to create your own DaemonSet pods to deploy without the need for a scheduler.
+
+Find the DaemonSet pods that exist in your kubeadm cluster:
+kubectl get pods -n kube-system -o wide
+
+Delete a DaemonSet pod and see what happens:
+kubectl delete pods [pod_name] -n kube-system
+
+Give the node a label to signify it has SSD:
+kubectl label node[node_name] disk=ssd
+
+The YAML for a DaemonSet:
+apiVersion: apps/v1beta2
+kind: DaemonSet
+metadata:
+  name: ssd-monitor
+spec:
+  selector:
+    matchLabels:
+      app: ssd-monitor
+  template:
+    metadata:
+      labels:
+        app: ssd-monitor
+    spec:
+      nodeSelector:
+        disk: ssd
+      containers:
+      - name: main
+        image: linuxacademycontent/ssd-monitor
+
+Create a DaemonSet from a YAML spec:
+kubectl create -f ssd-monitor.yaml
+
+Label another node to specify it has SSD:
+kubectl label node chadcrowell2c.mylabserver.com disk=ssd
+
+View the DaemonSet pods that have been deployed:
+kubectl get pods -o wide
+
+Remove the label from a node and watch the DaemonSet pod terminate:
+kubectl label node chadcrowell3c.mylabserver.com disk-
+
+Change the label on a node to change it to spinning disk:
+kubectl label node chadcrowell2c.mylabserver.com disk=hdd --overwrite
+
+Pick the label to choose for your DaemonSet:
+kubectl get nodes chadcrowell3c.mylabserver.com --show-labels
+
+Helpful Links
+DaemonSets https://kubernetes.io/docs/concepts/workloads/controllers/daemonset/
+
+Displaying Scheduler Events
+There are multiple ways to view the events related to the scheduler.
+  In this lesson, we’ll look at ways in which you can troubleshoot
+  any problems with your scheduler or just find out more information.
+
+View the name of the scheduler pod:
+kubectl get pods -n kube-system
+
+Get the information about your scheduler pod events:
+kubectl describe pods [scheduler_pod_name] -n kube-system
+
+View the events in your default namespace:
+kubectl get events
+
+View the events in your kube-system namespace:
+kubectl get events -n kube-system
+
+Delete all the pods in your default namespace:
+kubectl delete pods --all
+
+Watch events as they are appearing in real time:
+kubectl get events -w
+
+View the logs from the scheduler pod:
+kubectl logs [kube_scheduler_pod_name] -n kube-system
+
+The location of a systemd service scheduler pod:
+/var/log/kube-scheduler.log
+
+Helpful Links
+Verify the Desired Scheduler https://kubernetes.io/docs/tasks/administer-cluster/configure-multiple-schedulers/#verifying-that-the-pods-were-scheduled-using-the-desired-schedulers
+
+Hands-On Lab: Scheduling Pods with Taints and Tolerations in Kubernetes
+You have been given a three-node cluster. Within that cluster, you must perform the following tasks
+  to taint the production node in order to repel work. You will create the necessary taint to properly
+  label one of the nodes “prod.” Then you will deploy two pods — one to each environment.
+  One pod spec will contain the toleration for the taint. You must perform the following tasks in order to complete this hands-on lab:
+
+Taint one of the worker nodes to identify the prod environment.
+kubectl taint node <node_name> node-type=prod:NoSchedule
+
+Create the YAML spec for a pod that will be scheduled to the dev environment.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: dev-pod
+  labels:
+    app: busybox
+spec:
+  containers:
+  - name: dev
+    image: busybox
+    command: ['sh', '-c', 'echo Hello Kubernetes! && sleep 3600']
+kubectl create -f dev-pod.yaml
+
+Create the YAML spec for a pod that will be scheduled to the prod environment.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: prod-pod
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prod
+  template:
+    metadata:
+      labels:
+        app: prod
+  spec:
+    containers:
+    - args:
+      - sleep
+      - "3600"
+      image: busybox
+      name: main
+    tolerations:
+    - key: node-type
+      operator: Equal
+      value: prod
+      effect: NoSchedule
+kubectl create -f prod-deployment.yaml
+
+Deploy each pod to their respective environments.
+
+Verify each pod has been scheduled successfully to each environment.
+kubectl get pods -o wide
+
+Application Lifecycle Management
+Deploying Applications in the Kubernetes Cluster
+Deploying an Application, Rolling Updates, and Rollbacks
+We already know Kubernetes will run pods and deployments, but what happens when you need to update or
+  change the version of your application running inside of the Kubernetes cluster? That’s where rolling
+  updates come in, allowing you to update the app image with zero downtime. In this lesson, we’ll go
+  over a rolling update, how to roll back, and how to pause the update if things aren’t going well.
+
+The YAML for a deployment:
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kubeserve
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: kubeserve
+  template:
+    metadata:
+      name: kubeserve
+      labels:
+        app: kubeserve
+    spec:
+      containers:
+      - image: linuxacademycontent/kubeserve:v1
+        name: app
+
+Create a deployment with a record (for rollbacks):
+kubectl create -f kubeserve-deployment.yaml --record
+
+Check the status of the rollout:
+kubectl rollout status deployments kubeserve
+
+View the ReplicaSets in your cluster:
+kubectl get replicasets
+
+Scale up your deployment by adding more replicas:
+kubectl scale deployment kubeserve --replicas=5
+
+Expose the deployment and provide it a service:
+kubectl expose deployment kubeserve --port 80 --target-port 80 --type NodePort
+
+Set the minReadySeconds attribute to your deployment:
+kubectl patch deployment kubeserve -p '{"spec": {"minReadySeconds": 10}}'
+
+Use kubectl apply to update a deployment:
+kubectl apply -f kubeserve-deployment.yaml
+
+Use kubectl replace to replace an existing deployment:
+kubectl replace -f kubeserve-deployment.yaml
+replace only works if the deployment has already been created
+
+Run this curl look while the update happens:
+while true; do curl http://10.105.31.119; done
+
+Perform the rolling update:
+kubectl set image deployments/kubeserve app=linuxacademycontent/kubeserve:v2 --v 6
+
+Describe a certain ReplicaSet:
+kubectl describe replicasets kubeserve-[hash]
+
+Apply the rolling update to version 3 (buggy):
+kubectl set image deployment kubeserve app=linuxacademycontent/kubeserve:v3
+
+Undo the rollout and roll back to the previous version:
+kubectl rollout undo deployments kubeserve
+
+Look at the rollout history:
+kubectl rollout history deployment kubeserve
+
+Roll back to a certain revision:
+kubectl rollout undo deployment kubeserve --to-revision=2
+
+Pause the rollout in the middle of a rolling update (canary release):
+kubectl rollout pause deployment kubeserve
+
+Resume the rollout after the rolling update looks good:
+kubectl rollout resume deployment kubeserve
+
+Helpful Links
+Deployments https://kubernetes.io/docs/concepts/workloads/controllers/deployment/
+Creating a Deployment https://kubernetes.io/docs/tutorials/kubernetes-basics/deploy-app/deploy-intro/
+Performing a Rolling Update https://kubernetes.io/docs/tutorials/kubernetes-basics/update/update-intro/
+
+Configuring an Application for High Availability and Scale
+Continuing from the last lesson, we will go through how Kubernetes will save you from EVER releasing
+  code with bugs. Then, we will talk about ConfigMaps and secrets as a way to pass configuration data to your apps.
+
+The YAML for a readiness probe:
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kubeserve
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: kubeserve
+  minReadySeconds: 10
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    type: RollingUpdate
+  template:
+    metadata:
+      name: kubeserve
+      labels:
+        app: kubeserve
+    spec:
+      containers:
+      - image: linuxacademycontent/kubeserve:v3
+        name: app
+        readinessProbe:
+          periodSeconds: 1
+          httpGet:
+            path: /
+            port: 80
+
+Apply the readiness probe:
+kubectl apply -f kubeserve-deployment-readiness.yaml
+
+View the rollout status:
+kubectl rollout status deployment kubeserve
+
+Describe deployment:
+kubectl describe deployment
+
+Create a ConfigMap with two keys:
+kubectl create configmap appconfig --from-literal=key1=value1 --from-literal=key2=value2
+
+Get the YAML back out from the ConfigMap:
+kubectl get configmap appconfig -o yaml
+
+The YAML for the ConfigMap pod:
+apiVersion: v1
+kind: Pod
+metadata:
+  name: configmap-pod
+spec:
+  containers:
+  - name: app-container
+    image: busybox:1.28
+    command: ['sh', '-c', "echo $(MY_VAR) && sleep 3600"]
+    env:
+    - name: MY_VAR
+      valueFrom:
+        configMapKeyRef:
+          name: appconfig
+          key: key1
+
+Create the pod that is passing the ConfigMap data:
+kubectl apply -f configmap-pod.yaml
+
+Get the logs from the pod displaying the value:
+kubectl logs configmap-pod
+
+The YAML for a pod that has a ConfigMap volume attached:
+apiVersion: v1
+kind: Pod
+metadata:
+  name: configmap-volume-pod
+spec:
+  containers:
+  - name: app-container
+    image: busybox
+    command: ['sh', '-c', "echo $(MY_VAR) && sleep 3600"]
+    volumeMounts:
+      - name: configmapvolume
+        mountPath: /etc/config
+  volumes:
+    - name: configmapvolume
+      configMap:
+        name: appconfig
+
+Create the ConfigMap volume pod:
+kubectl apply -f configmap-volume-pod.yaml
+
+Get the keys from the volume on the container:
+kubectl exec configmap-volume-pod -- ls /etc/config
+
+Get the values from the volume on the pod:
+kubectl exec configmap-volume-pod -- cat /etc/config/key1
+
+The YAML for a secret:
+apiVersion: v1
+kind: Secret
+metadata:
+  name: appsecret
+stringData:
+  cert: value
+  key: value
+
+Create the secret:
+kubectl apply -f appsecret.yaml
+
+The YAML for a pod that will use the secret:
+apiVersion: v1
+kind: Pod
+metadata:
+  name: secret-pod
+spec:
+  containers:
+  - name: app-container
+    image: busybox
+    command: ['sh', '-c', "echo Hello, Kubernetes! && sleep 3600"]
+    env:
+    - name: MY_CERT
+      valueFrom:
+        secretKeyRef:
+          name: appsecret
+          key: cert
+
+Create the pod that has attached secret data:
+kubectl apply -f secret-pod.yaml
+
+Open a shell and echo the environment variable:
+kubectl exec -it secret-pod -- sh
+echo $MY_CERT
+
+The YAML for a pod that will access the secret from a volume:
+apiVersion: v1
+kind: Pod
+metadata:
+  name: secret-volume-pod
+spec:
+  containers:
+  - name: app-container
+    image: busybox
+    command: ['sh', '-c', "echo $(MY_VAR) && sleep 3600"]
+    volumeMounts:
+      - name: secretvolume
+        mountPath: /etc/certs
+  volumes:
+    - name: secretvolume
+      secret:
+        secretName: appsecret
+
+Create the pod with volume attached with secrets:
+kubectl apply -f secret-volume-pod.yaml
+
+Get the keys from the volume mounted to the container with the secrets:
+kubectl exec secret-volume-pod -- ls /etc/certs
+
+Helpful Links
+Scaling Your Application https://kubernetes.io/docs/concepts/cluster-administration/manage-deployment/#scaling-your-application
+Configure Pod ConfigMaps https://kubernetes.io/docs/tasks/configure-pod-container/configure-pod-configmap/
+Secrets https://kubernetes.io/docs/concepts/configuration/secret/
+
+Creating a Self-Healing Application
+In this lesson, we’ll go through the power of ReplicaSets, which make your application self-healing by replicating pods and
+  moving them around and spinning them up when nodes fail. We’ll also talk about StatefulSets and the benefit they provide.
+
+The YAML for a ReplicaSet:
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: myreplicaset
+  labels:
+    app: app
+    tier: frontend
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      tier: frontend
+  template:
+    metadata:
+      labels:
+        tier: frontend
+    spec:
+      containers:
+      - name: main
+        image: linuxacademycontent/kubeserve
+
+Create the ReplicaSet:
+kubectl apply -f replicaset.yaml
+
+The YAML for a pod with the same label as a ReplicaSet:
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod1
+  labels:
+    tier: frontend
+spec:
+  containers:
+  - name: main
+    image: linuxacademycontent/kubeserve
+
+Create the pod with the same label:
+kubectl apply -f pod-replica.yaml
+
+Watch the pod get terminated:
+kubectl get pods -w
+
+The YAML for a StatefulSet:
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: web
+spec:
+  serviceName: "nginx"
+  replicas: 2
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx
+        ports:
+        - containerPort: 80
+          name: web
+        volumeMounts:
+        - name: www
+          mountPath: /usr/share/nginx/html
+    volumeClaimTemplates:
+    - metadata:
+        name: www
+       spec:
+         accessModes: [ "ReadWriteOnce" ]
+         resources:
+           requests:
+             storage: 1Gi
+
+Create the StatefulSet:
+kubectl apply -f statefulset.yaml
+
+View all StatefulSets in the cluster:
+kubectl get statefulsets
+
+Describe the StatefulSets:
+kubectl describe statefulsets
+
+Helpful Links
+ReplicaSet https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/
+StatefulSets https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/
+
+
+Hands-On Lab
+Performing a Rolling Update of an Application in Kubernetes
+
+Create and roll out version 1 of the application, and verify a successful deployment.
+Use the following YAML named kubeserve-deployment.yaml to create your deployment:
+ apiVersion: apps/v1
+ kind: Deployment
+ metadata:
+   name: kubeserve
+ spec:
+   replicas: 3
+   selector:
+     matchLabels:
+       app: kubeserve
+   template:
+     metadata:
+       name: kubeserve
+       labels:
+         app: kubeserve
+     spec:
+       containers:
+       - image: linuxacademycontent/kubeserve:v1
+         name: app
+
+Use the following command to create the deployment:
+ kubectl apply -f kubeserve-deployment.yaml --record
+
+Use the following command to verify the deployment was successful:
+ kubectl rollout status deployments kubeserve
+
+Use the following command to verify the app is at the correct version:
+ kubectl describe deployment kubeserve
+
+Scale up the application to create high availability.
+Use the following command to scale up your application to five replicas:
+kubectl scale deployment kubeserve --replicas=5
+
+Use the following command to verify the additional replicas have been created:
+kubectl get pods
+
+Create a service, so users can access the application.
+Use the following command to create a service for your deployment:
+kubectl expose deployment kubeserve --port 80 --target-port 80 --type NodePort
+
+Use the following command to verify the service is present and collect the cluster IP:
+kubectl get services
+
+Use the following command to verify the service is responding:
+curl http://<ip-address-of-the-service>
+
+Perform a rolling update to version 2 of the application, and verify its success.
+Use this curl loop command to see the version change as you perform the rolling update:
+ while true; do curl http://<ip-address-of-the-service>; done
+
+Use this command to perform the update (while the curl loop is running):
+ kubectl set image deployments/kubeserve app=linuxacademycontent/kubeserve:v2 --v 6
+
+Use this command to view the additional ReplicaSet created during the update:
+ kubectl get replicasets
+
+Use this command to verify all pods are up and running:
+ kubectl get pods
+
+Use this command to view the rollout history:
+ kubectl rollout history deployment kubeserve
+
+Storage(7%)
+Managing Data in the Kubernetes Cluster
+Persistent Volumes
+In Kubernetes, pods are ephemeral. This creates a unique challenge with attaching storage directly
+  to the filesystem of a container. Persistent Volumes are used to create an abstraction layer
+  between the application and the underlying storage, making it easier for the storage to follow
+  the pods as they are deleted, moved, and created within your Kubernetes cluster.
+
+In the Google Cloud Engine, find the region your cluster is in:
+
+gcloud container clusters list
+Using Google Cloud, create a persistent disk in the same region as your cluster:
+gcloud compute disks create --size=1GiB --zone=us-central1-a mongodb
+
+The YAML for a pod that will use persistent disk:
+apiVersion: v1
+kind: Pod
+metadata:
+  name: mongodb
+spec:
+  volumes:
+  - name: mongodb-data
+    gcePersistentDisk:
+      pdName: mongodb
+      fsType: ext4
+  containers:
+  - image: mongo
+    name: mongodb
+    volumeMounts:
+    - name: mongodb-data
+      mountPath: /data/db
+    ports:
+    - containerPort: 27017
+      protocol: TCP
+
+Create the pod with disk attached and mounted:
+kubectl apply -f mongodb-pod.yaml
+
+See which node the pod landed on:
+kubectl get pods -o wide
+
+Connect to the mongodb shell:
+kubectl exec -it mongodb mongo
+
+Switch to the mystore database in the mongodb shell:
+use mystore
+
+Create a JSON document to insert into the database:
+db.foo.insert({name:'foo'})
+
+View the document you just created:
+db.foo.find()
+
+Exit from the mongodb shell:
+exit
+
+Delete the pod:
+kubectl delete pod mongodb
+
+Create a new pod with the same attached disk:
+kubectl apply -f mongodb-pod.yaml
+
+Check to see which node the pod landed on:
+kubectl get pods -o wide
+
+Drain the node (if the pod is on the same node as before):
+kubectl drain [node_name] --ignore-daemonsets
+
+Once the pod is on a different node, access the mongodb shell again:
+kubectl exec -it mongodb mongo
+
+Access the mystore database again:
+use mystore
+
+Find the document you created from before:
+db.foo.find()
+
+The YAML for a PersistentVolume object in Kubernetes:
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: mongodb-pv
+spec:
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadWriteOnce
+    - ReadOnlyMany
+  persistentVolumeReclaimPolicy: Retain
+  gcePersistentDisk:
+    pdName: mongodb
+    fsType: ext4
+
+Create the Persistent Volume resource:
+kubectl apply -f mongodb-persistentvolume.yaml
+
+View our Persistent Volumes:
+kubectl get persistentvolumes
+
+Helpful Links:
+Persistent Volumes https://kubernetes.io/docs/concepts/storage/persistent-volumes/
+Configure Persistent Volume Storage https://kubernetes.io/docs/tasks/configure-pod-container/configure-persistent-volume-storage/
+
+Volume Access Modes
+Volume access modes are how you specify the access of a node to your Persistent Volume.
+  There are three types of access modes: ReadWriteOnce, ReadOnlyMany, and ReadWriteMany.
+  In this lesson, we will explain what each of these access modes means and two VERY IMPORTANT
+  things to remember when using your Persistent Volumes with pods.
+
+By specifying an access mode with your Persistent Volume(PV), you allow the volume
+  to be mounted to one or many nodes, as well as read by one or many nodes.
+
+RWO (ReadWriteOnce) - Only one node can mount the volume for writing and reading
+ROX (ReadOnlyMany) - Multiple nodes can mount the volume for reading
+RWX (ReadWriteMany) - Multiple nodes can mount the volume for writing and reading
+
+The YAML for a Persistent Volume:
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: mongodb-pv
+spec:
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadWriteOnce
+    - ReadOnlyMany
+  persistentVolumeReclaimPolicy: Retain
+  gcePersistentDisk:
+    pdName: mongodb
+    fsType: ext4
+
+View the Persistent Volumes in your cluster:
+kubectl get pv
+
+Helpful Links:
+Access Modes https://kubernetes.io/docs/concepts/storage/persistent-volumes/#access-modes
+
+Persistent Volume Claims
+Persistent Volume Claims (PVCs) are a way for an application developer to request storage
+  for the application without having to know where the underlying storage is. The claim is
+  then bound to the Persistent Volume (PV), and it will not be released until the PVC is
+  deleted. In this lesson, we will go through creating a PVC and accessing storage within
+  our persistent disk.
+
+The YAML for a PVC:
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mongodb-pvc
+spec:
+  resources:
+    requests:
+      storage: 1Gi
+  accessModes:
+  - ReadWriteOnce
+  storageClassName: ""
+
+Create a PVC:
+kubectl apply -f mongodb-pvc.yaml
+
+View the PVC in the cluster:
+kubectl get pvc
+
+View the PV to ensure it’s bound:
+kubectl get pv
+
+The YAML for a pod that uses a PVC:
+apiVersion: v1
+kind: Pod
+metadata:
+  name: mongodb
+spec:
+  containers:
+  - image: mongo
+    name: mongodb
+    volumeMounts:
+    - name: mongodb-data
+      mountPath: /data/db
+    ports:
+    - containerPort: 27017
+      protocol: TCP
+  volumes:
+  - name: mongodb-data
+    persistentVolumeClaim:
+      claimName: mongodb-pvc
+
+Create the pod with the attached storage:
+kubectl apply -f mongo-pvc-pod.yaml
+
+Access the mogodb shell:
+kubectl exec -it mongodb mongo
+
+Find the JSON document created in previous lessons:
+db.foo.find()
+
+Delete the mongodb pod:
+kubectl delete pod mogodb
+
+Delete the mongodb-pvc PVC:
+kubectl delete pvc mongodb-pvc
+
+Check the status of the PV:
+kubectl get pv
+
+The YAML for the PV to show its reclaim policy:
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: mongodb-pv
+spec:
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadWriteOnce
+    - ReadOnlyMany
+  persistentVolumeReclaimPolicy: Retain
+  gcePersistentDisk:
+    pdName: mongodb
+    fsType: ext4
+
+Helpful Links
+PersistentVolumeClaims https://kubernetes.io/docs/concepts/storage/persistent-volumes/#persistentvolumeclaims
+Create a PersistentVolumeClaim https://kubernetes.io/docs/tasks/configure-pod-container/configure-persistent-volume-storage/#create-a-persistentvolumeclaim
+
+Storage Objects
+There’s an even easier way to provision storage in Kubernetes with StorageClass objects.
+  Also, your storage is safe from data loss with the “Storage Object in Use Protection”
+  feature, which ensures any pods using a Persistent Volume will not lose the data on
+  the volume as long as it is actively mounted. We’ve been using Google Storage for this
+  section, but there are many different volume types you can use in Kubernetes. In this
+  lesson, we will talk about the hostPath volume and the empty directory volume type.
+
+See the PV protection on your volume:
+kubectl describe pv mongodb-pv
+
+See the PVC protection for your claim:
+kubectl describe pvc mongodb-pvc
+
+Delete the PVC:
+kubectl delete pvc mongodb-pvc
+
+See that the PVC is terminated, but the volume is still attached to pod:
+kubectl get pvc
+
+Try to access the data, even though we just deleted the PVC:
+kubectl exec -it mongodb mongo
+use mystore
+db.foo.find()
+
+Delete the pod, which finally deletes the PVC:
+kubectl delete pods mongodb
+
+Show that the PVC is deleted:
+kubectl get pvc
+
+YAML for a StorageClass object:
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: fast
+provisioner: kubernetes.io/gce-pd
+parameters:
+  type: pd-ssd
+
+Create the StorageClass type "fast":
+kubectl apply -f sc-fast.yaml
+
+Change the PVC to include the new StorageClass object:
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mongodb-pvc
+spec:
+  storageClassName: fast
+  resources:
+    requests:
+      storage: 100Mi
+  accessModes:
+    - ReadWriteOnce
+
+Create the PVC with automatically provisioned storage:
+kubectl apply -f mongodb-pvc.yaml
+
+View the PVC with new StorageClass:
+kubectl get pvc
+
+View the newly provisioned storage:
+kubectl get pv
+
+The YAML for a hostPath PV:
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-hostpath
+spec:
+  storageClassName: local-storage
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: "/mnt/data"
+
+The YAML for a pod with an empty directory volume:
+apiVersion: v1
+kind: Pod
+metadata:
+  name: emptydir-pod
+spec:
+  containers:
+  - image: busybox
+    name: busybox
+    command: ["/bin/sh", "-c", "while true; do sleep 3600; done"]
+    volumeMounts:
+    - mountPath: /tmp/storage
+      name: vol
+  volumes:
+  - name: vol
+    emptyDir: {}
+
+Helpful Links:
+Object in Use Protection https://kubernetes.io/docs/concepts/storage/persistent-volumes/#storage-object-in-use-protection
+Volumes https://kubernetes.io/docs/concepts/storage/volumes/
+
+Applications with Persistent Storage
+In this lesson, we’ll wrap everything up in a nice little bow and create a deployment that will allow
+  us to use our storage with our pods. This is to demonstrate how a real-world application would be
+  deployed and used for storing data.
+
+The YAML for our StorageClass object:
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: fast
+provisioner: kubernetes.io/gce-pd
+parameters:
+  type: pd-ssd
+
+The YAML for our PVC:
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: kubeserve-pvc
+spec:
+  storageClassName: fast
+  resources:
+    requests:
+      storage: 100Mi
+  accessModes:
+    - ReadWriteOnce
+
+Create our StorageClass object:
+kubectl apply -f storageclass-fast.yaml
+
+View the StorageClass objects in your cluster:
+kubectl get sc
+
+Create our PVC:
+kubectl apply -f kubeserve-pvc.yaml
+
+View the PVC created in our cluster:
+kubectl get pvc
+
+View our automatically provisioned PV:
+kubectl get pv
+
+The YAML for our deployment:
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kubeserve
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kubeserve
+  template:
+    metadata:
+      name: kubeserve
+      labels:
+        app: kubeserve
+    spec:
+      containers:
+      - env:
+        - name: app
+          value: "1"
+        image: linuxacademycontent/kubeserve:v1
+        name: app
+        volumeMounts:
+        - mountPath: /data
+          name: volume-data
+      volumes:
+      - name: volume-data
+        persistentVolumeClaim:
+          claimName: kubeserve-pvc
+
+Create our deployment and attach the storage to the pods:
+kubectl apply -f kubeserve-deployment.yaml
+
+Check the status of the rollout:
+kubectl rollout status deployments kubeserve
+
+Check the pods have been created:
+kubectl get pods
+
+Connect to our pod and create a file on the PV:
+kubectl exec -it [pod-name] -- touch /data/file1.txt
+
+Connect to our pod and list the contents of the /data directory:
+kubectl exec -it [pod-name] -- ls /data
+
+Hands-On Lab:
+Creating Persistent Storage for Pods in Kubernetes
+Create a PersistentVolume.
+
+
+Create a PersistentVolumeClaim.
+
+
+Create a pod from the mongodb image, with a mounted volume to mount path `/data/db`.
+
+
+Access the node and view the data within the volume.
+
+
+Delete the pod and create a new pod with the same YAML spec.
+
+
+Verify the data still resides on the volume.
