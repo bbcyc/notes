@@ -2058,18 +2058,1288 @@ kubectl exec -it [pod-name] -- ls /data
 Hands-On Lab:
 Creating Persistent Storage for Pods in Kubernetes
 Create a PersistentVolume.
+Use the following YAML spec for the PersistentVolume named mongodb-pv.yaml:
+ apiVersion: v1
+ kind: PersistentVolume
+ metadata:
+   name: mongodb-pv
+ spec:
+   storageClassName: local-storage
+   capacity:
+     storage: 1Gi
+   accessModes:
+     - ReadWriteOnce
+   hostPath:
+     path: "/mnt/data"
 
+Then, create the PersistentVolume:
+ kubectl apply -f mongodb-pv.yaml
 
 Create a PersistentVolumeClaim.
+Use the following YAML spec for the PersistentVolumeClaim named mongodb-pvc.yaml:
+ apiVersion: v1
+ kind: PersistentVolumeClaim
+ metadata:
+   name: mongodb-pvc
+ spec:
+   storageClassName: "local-storage"
+   accessModes:
+     - ReadWriteOnce
+   resources:
+     requests:
+       storage: 1Gi
 
+Then, create the PersistentVolumeClaim:
+ kubectl apply -f mongodb-pvc.yaml
 
 Create a pod from the mongodb image, with a mounted volume to mount path `/data/db`.
+Use the following YAML spec for the pod named mongodb-pod.yaml:
+ apiVersion: v1
+ kind: Pod
+ metadata:
+   name: mongodb
+ spec:
+   containers:
+   - image: mongo
+     name: mongodb
+     volumeMounts:
+     - name: mongodb-data
+       mountPath: /data/db
+     ports:
+     - containerPort: 27017
+       protocol: TCP
+   volumes:
+   - name: mongodb-data
+     persistentVolumeClaim:
+       claimName: mongodb-pvc
 
+Then, create the pod:
+ kubectl apply -f mongodb-pod.yaml
+
+Verify the pod was created:
+ kubectl get pods
 
 Access the node and view the data within the volume.
+Connect to the node:
+ssh <node_hostname>
 
+Switch to the /mnt/data directory:
+cd /mnt/data
+
+List the contents of the directory:
+ls
 
 Delete the pod and create a new pod with the same YAML spec.
+Delete the pod:
+ kubectl delete pod mongodb
 
+Create a new pod:
+ kubectl apply -f mongodb-pod.yaml
 
 Verify the data still resides on the volume.
+Log in to the node:
+ ssh <node_hostname>
+
+Switch to the /mnt/data directory:
+ cd /mnt/data
+
+List the contents of the directory:
+ ls
+
+Security(12%)
+Securing the Kubernetes Cluster
+Kubernetes Security Primitives
+Expanding on our discussion about securing the Kubernetes cluster, we’ll take a look at service
+  accounts and user authentication. Also in this lesson, we will create a workstation for you
+  to administer your cluster without logging in to the Kubernetes master server.
+
+The API server first evaluates if the request is coming from a service account or a normal user. A normal user
+  may be a private key, a user store, or even a file with a list of usernames and passwords.
+
+List the service accounts in your cluster:
+kubectl get serviceaccounts
+
+Create a new jenkins service account:
+kubectl create serviceaccount jenkins
+
+Use the abbreviated version of serviceAccount:
+kubectl get sa
+
+View the YAML for our service account:
+kubectl get serviceaccounts jenkins -o yaml
+
+View the secrets in your cluster:
+kubectl get secret [secret_name]
+
+The YAML for a busybox pod using the jenkins service account:
+apiVersion: v1
+kind: Pod
+metadata:
+  name: busybox
+  namespace: default
+spec:
+  serviceAccountName: jenkins
+  containers:
+  - image: busybox:1.28.4
+    command:
+      - sleep
+      - "3600"
+    imagePullPolicy: IfNotPresent
+    name: busybox
+  restartPolicy: Always
+
+Create a new pod with the service account:
+kubectl apply -f busybox.yaml
+
+View the cluster config that kubectl uses:
+kubectl config view
+
+View the config file:
+cat ~/.kube/config
+
+Set new credentials for your cluster:
+kubectl config set-credentials chad --username=chad --password=password
+
+Create a role binding for anonymous users (not recommended):
+kubectl create clusterrolebinding cluster-system-anonymous --clusterrole=cluster-admin --user=system:anonymous
+
+SCP the certificate authority to your workstation or server:
+scp ca.crt cloud_user@[pub-ip-of-remote-server]:~/
+
+Set the cluster address and authentication:
+kubectl config set-cluster kubernetes --server=https://172.31.41.61:6443 --certificate-authority=ca.crt --embed-certs=true
+
+Set the credentials for Chad:
+kubectl config set-credentials chad --username=chad --password=password
+
+Set the context for the cluster:
+kubectl config set-context kubernetes --cluster=kubernetes --user=chad --namespace=default
+
+Use the context:
+kubectl config use-context kubernetes
+
+Run the same commands with kubectl:
+kubectl get nodes
+
+Helpful Links
+Securing the Cluster https://kubernetes.io/docs/concepts/cluster-administration/cluster-administration-overview/#securing-a-cluster
+Authentication https://kubernetes.io/docs/reference/access-authn-authz/authentication/
+Administer the Cluster via kubectl https://kubernetes.io/docs/reference/kubectl/overview/
+
+Cluster Authentication and Authorization
+Once the API server has determined who you are (whether a pod or a user), the authorization is handled by RBAC.
+  In this lesson, we will talk about roles, cluster roles, role bindings, and cluster role bindings.
+
+RBAC - Role Based Access Control
+Role and RoleBinding - based on namespaces
+ClusterRole and ClusterRoleBinding - based on clusters
+
+Create a new namespace:
+kubectl create ns web
+
+The YAML for a service role:
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: web
+  name: service-reader
+rules:
+- apiGroups: [""]
+  verbs: ["get", "list"]
+  resources: ["services"]
+
+Create a new role from that YAML file:
+kubectl apply -f role.yaml
+
+Create a RoleBinding:
+kubectl create rolebinding test --role=service-reader --serviceaccount=web:default -n web
+
+Run a proxy for inter-cluster communications:
+kubectl proxy
+
+Try to access the services in the web namespace:
+curl localhost:8001/api/v1/namespaces/web/services
+
+Create a ClusterRole to access PersistentVolumes:
+kubectl create clusterrole pv-reader --verb=get,list --resource=persistentvolumes
+
+Create a ClusterRoleBinding for the cluster role:
+kubectl create clusterrolebinding pv-test --clusterrole=pv-reader --serviceaccount=web:default
+
+The YAML for a pod that includes a curl and proxy container:
+apiVersion: v1
+kind: Pod
+metadata:
+  name: curlpod
+  namespace: web
+spec:
+  containers:
+  - image: tutum/curl
+    command: ["sleep", "9999999"]
+    name: main
+  - image: linuxacademycontent/kubectl-proxy
+    name: proxy
+  restartPolicy: Always
+
+Create the pod that will allow you to curl directly from the container:
+kubectl apply -f curl-pod.yaml
+
+Get the pods in the web namespace:
+kubectl get pods -n web
+
+Open a shell to the container:
+kubectl exec -it curlpod -n web -- sh
+
+Access PersistentVolumes (cluster-level) from the pod:
+curl localhost:8001/api/v1/persistentvolumes
+
+Helpful Links:
+Authorization https://kubernetes.io/docs/reference/access-authn-authz/authorization/
+RBAC https://kubernetes.io/docs/reference/access-authn-authz/rbac/
+RoleBinding and ClusterRoleBinding https://kubernetes.io/docs/reference/access-authn-authz/rbac/#rolebinding-and-clusterrolebinding
+
+Configuring Network Policies
+Network policies allow you to specify which pods can talk to other pods. This helps when securing communication
+  between pods, allowing you to identify ingress and egress rules. You can apply a network policy to a pod
+  by using pod or namespace selectors. You can even choose a CIDR block range to apply the network policy.
+  In this lesson, we’ll go through each of these options for network policies.
+
+Download the canal plugin:
+wget -O canal.yaml https://docs.projectcalico.org/v3.5/getting-started/kubernetes/installation/hosted/canal/canal.yaml
+
+Apply the canal plugin:
+kubectl apply -f canal.yaml
+
+The YAML for a deny-all NetworkPolicy:
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-all
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+
+Run a deployment to test the NetworkPolicy:
+kubectl run nginx --image=nginx --replicas=2
+
+Create a service for the deployment:
+kubectl expose deployment nginx --port=80
+
+Attempt to access the service by using a busybox interactive pod:
+kubectl run busybox --rm -it --image=busybox /bin/sh
+#wget --spider --timeout=1 nginx
+
+The YAML for a pod selector NetworkPolicy:
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: db-netpolicy
+spec:
+  podSelector:
+    matchLabels:
+      app: db
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: web
+    ports:
+    - port: 5432
+
+Label a pod to get the NetworkPolicy:
+kubectl label pods [pod_name] app=db
+
+The YAML for a namespace NetworkPolicy:
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ns-netpolicy
+spec:
+  podSelector:
+    matchLabels:
+      app: db
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          tenant: web
+    ports:
+    - port: 5432
+
+The YAML for an IP block NetworkPolicy:
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ipblock-netpolicy
+spec:
+  podSelector:
+    matchLabels:
+      app: db
+  ingress:
+  - from:
+    - ipBlock:
+        cidr: 192.168.1.0/24
+
+The YAML for an egress NetworkPolicy:
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: egress-netpol
+spec:
+  podSelector:
+    matchLabels:
+      app: web
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app: db
+    ports:
+    - port: 5432
+
+Helpful Links:
+Network Policies https://kubernetes.io/docs/concepts/services-networking/network-policies/
+Declare Network Policies https://kubernetes.io/docs/tasks/administer-cluster/declare-network-policy/
+Default Network Policies https://kubernetes.io/docs/concepts/services-networking/network-policies/#default-policies
+
+Creating TLS Certificates
+A Certificate Authority (CA) is used to generate TLS certificates and authenticate to your API server.
+  In this lesson, we’ll go through certificate requests and generating a new certificate.
+
+Find the CA certificate on a pod in your cluster:
+kubectl exec busybox -- ls /var/run/secrets/kubernetes.io/serviceaccount
+
+Download the binaries for the cfssl tool:
+wget -q --show-progress --https-only --timestamping \
+  https://pkg.cfssl.org/R1.2/cfssl_linux-amd64 \
+  https://pkg.cfssl.org/R1.2/cfssljson_linux-amd64
+
+Make the binary files executable:
+chmod +x cfssl_linux-amd64 cfssljson_linux-amd64
+
+Move the files into your bin directory:
+sudo mv cfssl_linux-amd64 /usr/local/bin/cfssl
+sudo mv cfssljson_linux-amd64 /usr/local/bin/cfssljson
+
+Check to see if you have cfssl installed correctly:
+cfssl version
+
+Create a CSR file:
+cat <<EOF | cfssl genkey - | cfssljson -bare server
+{
+  "hosts": [
+    "my-svc.my-namespace.svc.cluster.local",
+    "my-pod.my-namespace.pod.cluster.local",
+    "172.168.0.24",
+    "10.0.34.2"
+  ],
+  "CN": "my-pod.my-namespace.pod.cluster.local",
+  "key": {
+    "algo": "ecdsa",
+    "size": 256
+  }
+}
+EOF
+
+Create a CertificateSigningRequest API object:
+cat <<EOF | kubectl create -f -
+apiVersion: certificates.k8s.io/v1beta1
+kind: CertificateSigningRequest
+metadata:
+  name: pod-csr.web
+spec:
+  groups:
+  - system:authenticated
+  request: $(cat server.csr | base64 | tr -d '\n')
+  usages:
+  - digital signature
+  - key encipherment
+  - server auth
+EOF
+
+View the CSRs in the cluster:
+kubectl get csr
+
+View additional details about the CSR:
+kubectl describe csr pod-csr.web
+
+Approve the CSR:
+kubectl certificate approve pod-csr.web
+
+View the certificate within your CSR:
+kubectl get csr pod-csr.web -o yaml
+
+Extract and decode your certificate to use in a file:
+kubectl get csr pod-csr.web -o jsonpath='{.status.certificate}' \
+    | base64 --decode > server.crt
+
+Helpful Links
+Managing TLS in the Cluster https://kubernetes.io/docs/tasks/tls/managing-tls-in-a-cluster/
+Bootstrapping TLS for Your kubelets https://kubernetes.io/docs/reference/command-line-tools-reference/kubelet-tls-bootstrapping/
+How kubeadm Manages Certificates https://kubernetes.io/docs/tasks/administer-cluster/kubeadm/kubeadm-certs/
+
+Secure Images
+Working with secure images is imperative in Kubernetes, as it ensures your applications are running
+  efficiently and protecting you from vulnerabilities. In this lesson, we’ll go through how to set Kubernetes to use a private registry.
+
+View where your Docker credentials are stored:
+sudo vim /home/cloud_user/.docker/config.json
+
+Log in to the Docker Hub:
+sudo docker login
+
+View the images currently on your server:
+sudo docker images
+
+Pull a new image to use with a Kubernetes pod:
+sudo docker pull busybox:1.28.4
+
+Log in to a private registry using the docker login command:
+docker login -u podofminerva -p 'otj701c9OucKZOCx5qrRblofcNRf3W+e' podofminerva.azurecr.io
+
+View your stored credentials:
+sudo vim /home/cloud_user/.docker/config.json
+
+Tag an image in order to push it to a private registry:
+sudo docker tag busybox:1.28.4 podofminerva.azurecr.io/busybox:latest
+
+Push the image to your private registry:
+docker push podofminerva.azurecr.io/busybox:latest
+
+Create a new docker-registry secret:
+kubectl create secret docker-registry acr --docker-server=https://podofminerva.azurecr.io --docker-username=podofminerva --docker-password='otj701c9OucKZOCx5qrRblofcNRf3W+e' --docker-email=user@example.com
+
+Modify the default service account to use your new docker-registry secret:
+kubectl patch sa default -p '{"imagePullSecrets": [{"name": "acr"}]}'
+
+The YAML for a pod using an image from a private repository:
+apiVersion: v1
+kind: Pod
+metadata:
+  name: acr-pod
+  labels:
+    app: busybox
+spec:
+  containers:
+    - name: busybox
+      image: podofminerva.azurecr.io/busybox:latest
+      command: ['sh', '-c', 'echo Hello Kubernetes! && sleep 3600']
+      imagePullPolicy: Always
+
+Create the pod from the private image:
+kubectl apply -f acr-pod.yaml
+
+View the running pod:
+kubectl get pods
+
+Helpful Links
+Images https://kubernetes.io/docs/concepts/containers/images/
+Pull Images from a Private Registry https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
+Configure Service Accounts https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/
+Add ImagePullSecrets https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/#add-imagepullsecrets-to-a-service-account
+11 Ways (Not) to Get Hacked https://kubernetes.io/blog/2018/07/18/11-ways-not-to-get-hacked/
+
+
+Defining Security Contexts
+Defining security contexts allows you to lock down your containers, so that only certain
+  processes can do certain things. This ensures the stability of your containers and allows
+  you to give control or take it away. In this lesson, we’ll go through how to set the
+  security context at the container level and the pod level.
+
+Run an alpine container with default security:
+kubectl run pod-with-defaults --image alpine --restart Never -- /bin/sleep 999999
+
+Check the ID on the container:
+kubectl exec pod-with-defaults id
+
+The YAML for a container that runs as a user:
+apiVersion: v1
+kind: Pod
+metadata:
+  name: alpine-user-context
+spec:
+  containers:
+  - name: main
+    image: alpine
+    command: ["/bin/sleep", "999999"]
+    securityContext:
+      runAsUser: 405
+
+Create a pod that runs the container as user:
+kubectl apply -f alpine-user-context.yaml
+
+View the IDs of the new pod created with container user permission:
+kubectl exec alpine-user-context id
+
+The YAML for a pod that runs the container as non-root:
+apiVersion: v1
+kind: Pod
+metadata:
+  name: alpine-nonroot
+spec:
+  containers:
+  - name: main
+    image: alpine
+    command: ["/bin/sleep", "999999"]
+    securityContext:
+      runAsNonRoot: true
+
+Create a pod that runs the container as non-root:
+kubectl apply -f alpine-nonroot.yaml
+
+View more information about the pod error:
+kubectl describe pod alpine-nonroot
+
+The YAML for a privileged container pod:
+apiVersion: v1
+kind: Pod
+metadata:
+  name: privileged-pod
+spec:
+  containers:
+  - name: main
+    image: alpine
+    command: ["/bin/sleep", "999999"]
+    securityContext:
+      privileged: true
+
+Create the privileged container pod:
+kubectl apply -f privileged-pod.yaml
+
+View the devices on the default container:
+kubectl exec -it pod-with-defaults ls /dev
+
+View the devices on the privileged pod container:
+kubectl exec -it privileged-pod ls /dev
+
+Try to change the time on a default container pod:
+kubectl exec -it pod-with-defaults -- date +%T -s "12:00:00"
+
+The YAML for a container that will allow you to change the time:
+apiVersion: v1
+kind: Pod
+metadata:
+  name: kernelchange-pod
+spec:
+  containers:
+  - name: main
+    image: alpine
+    command: ["/bin/sleep", "999999"]
+    securityContext:
+      capabilities:
+        add:
+        - SYS_TIME
+
+Create the pod that will allow you to change the container’s time:
+kubectl run -f kernelchange-pod.yaml
+
+Change the time on a container:
+kubectl exec -it kernelchange-pod -- date +%T -s "12:00:00"
+
+View the date on the container:
+kubectl exec -it kernelchange-pod -- date
+
+The YAML for a container that removes capabilities:
+apiVersion: v1
+kind: Pod
+metadata:
+  name: remove-capabilities
+spec:
+  containers:
+  - name: main
+    image: alpine
+    command: ["/bin/sleep", "999999"]
+    securityContext:
+      capabilities:
+        drop:
+        - CHOWN
+
+Create a pod that’s container has capabilities removed:
+kubectl apply -f remove-capabilities.yaml
+
+Try to change the ownership of a container with removed capability:
+kubectl exec remove-capabilities chown guest /tmp
+
+The YAML for a pod container that can’t write to the local filesystem:
+apiVersion: v1
+kind: Pod
+metadata:
+  name: readonly-pod
+spec:
+  containers:
+  - name: main
+    image: alpine
+    command: ["/bin/sleep", "999999"]
+    securityContext:
+      readOnlyRootFilesystem: true
+    volumeMounts:
+    - name: my-volume
+      mountPath: /volume
+      readOnly: false
+  volumes:
+  - name: my-volume
+    emptyDir:
+
+Create a pod that will not allow you to write to the local container filesystem:
+kubectl apply -f readonly-pod.yaml
+
+Try to write to the container filesystem:
+kubectl exec -it readonly-pod touch /new-file
+
+Create a file on the volume mounted to the container:
+kubectl exec -it readonly-pod touch /volume/newfile
+
+View the file on the volume that’s mounted:
+kubectl exec -it readonly-pod -- ls -la /volume/newfile
+
+The YAML for a pod that has different group permissions for different pods:
+apiVersion: v1
+kind: Pod
+metadata:
+  name: group-context
+spec:
+  securityContext:
+    fsGroup: 555
+    supplementalGroups: [666, 777]
+  containers:
+  - name: first
+    image: alpine
+    command: ["/bin/sleep", "999999"]
+    securityContext:
+      runAsUser: 1111
+    volumeMounts:
+    - name: shared-volume
+      mountPath: /volume
+      readOnly: false
+  - name: second
+    image: alpine
+    command: ["/bin/sleep", "999999"]
+    securityContext:
+      runAsUser: 2222
+    volumeMounts:
+    - name: shared-volume
+      mountPath: /volume
+      readOnly: false
+  volumes:
+  - name: shared-volume
+    emptyDir:
+
+Create a pod with two containers and different group permissions:
+kubectl apply -f group-context.yaml
+
+Open a shell to the first container on that pod:
+kubectl exec -it group-context -c first sh
+
+Helpful Links
+Security Contexts https://kubernetes.io/docs/tasks/configure-pod-container/security-context/
+
+
+Securing Persistent Key Value Store
+Secrets are used to secure sensitive data you may access from your pod.
+  The data never gets written to disk because it's stored in an in-memory
+  filesystem (tmpfs). Because secrets can be created independently of pods,
+  there is less risk of the secret being exposed during the pod lifecycle.
+
+View the secrets in your cluster:
+kubectl get secrets
+
+View the default secret mounted to each pod:
+kubectl describe pods pod-with-defaults
+
+View the token, certificate, and namespace within the secret:
+kubectl describe secret
+
+Generate a key for your https server:
+openssl genrsa -out https.key 2048
+
+Generate a certificate for the https server:
+openssl req -new -x509 -key https.key -out https.cert -days 3650 -subj /CN=www.example.com
+
+Create an empty file to create the secret:
+touch file
+
+Create a secret from your key, cert, and file:
+kubectl create secret generic example-https --from-file=https.key --from-file=https.cert --from-file=file
+
+View the YAML from your new secret:
+kubectl get secrets example-https -o yaml
+
+The YAML for a pod using the new secret:
+apiVersion: v1
+kind: Pod
+metadata:
+  name: example-https
+spec:
+  containers:
+  - image: linuxacademycontent/fortune
+    name: html-web
+    env:
+    - name: INTERVAL
+      valueFrom:
+        configMapKeyRef:
+          name: config
+          key: sleep-interval
+    volumeMounts:
+    - name: html
+      mountPath: /var/htdocs
+  - image: nginx:alpine
+    name: web-server
+    volumeMounts:
+    - name: html
+      mountPath: /usr/share/nginx/html
+      readOnly: true
+    - name: config
+      mountPath: /etc/nginx/conf.d
+      readOnly: true
+    - name: certs
+      mountPath: /etc/nginx/certs/
+      readOnly: true
+    ports:
+    - containerPort: 80
+    - containerPort: 443
+  volumes:
+  - name: html
+    emptyDir: {}
+  - name: config
+    configMap:
+      name: config
+      items:
+      - key: my-nginx-config.conf
+        path: https.conf
+  - name: certs
+    secret:
+      secretName: example-https
+
+Describe the nginx conf via ConfigMap:
+kubectl describe configmap
+
+View the cert mounted on the container:
+kubectl exec example-https -c web-server -- mount | grep certs
+
+Use port forwarding on the pod to server traffic from 443:
+kubectl port-forward example-https 8443:443 &
+
+Curl the web server to get a response:
+curl https://localhost:8443 -k
+
+Helpful Links
+Secrets https://kubernetes.io/docs/concepts/configuration/secret/
+
+Hands-On Lab
+Creating a ClusterRole to Access a PV in Kubernetes
+View the Persistent Volume.
+Use the following command to view the Persistent Volume within the cluster:
+kubectl get pv
+
+Create a ClusterRole.
+Use the following command to create the ClusterRole:
+kubectl create clusterrole pv-reader --verb=get,list --resource=persistentvolumes
+
+Create a ClusterRoleBinding.
+Use the following command to create the ClusterRoleBinding:
+kubectl create clusterrolebinding pv-test --clusterrole=pv-reader --serviceaccount=web:default
+
+Create a pod to access the PV.
+Use the following YAML to create a pod that will proxy the connection and allow you to curl the address:
+ apiVersion: v1
+ kind: Pod
+ metadata:
+   name: curlpod
+   namespace: web
+ spec:
+   containers:
+   - image: tutum/curl
+     command: ["sleep", "9999999"]
+     name: main
+   - image: linuxacademycontent/kubectl-proxy
+     name: proxy
+   restartPolicy: Always
+
+Use the following command to create the pod:
+ kubectl apply -f curlpod.yaml
+
+Request access to the PV from the pod.
+Use the following command (from within the pod) to access a shell from the pod:
+ kubectl exec -it curlpod -n web -- sh
+
+Use the following command to curl the PV resource:
+ curl localhost:8001/api/v1/persistentvolumes
+
+Logging and Monitoring(5%)
+Monitoring Cluster Components
+We are able to monitor the CPU and memory utilization of our pods and nodes by using the metrics server.
+  In this lesson, we’ll install the metrics server and see how the kubectl top command works.
+
+Clone the metrics server repository:
+git clone https://github.com/linuxacademy/metrics-server
+
+Install the metrics server in your cluster:
+kubectl apply -f ~/metrics-server/deploy/1.8+/
+
+Get a response from the metrics server API:
+kubectl get --raw /apis/metrics.k8s.io/
+
+Get the CPU and memory utilization of the nodes in your cluster:
+kubectl top node
+
+Get the CPU and memory utilization of the pods in your cluster:
+kubectl top pods
+
+Get the CPU and memory of pods in all namespaces:
+kubectl top pods --all-namespaces
+
+Get the CPU and memory of pods in only one namespace:
+kubectl top pods -n kube-system
+
+Get the CPU and memory of pods with a label selector:
+kubectl top pod -l run=pod-with-defaults
+
+Get the CPU and memory of a specific pod:
+kubectl top pod pod-with-defaults
+
+Get the CPU and memory of the containers inside the pod:
+kubectl top pods group-context --containers
+
+Helpful Links
+Monitor Node Health https://kubernetes.io/docs/tasks/debug-application-cluster/monitor-node-health/
+Resource Usage Monitoring https://kubernetes.io/docs/tasks/debug-application-cluster/resource-usage-monitoring/
+
+Monitoring the Applications Running within a Cluster
+There are ways Kubernetes can automatically monitor your apps for you and, furthermore,
+  fix them by either restarting or preventing them from affecting the rest of your service.
+  You can insert liveness probes and readiness probes to do just this for custom monitoring of your applications.
+
+The pod YAML for a liveness probe:
+apiVersion: v1
+kind: Pod
+metadata:
+  name: liveness
+spec:
+  containers:
+  - image: linuxacademycontent/kubeserve
+    name: kubeserve
+    livenessProbe:
+      httpGet:
+        path: /
+        port: 80
+
+The YAML for a service and two pods with readiness probes:
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 80
+    targetPort: 80
+  selector:
+    app: nginx
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nginx
+  labels:
+    app: nginx
+spec:
+  containers:
+  - name: nginx
+    image: nginx
+    readinessProbe:
+      httpGet:
+        path: /
+        port: 80
+      initialDelaySeconds: 5
+      periodSeconds: 5
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nginxpd
+  labels:
+    app: nginx
+spec:
+  containers:
+  - name: nginx
+    image: nginx:191
+    readinessProbe:
+      httpGet:
+        path: /
+        port: 80
+      initialDelaySeconds: 5
+      periodSeconds: 5
+
+Create the service and two pods with readiness probes:
+kubectl apply -f readiness.yaml
+
+Check if the readiness check passed or failed:
+kubectl get pods
+
+Check if the failed pod has been added to the list of endpoints:
+kubectl get ep
+
+Edit the pod to fix the problem and enter it back into the service:
+kubectl edit pod [pod_name]
+
+Get the list of endpoints to see that the repaired pod is part of the service again:
+kubectl get ep
+
+Helpful Links
+Container Probes https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#container-probes
+
+Managing Cluster Component Logs
+There are many ways to manage the logs that can accumulate from both applications and system components.
+  In this lesson, we’ll go through a few different approaches to organizing your logs.
+
+The directory where the container logs reside:
+/var/log/containers
+
+The directory where kubelet stores its logs:
+/var/log
+
+The YAML for a pod that has two different log streams:
+apiVersion: v1
+kind: Pod
+metadata:
+  name: counter
+spec:
+  containers:
+  - name: count
+    image: busybox
+    args:
+    - /bin/sh
+    - -c
+    - >
+      i=0;
+      while true;
+      do
+        echo "$i: $(date)" >> /var/log/1.log;
+        echo "$(date) INFO $i" >> /var/log/2.log;
+        i=$((i+1));
+        sleep 1;
+      done
+    volumeMounts:
+    - name: varlog
+      mountPath: /var/log
+  volumes:
+  - name: varlog
+    emptyDir: {}
+
+Create a pod that has two different log streams to the same directory:
+kubectl apply -f twolog.yaml
+
+View the logs in the /var/log directory of the container:
+kubectl exec counter -- ls /var/log
+
+The YAML for a sidecar container that will tail the logs for each type:
+apiVersion: v1
+kind: Pod
+metadata:
+  name: counter
+spec:
+  containers:
+  - name: count
+    image: busybox
+    args:
+    - /bin/sh
+    - -c
+    - >
+      i=0;
+      while true;
+      do
+        echo "$i: $(date)" >> /var/log/1.log;
+        echo "$(date) INFO $i" >> /var/log/2.log;
+        i=$((i+1));
+        sleep 1;
+      done
+    volumeMounts:
+    - name: varlog
+      mountPath: /var/log
+  - name: count-log-1
+    image: busybox
+    args: [/bin/sh, -c, 'tail -n+1 -f /var/log/1.log']
+    volumeMounts:
+    - name: varlog
+      mountPath: /var/log
+  - name: count-log-2
+    image: busybox
+    args: [/bin/sh, -c, 'tail -n+1 -f /var/log/2.log']
+    volumeMounts:
+    - name: varlog
+      mountPath: /var/log
+  volumes:
+  - name: varlog
+    emptyDir: {}
+
+View the first type of logs separately:
+kubectl logs counter count-log-1
+
+View the second type of logs separately:
+kubectl logs counter count-log-2
+
+Helpful Links
+Logging https://kubernetes.io/docs/concepts/cluster-administration/logging/
+
+Managing Application Logs
+Containerized applications usually write their logs to standard out and standard error
+  instead of writing their logs to files. Docker then redirects those streams to files.
+  You can retrieve those files with the kubectl logs command in Kubernetes. In this lesson,
+  we’ll go over the many ways to manipulate the output of your logs and redirect them to a file.
+
+Get the logs from a pod:
+kubectl logs nginx
+
+Get the logs from a specific container on a pod:
+kubectl logs counter -c count-log-1
+
+Get the logs from all containers on the pod:
+kubectl logs counter --all-containers=true
+
+Get the logs from containers with a certain label:
+kubectl logs -lapp=nginx
+
+Get the logs from a previously terminated container within a pod:
+kubectl logs -p -c nginx nginx
+
+Stream the logs from a container in a pod:
+kubectl logs -f -c count-log-1 counter
+
+Tail the logs to only view a certain number of lines:
+kubectl logs --tail=20 nginx
+
+View the logs from a previous time duration:
+kubectl logs --since=1h nginx
+
+View the logs from a container within a pod within a deployment:
+kubectl logs deployment/nginx -c nginx
+
+Redirect the output of the logs to a file:
+kubectl logs counter -c count-log-1 > count.log
+
+Helpful Links
+Logs https://kubernetes.io/docs/reference/generated/kubectl/kubectl-commands#logs
+
+Hands-On Lab
+Monitor and Output Logs to a file in Kubernetes
+
+Identify the problematic pod in your cluster.
+Use the following command to view all the pods in your cluster:
+kubectl get pods --all-namespaces
+
+Collect the logs from the pod.
+Use the following command to collect the logs from the pod:
+kubectl logs <pod_name> -n <namespace_name>
+
+Output the logs to a file.
+Use the following command to output the logs to a file:
+kubectl logs <pod_name> -n <namespace_name> > broken-pod.log
+
+Troubleshooting(10%)
+Identifying Failure within the Kubernetes Cluster
+Troubleshooting Application Failure
+Application failure can happen for many reasons, but there are ways within Kubernetes that
+  make it a little easier to discover why. In this lesson, we’ll fix some broken pods and
+  show common methods to troubleshoot.
+
+The YAML for a pod with a termination reason:
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod2
+spec:
+  containers:
+  - image: busybox
+    name: main
+    command:
+    - sh
+    - -c
+    - 'echo "I''ve had enough" > /var/termination-reason ; exit 1'
+    terminationMessagePath: /var/termination-reason
+
+One of the first steps in troubleshooting is usually to describe the pod:
+kubectl describe po pod2
+
+The YAML for a liveness probe that checks for pod health:
+apiVersion: v1
+kind: Pod
+metadata:
+  name: liveness
+spec:
+  containers:
+  - image: linuxacademycontent/kubeserve
+    name: kubeserve
+    livenessProbe:
+      httpGet:
+        path: /healthz
+        port: 8081
+
+View the logs for additional detail:
+kubectl logs pod-with-defaults
+
+Export the YAML of a running pod, in the case that you are unable to edit it directly:
+kubectl get po pod-with-defaults -o yaml --export > defaults-pod.yaml
+
+Edit a pod directly (i.e., changing the image):
+kubectl edit po nginx
+
+Helpful Links
+Pod Failure Reasons https://kubernetes.io/docs/tasks/debug-application-cluster/determine-reason-pod-failure/
+Debug the Application https://kubernetes.io/docs/tasks/debug-application-cluster/debug-application-introspection/
+Troubleshoot Applications https://kubernetes.io/docs/tasks/debug-application-cluster/debug-application/
+The Pod Lifecycle https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/
+
+Troubleshooting Control Plane Failure
+The Kubernetes Control Plane is an important component to back up and protect against failure.
+  There are certain best practices you can take to ensure you don’t have a single point of failure.
+  If your Control Plane components are not effectively communicating, there are a few things you
+  can check to ensure your cluster is operating efficiently.
+
+Check the events in the kube-system namespace for errors:
+kubectl get events -n kube-system
+
+Get the logs from the individual pods in your kube-system namespace and check for errors:
+kubectl logs [kube_scheduler_pod_name] -n kube-system
+
+Check the status of the Docker service:
+sudo systemctl status docker
+
+Start up and enable the Docker service, so it starts upon bootup:
+sudo systemctl enable docker && systemctl start docker
+
+Check the status of the kubelet service:
+sudo systemctl status kubelet
+
+Start up and enable the kubelet service, so it starts up when the machine is rebooted:
+sudo systemctl enable kubelet && systemctl start kubelet
+
+Turn off swap on your machine:
+sudo su -
+swapoff -a && sed -i '/ swap / s/^/#/' /etc/fstab
+
+Check if you have a firewall running:
+sudo systemctl status firewalld
+
+Disable the firewall and stop the firewalld service:
+sudo systemctl disable firewalld && systemctl stop firewalld
+
+Helpful Links
+Cluster Failure Overview https://kubernetes.io/docs/tasks/debug-application-cluster/debug-cluster/#a-general-overview-of-cluster-failure-modes
+Master HA https://kubernetes.io/docs/tasks/administer-cluster/highly-available-master/
+
+Troubleshooting Worker Node Failure
+Troubleshooting worker node failure is a lot like troubleshooting a non-responsive server,
+  in addition to the kubectl tools we have at our disposal. In this lesson, we’ll learn
+  how to recover a node and add it back to the cluster and find out how to identify when the kublet service is down.
+
+Listing the status of the nodes should be the first step:
+kubectl get nodes
+
+Find out more information about the nodes with kubectl describe:
+kubectl describe nodes chadcrowell2c.mylabserver.com
+
+You can try to log in to your server via SSH:
+ssh chadcrowell2c.mylabserver.com
+
+Get the IP address of your nodes:
+kubectl get nodes -o wide
+
+Use the IP address to further probe the server:
+ssh cloud_user@172.31.29.182
+
+Generate a new token after spinning up a new server:
+sudo kubeadm token generate
+
+Create the kubeadm join command for your new worker node:
+sudo kubeadm token create [token_name] --ttl 2h --print-join-command
+
+View the journalctl logs:
+sudo journalctl -u kubelet
+
+View the syslogs:
+sudo more syslog | tail -120 | grep kubelet
+
+Nodes https://kubernetes.io/docs/concepts/architecture/nodes/
+Explore Nodes https://kubernetes.io/docs/tutorials/kubernetes-basics/explore/explore-intro/#nodes
+
+Troubleshooting Networking
+Network issues usually start to arise internally or when using a service. In this lesson,
+  we’ll go through the many methods to see if your app is serving traffic by creating
+  a service and testing the communication within the cluster.
+
+Run a deployment using the container port 9376 and with three replicas:
+
+kubectl run hostnames --image=k8s.gcr.io/serve_hostname \
+                        --labels=app=hostnames \
+                        --port=9376 \
+                        --replicas=3
+
+List the services in your cluster:
+kubectl get svc
+
+Create a service by exposing a port on the deployment:
+kubectl expose deployment hostnames --port=80 --target-port=9376
+
+Run an interactive busybox pod:
+kubectl run -it --rm --restart=Never busybox --image=busybox:1.28 sh
+
+From the pod, check if DNS is resolving hostnames:
+# nslookup hostnames
+
+From the pod, cat out the /etc/resolv.conf file:
+# cat /etc/resolv.conf
+
+From the pod, look up the DNS name of the Kubernetes service:
+# nslookup kubernetes.default
+
+Get the JSON output of your service:
+kubectl get svc hostnames -o json
+
+View the endpoints for your service:
+kubectl get ep
+
+Communicate with the pod directly (without the service):
+wget -qO- 10.244.1.6:9376
+
+Check if kube-proxy is running on the nodes:
+ps auxw | grep kube-proxy
+
+Check if kube-proxy is writing iptables:
+iptables-save | grep hostnames
+
+View the list of kube-system pods:
+kubectl get pods -n kube-system
+
+Connect to your kube-proxy pod in the kube-system namespace:
+kubectl exec -it kube-proxy-cqptg -n kube-system -- sh
+
+Delete the flannel CNI plugin:
+kubectl delete -f https://raw.githubusercontent.com/coreos/flannel/bc79dd1505b0c8681ece4de4c0d86c5cd2643275/Documentation/kube-flannel.yml
+
+Apply the Weave Net CNI plugin:
+kubectl apply -f "https://cloud.weave.works/k8s/net?k8s-version=$(kubectl version | base64 | tr -d '\n')"
+
+Helpful Links
+Debugging Services in Kubernetes https://kubernetes.io/docs/tasks/debug-application-cluster/debug-service/
+Port Forwarding to Access a Pod https://kubernetes.io/docs/tasks/access-application-cluster/port-forward-access-application-cluster/
+Troubleshooting https://kubernetes.io/docs/tasks/debug-application-cluster/troubleshooting/
+Installing the CNI Plugin https://kubernetes.io/docs/setup/independent/create-cluster-kubeadm/#pod-network
+
+Hands-On Lab
+Repairing Failed Pods in Kubernetes
+Identify the broken pods.
+Use the following command to see what’s in the cluster:
+kubectl get all --all-namespaces
+
+Find out why the pods are broken.
+Use the following command to inspect the pod and view the events:
+kubectl describe pod <pod_name>
+
+Repair the broken pods.
+Use the following command to repair the broken pods in the most efficient manner:
+kubectl edit deploy nginx -n web
+
+Ensure pod health by accessing the pod directly.
+Use the following command to access the pod directly via its container port:
+wget -qO- <pod_ip_address>:80
