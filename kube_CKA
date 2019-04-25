@@ -3343,3 +3343,323 @@ kubectl edit deploy nginx -n web
 Ensure pod health by accessing the pod directly.
 Use the following command to access the pod directly via its container port:
 wget -qO- <pod_ip_address>:80
+
+Practice Exam Part 1
+Instructions
+You have been given access to a three-node cluster. Within that cluster, you will be responsible for
+  creating a service for end users of your web application. You will ensure the application meets the
+  specifications set by the developers and the proper resources are in place to ensure maximum uptime
+  for the app. You must perform the following tasks in order to complete this hands-on lab:
+
+All objects should be in the web namespace.
+The deployment name should be webapp.
+The deployment should have 3 replicas.
+The deployment’s pods should have one container using the linuxacademycontent/podofminerva image with the tag latest.
+The service should be named web-service.
+The service should forward traffic to port 80 on the pods.
+The service should be exposed externally by listening on port 30080 on each node.
+The pods should be configured to check the /healthz. endpoint on port 8081, and automatically restart the container if the check fails.
+The pods should be configured to not receive traffic until the endpoint on port 80 responds successfully.
+
+Create a deployment named `webapp` in the `web` namespace and verify connectivity.
+Use the following command to create a namespace named web:
+ kubectl create ns web
+
+Use the following command to create a deployment named webapp:
+ kubectl run webapp --image=linuxacademycontent/podofminerva:latest --port=80 --replicas=3 -n web
+
+Create a service named `web-service` and forward traffic from the pods.
+
+Use the following command to get the IP address of a pod that’s a part of the deployment:
+ kubectl get po -o wide -n web
+
+Use the following command to create a temporary pod with a shell to its container:
+ kubectl run busybox --image=busybox --rm -it --restart=Never -- sh
+
+Use the following command (from the container’s shell) to send a request to the web pod:
+ wget -O- <pod_ip_address>:80
+
+Use the following command to create the YAML for the service named web-service:
+ kubectl expose deployment/webapp --port=80 --target-port=80 --type=NodePort -n web --dry-run -o yaml > web-service.yaml
+
+Use Vim to add the namespace and the NodePort to the YAML:
+ vim web-service.yaml
+
+Change the name to web-service, add the namespace web, and add nodePort: 30080.
+
+Use the following command to create the service:
+ kubectl apply -f web-service.yaml
+
+Use the following command to verify that the service is responding on the correct port:
+ curl localhost:30080
+
+Use the following command to modify the deployment:
+ kubectl edit deploy webapp -n web
+
+Add the liveness probe and the readiness probe:
+ livenessProbe:
+   httpGet:
+     path: /healthz
+     port: 8081
+ readinessProbe:
+   httpGet:
+     path: /
+     port: 80
+
+Use the following command to check if the pods are running:
+ kubectl get po -n web
+
+Use the following command to check if the probes were added to the pods:
+ kubectl get po <pod_name> -o yaml -n web --export
+
+Hands-On Lab
+CKA Practice Exam Part 2
+Instructions
+You have been given access to a two-node cluster. Within that cluster, a PersistentVolume has already been created.
+  You must identify the size of the volume in order to make a PersistentVolumeClaim and mount the volume to your pod.
+  Once you have created the PVC and mounted it to your running pod, you must copy the contents of /etc/passwd to the volume.
+  Finally, you will delete the pod and create a new pod with the volume mounted in order to demonstrate the persistence of data.
+  You must perform the following tasks in order to complete this hands-on lab:
+
+All objects should be in the web namespace.
+The PersistentVolumeClaim name should be data-pvc.
+The PVC request should be 256 MiB.
+The access mode for the PVC should be ReadWriteOnce.
+The storage class name should be local-storage.
+The pod name should be data-pod.
+The pod image should be busybox and the tag should be 1.28.
+The pod should request the PersistentVolumeClaim named data-pvc, and the volume name should be temp-data.
+The pod should mount the volume named temp-data to the /tmp/data directory.
+The name of the second pod should be data-pod2.
+
+Objectives
+
+Create the `PersistentVolumeClaim`.
+how i did it:
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: data-pvc
+  namespace: web
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 256Mi
+  storageClassName: local-storage
+
+exercise solution
+Use the following command to check if there is already a web namespace:
+ kubectl get ns
+
+Use the following command to create a PersistentVolumeClaim:
+ vi data-pvc.yaml #copy and paste from docs
+
+Change the following in the data-pvc.yaml file:
+ name: data-pvc
+ namespace: web
+ storageClassName: local-storage
+ storage: 256Mi
+
+Use the following command to create the PVC:
+ kubectl apply -f data-pvc.yaml
+
+Create a pod mounting the volume and write data to the volume.
+my solution:
+apiVersion: v1
+kind: Pod
+metadata:
+  name: data-pod
+  namespace: web
+spec:
+  containers:
+  - image: busybox:1.28
+    name: busybox
+    command:
+    - sleep
+    - "3600"
+    volumeMounts:
+    - name: temp-data
+      mountPath: /tmp/data
+  volumes:
+  - name: temp-data
+    persistentVolumeClaim:
+      claimName: data-pvc
+
+exercise solution:
+Use the following command to create the YAML for a busybox pod:
+ kubectl run busybox --image=busybox --restart=Never -o yaml --dry-run -- /bin/sh -c 'sleep 3600' > data-pod.yaml
+
+Use the following command to edit the data-pod.yaml file:
+ vi data-pod.yaml
+
+Add the following to the data-pod.yaml file:
+   namespace: web
+  volumeMounts:
+     - name: temp-data
+       mountPath: /tmp/data
+   volumes:
+   - name: temp-data
+     persistentVolumeClaim:
+       claimName: data-pvc
+
+Use the following command to create the pod:
+ kubectl apply -f data-pod.yaml
+
+Use the following command to connect to the pod:
+ kubectl exec -it data-pod -n web -- sh
+
+Use the following command to copy the contents of the etc/passwd file to /tmp/data:
+ # cp /etc/passwd /tmp/data/passwd
+
+Use the following command to list the contents of /tmp/data:
+ # ls /tmp/data/
+
+Delete the pod and create a new pod and view volume data.
+Use the following command to delete the pod:
+ kubectl delete po data-pod -n web
+
+Use the following command to modify the pod YAML:
+ vi data-pod.yaml
+
+Change the following line in the data-pod.yaml file:
+ name: data-pod2
+
+Use the following command to create a new pod:
+ kubectl apply -f data-pod.yaml
+
+Use the following command to connect to the pod and view the contents of the volume:
+ kubectl exec -it data-pod2 -n web -- sh
+ # ls /tmp/data
+
+Hand-On Lab: CKA Practice Exam: Part 3
+Instructions
+You have been given access to a three-node cluster. You will be responsible for creating a deployment
+  and a service to serve as a front end for a web application. In addition to the web application,
+  you must deploy a Redis database and make sure the web application can only access this database
+  using the default port of 6379. You will first create a default-deny network policy, so all pods
+  within your Kubernetes are not able to communicate with each other by default. Then you will create
+  a second network policy that specifies the communication on port 6379 between the web application
+  and the database using their label selectors. You must apply these specifications to your resources
+  in order to complete this hands-on lab:
+
+Create a deployment named webfront-deploy.
+The deployment should use the image nginx with the tag 1.7.8.
+The deployment should expose container port 80 on each pod and contain 2 replicas.
+Create a service named webfront-service and expose port 80, target port 80.
+The service should be exposed externally by listening on port 30080 on each node.
+Create one pod named db-redis using the image redis and the tag latest.
+Verify that you can communicate to pods by default.
+Create a network policy named default-deny that will deny pod communication by default.
+Verify that you can no longer communicate between pods.
+Apply the label role=frontend to the web application pods and the label role=db to the database pod.
+Create a network policy that will apply an ingress rule for the pods labeled with role=db to allow traffic on port 6379 from the pods labeled app=frontend.
+Verify that you have applied the correct labels and created the correct network policies.
+
+Create a deployment and a service to expose your web front end.
+Use the following command to create the YAML for your deployment:
+ kubectl create deployment webfront-deploy  --image=nginx:1.7.8  --dry-run -o yaml > webfront-deploy.yaml
+
+Add the following to your YAML in order to expose the container port:
+ - containerPort:80
+
+Use the following command to create your deployment:
+ kubectl apply -f webfront-deploy.yaml
+
+Use the following command to scale up your deployment:
+ kubectl scale deployment/webfront-deploy --replicas=2
+
+Use the following command to create the YAML for a service:
+ kubectl expose deployment/webfront --port=80 --target-port=80 --type=NodePort --dry-run -o yaml > webfront-service.yaml
+
+Add the following to the YAML for the service:
+ name: webfront-service
+ nodePort: 30080
+
+Use the following command to create the service:
+ kubectl apply -f webfront-service.yaml
+
+Verify that you can communicate with your pod directly:
+ kubectl run busybox --rm -it --image=busybox /bin/sh
+ # wget -O- <pod_ip_address>:80
+ # wget --spider --timeout=1 webfront-service
+
+Create a database server to serve as the backend database.
+Use the following command to create a Redis pod:
+kubectl run db-redis --image=redis --restart=Never
+
+Create a network policy that will deny communication by default.
+Use the following YAML (this is where you can use kubernetes.io and search "network policies" and then search for the text "default"):
+
+ apiVersion: networking.k8s.io/v1
+ kind: NetworkPolicy
+ metadata:
+   name: default-deny
+ spec:
+   podSelector: {}
+   policyTypes:
+   - Ingress
+
+Use the following command to apply the network policy:
+ kubectl apply default-deny.yaml
+
+Verify that communication has been disabled by default:
+ kubectl run busybox --rm -it --image=busybox /bin/sh
+ # wget -O- <pod_ip_address>:80
+
+Apply the labels and create a communication over port 6379 to the database server.
+Use the following commands to apply the labels:
+ kubectl get po
+ kubectl label po <pod_name> role=frontend
+ kubectl label po db-redis role=db
+ kubectl get po --show-labels
+
+Use the following YAML to create a network policy for the communication between the two labeled pods (copy from kubernetes.io website):
+ apiVersion: networking.k8s.io/v1
+ kind: NetworkPolicy
+ metadata:
+   name: redis-netpolicy
+ spec:
+   podSelector:
+     matchLabels:
+       role: db
+   ingress:
+   - from:
+     - podSelector:
+         matchLabels:
+           role: frontend
+     ports:
+     - port: 6379
+
+Use the following command to create the network policy:
+ kubectl apply -f redis-netpolicy.yaml
+
+Use the following command to view the network policies:
+ kubectl get netpol
+
+Use the following command to describe the custom network policy:
+ kubectl describe netpol redis-netpolicy
+
+Use the following command to show the labels on the pods:
+ kubectl get po --show-labels
+
+Tips for the Certified Kubernetes Administer CKA Exam
+Use kubectl completion
+source <(kubectl completion bash)
+echo "source <(kubectl completion bash)" >> ~/.bashrc
+https://kubernetes.io/docs/reference/kubectl/cheatsheet/#kubectl-autocomplete
+
+Use kubectl help
+kubectl help
+https://kubernetes.io/docs/reference/kubectl/overview/#syntax
+
+Use kubectl explain
+Get documentation of various resources. For instance pods, nodes, services, etc.
+
+kubectl explain deployments
+https://kubernetes.io/docs/reference/kubectl/overview/#operations
+
+Switch Between Multiple Contexts
+kubectl config use-context
+https://kubernetes.io/docs/tasks/access-application-cluster/configure-access-multiple-clusters/#define-clusters-users-and-contexts
