@@ -1655,3 +1655,875 @@ emptyDir
   Stored on node's local medium
   Optional - set emptyDir.medium = Memory for RAM based tmpfs
 
+Persistent Volumes
+Kubernetes and Persistent Volumes
+  Native Pod Storage is Ephemeral -- Like a Pod
+  What happens when a container crashes:
+    Kubelet restarts it (possibly on another node)
+    File system is re-created from image
+    Ephemeral files are gone
+  Docker Volumes
+    Directory on disk
+    Possibly in another container
+    New Volume Drivers
+Kubernetes volumes
+  Same lifetime as pod
+  Data preserved across container restarts
+  Pod goes away -> Volume goes away
+  Directory with data
+  Accessible to containers in a pod
+  Implementation details determined by volume types
+Using Volumes
+  Pod spec indicates which volumes to provide for the pod (spec.volumes)
+  Pod spec indicates where to mount these volumes in containers (spec.containers.volumeMounts)
+  Volumes cannot mount onto other volumes
+  No hard links to other volumes
+  Each pod must specify where each volume is mounted
+emptyDir
+  Created when a pod is assigned to a node
+  Exists while pod runs on a particular node
+  Initially empty
+  Multiple containers can read/write same volume
+  Volume can be mounted per container -- same or different mount points
+  Pod removed -> Volume removed
+  Stored on node's local medium
+  Optional - set emptyDir.medium = memory for RAM based tmpfs
+secret
+  Used to pass sensitive information to pods
+  Stored using the Kubernetes API
+  Mount secrets as files for use by pods
+  Volumes are backed by tmpfs so secrets are never written to non-volatile storage
+  Secrets must be created in Kubernetes API prior to use
+
+Volumes and Their Access Modes
+PersistentVolume - API for users that abstracts implementation details of storage
+PersistentVolumeClaim - Method for users to claim durable storage regardless of implementation details
+PersistentVolume
+  Provisioned storage in a cluster
+  Cluster resource
+  Volume plugins (as discussed in the previous lesson) have independent lifecycle from pods
+  Volumes share the lifecycle of the pod; PersistentVolumes do not
+  API object (YAML) details the implementation
+Persistent Volume Claim
+  Request for storage
+  Pods consume node resources; PVCs consume PV resources
+  Pods can request specific CPU and memory; PVCs can request specific size and access modes
+PVs and PVCs
+  Users and applications do not share identical requirements
+  Administrators should offer a variety of PVs without users worrying about the implementation details
+  PVs are cluster resources, PVCs are requests for the cluster resource
+  PVCs also act as a "claim check" on a resource
+  PVs and PVCs have a set lifecycle
+    Provision
+    Bind
+    Reclaim
+Provisioning
+  Static
+    Creates PVs
+    In the K8S API and available for consumption
+  Dynamic
+    Used when none fo the static PVs match the PVC
+    Based on StorageClasses
+    PVC must request a created and configured storage class
+    Claims requesting nameless class disable dynamic provisioning
+To enable dynamic storage provisioning, DefaultStorageClass admission controller on the API server must be enabled
+Binding
+  User creates PVC
+  Master watchers for new PVCs and matches them to PVs
+  Master binds PVC to PV
+  Volume may be more than the request
+  Binds are exclusive
+  PVC->PV mapping is always 1:1
+  Claims not matched will remain unbound indefinitely
+
+Pod Uses Volume
+  Pods treat PVCs as volumes
+  Cluster checks claim, mounts appropriate volume to pod
+
+Persistent Volume Claim Protection
+  Alpha feature as of K8S 1.9
+  Ensures PVCs actively in use do not get removed from the system
+  PVC considered active when:
+    The pod status is Pending and the pod is assigned to a node
+    The pod status is Running
+  If a user deletes a PVC in use, removal is postponed until PVC is not in use by any pod
+
+Reclaiming
+  User can delete PVC objects
+  Reclaim Policy for a PV tells the cluster what to do with the volume
+  Policies:
+    Retain
+    Recycle
+    Delete
+  Policies allow for manual reclamation of a resource
+    PVC deleted
+    PV still exists; volume is "released"
+    Not yet available because the data is still present
+    Admin can manually reclaim the volume
+  Administrator can configure custom recycler pod template
+  Must contain a volumes specification
+  Volume plugs that support Delete reclaim policy
+    Removes the PersistentVolume object from K8S
+    Associated storage assets in the infrastructure
+    Dynamically provisioned volumes inherit reclaim policy of their StorageClass
+  Administrators should configure StorageClass according to expectations
+Capacity
+  PVs have a specific storage capacity
+  Set using "capacity" attribute
+  Storage size is the only resource that can be set or requested
+  Future attribute plans:
+    IOPS
+    Throughput
+    ???
+  Prior to K8S v1.9, default behavior for all volume plugins was to create a filesystem
+  As of 1.9, however, user can specify volumeMode
+    Raw Block Devices -- "Block"
+    File Systems -- "Filesystem" (default)
+
+Access Modes
+  Must be supported by storage resource provider
+  ReadWriteOnce -- Can be mounted as read/write by one node only (RWO)
+  ReadOnlyMany -- Can be mounted read-only by many nodes (ROX)
+  ReadWriteMany -- Can be mounted read/write by many nodes (RWX)
+A volume can only be mounted using one access mode at a time, regardless of the modes that are supported.
+
+Applications and Persistent Storage
+In this hands-on lesson, we'll closely examine the full process of providing persistent
+  storage to an application starting with provisioning the storage, creating a PV, a PVC,
+  and finally connecting to it via a pod.
+
+Create a server and login
+sudo apt update
+sudo apt install nfs-kernel-server
+sudo mkdir /var/nfs/general -p
+ls -la /var/nfs/general -> dir is owned by root
+sudo chown nobody:nogroup /var/nfs/general
+vim /etc/exports
+edit file to include
+/var/nfs/general [node1-privateip](rw,sync,no_subtree_check) [node2-privateip](rw,sync,no_subtree_check) etc
+save and
+sudo systemctl restart nfs-kernel-server
+on each node run `sudo apt install nfs-common`
+
+Create the pv.yaml:
+
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: lapv
+spec:
+  capacity:
+    storage: 1Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Recycle
+  nfs:
+    path: /var/nfs/general
+    server: $your-storage-server-private-IP
+    readOnly: false
+
+Create the pvc.yaml:
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nfs-pvc
+spec:
+  accessModes:
+  - ReadWriteMany
+  resources:
+    requests:
+      storage: 1Gi
+
+
+Create the nfs-pod.yaml:
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nfs-pod
+  labels:
+    name: nfs-pod
+spec:
+  containers:
+  - name: nfs-ctn
+    image: busybox
+    command:
+      - sleep
+      - "3600"
+    volumeMounts:
+    - name: nfsvol
+      mountPath: /tmp
+  restartPolicy: Always
+  securityContext:
+    fsGroup: 65534
+    runAsUser: 65534
+  volumes:
+    - name: nfsvol
+      persistentVolumeClaim:
+        claimName: nfs-pvc
+
+Work with Persistent Storage Exercise
+Okay, you've seen it done in the previous lesson... Now it's your turn!
+
+1. On one of your cloud servers, install and configure Ubuntu 16 to be an NFS server.  Export a directory for use by the cluster.  Be sure you give all of your cluster nodes access to the directory.
+Once the NFS node comes up, perform the following steps on it:
+
+sudo apt update
+sudo apt upgrade -y
+Make a note of the internal IP addresses your four Kubernetes cluster are assigned.
+sudo apt install nfs-kernel-server -y
+Create a directory: sudo mkdir /var/nfs/general -p
+Set correct owner and group on the directory: sudo chown nobody:nogroup /var/nfs/general
+Edit the file /etc/exports such that the following line is added:
+/var/nfs/general      x.x.x.x(rw,sync,no_subtree_check) y.y.y.y(rw,sync,no_subtree_check) z.z.z.z(rw,sync,no_subtree_check) a.a.a.a(rw,sync,no_subtree_check)
+
+Where x.x.x.x, y.y.y.y, z.z.z.z, and a.a.a.a are the internal IP addresses of your Kubernetes nodes.
+Restart the NFS server with the command sudo systemctl restart nfs-kernel-server.
+
+2. Configure each of your Kubernetes nodes -- including the master -- as NFS clients.
+Log in to each of your Kubernetes nodes, including the master, and execute the command sudo apt install nfs-common
+
+3. Write the yaml to provision the storage in Kubernetes and call the API with it, and verify that the appropriate object has been created.
+Make a note of your NFS server's internal ip address and create this file,pv.yaml, while replacing b.b.b.b with the NFS server's IP address:
+
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: lab-vol
+spec:
+  capacity:
+    storage: 1Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Recycle
+  nfs:
+    path: /var/nfs/general
+    server: b.b.b.b
+    readOnly: false
+Execute the command kubectl create -f pv.yaml and verify that the PersistentVolume was provisioned by executing kubectl get pv
+
+4. Write the yaml to request usage of the storage and call the API. Verify that the appropriate objects were created and/or allocated.
+Create the file for the PVC similar to the following yaml file named pvc.yaml:
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nfs-pvc
+spec:
+  accessModes:
+  - ReadWriteMany
+  resources:
+    requests:
+      storage: 1Gi
+Execute the command kubectl create -f pvc.yaml and verify that it was created and bound to the
+ lab-vol PV with the command kubectl get pvc and another look at kubectl get pv should also
+ verify that they two objects are bound.
+
+5. Write the yaml required by a busybox container to mount the volume at /tmp. Call the api.
+I created this yaml called nfs-pod.yaml:
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nfs-pod
+  labels:
+    name: nfs-pod
+spec:
+  containers:
+  - name: nfs-ctn
+    image: busybox
+    command:
+      - sleep
+      - "3600"
+    volumeMounts:
+    - name: nfsvol
+      mountPath: /tmp
+  restartPolicy: Always
+  securityContext:
+    fsGroup: 65534
+    runAsUser: 65534
+  volumes:
+    - name: nfsvol
+      persistentVolumeClaim:
+        claimName: nfs-pvc
+And created the pod by executing kubectl create -f nfs-pod.yaml
+
+6. Invoke the shell on the busybox to interactively work with the container.
+  Change to the /tmp directory and attempt to create a file called "its-alive.txt".
+Invoke the shell in the busybox container by using the command kubectl exec -it nfs-pod -- sh and then running these commands:
+
+cd /tmp
+echo "My Monster!" > its-alive.txt
+exit
+
+7. Verify that the file exists on the NFS server in the exported directory.
+On the NFS server, verify that the file was written:ls -la /var/nfs/general/
+
+Authentication and Authorization
+  Transport Layer Security Established
+  Authentication (authenticator modules)
+  Admissions modules
+  Authorization
+    RBAC
+    ABAC
+    Webhook
+Kubelet Authentication and Authorization
+The Kubelet's endpoint exposes APIs which give access to data of varying sensitivity
+How to authenticate and authorize access:
+  By default, requests are treated as anonymous requests
+  If authenticated, then it authorized the request:
+  Default is AlwaysAllow
+  Might want to subdivide access because:
+    Anonymous auth enabled, but anonymous users should be limited
+    Bearer token auth enabled, but some service accounts should be limited
+    Client certificate auth enabled, but only some that are signed should be allowed
+
+Configure Network Policies
+Specifications of how groups of pods can communicate
+Use labels to select pods and define rules
+Implemented by the network plugin
+Pods are non-isolated by default
+Pods are isolated when a Network Policy selects them
+
+Kubernetes Network Policies Example
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: test-network-policy
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      role: db
+  policyTpes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - ipBlock:
+        cidr: 172.17.0.0/16
+        except:
+        - 172.17.1.0/24
+    - namespaceSelector:
+        matchLabels:
+          project: myproject
+    - podSelector:
+        matchLabels:
+          role: frontend
+    ports:
+    - protocol: TCP
+      port: 6379
+  egress:
+  - to:
+    - ipBlock:
+        cidr: 10.0.0.0/24
+    ports:
+    - protocol: TCP
+      port: 5978
+
+Example Default Isolation Policy - this will block all traffic by default
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+
+Explicitly Allow All Traffic Sample YAML - can be useful if diagnosing another Network Policy issue
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-all
+spec:
+  podSelector: {}
+  ingress:
+  - {}
+
+Explicitly Deny Outgoing Traffic Sample YAML
+apiVersion: networking.k8s.io
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+spec:
+  podSelector: {}
+  policyTypes:
+  - Egress
+
+Explicitly Allow All Outgoing Traffic Sample YAML
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-all
+spec:
+  podSelector: {}
+  egress:
+  - {}
+
+Explicitly Stop ALL Traffic Sample YAML
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+
+Conclusion
+  Specification of how groups of pods may communicate
+  Use labels to select pods and define rules
+  Implemented by the network plugin
+  Pods are isolated when a Network Policy selects them
+
+TLS Ceritficates for Cluster Components
+already downloaded easy rsa
+cd k8s/easy-rsa-master/easyrsa3
+./easyrsa init-pki
+./easyrsa --batch "--req-cn=${MASTER_IP}@`date +%s`" build-ca nopass
+
+Securing Images
+  User containers could contain vulnerabilities
+  Continuous security vulnerability scanning
+    Check for outdated containers
+    Known vulnerabilities
+  New vulnerabilities are published everyday
+  Regularly apply security updates to your environment
+  Don't run tools like apt-update in containers
+  Use rolling updates!
+  Ensure only authorized images are used in your environment
+  Use private registries to store approved images
+  CI Pipeline should ensure that only vetted code is used for building images
+
+Defining Security Contexts
+security.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: security-context-pod
+spec:
+  securityContext:
+    runAsUser: 1000
+    fsGroup: 2000
+  volumes:
+  - name: sam-vol
+    emptyDir: {}
+  containers:
+  - name: sample-container
+    image: gcr.io/google-samples/node-hello:1.0
+    volumeMounts:
+    - name: sam-vol
+      mountPath: /data/demo
+    securityContext:
+      allowPrivilegeEscalation: false
+
+kubectl get pods -o wide
+kubectl exec -it security-context-pod -- sh
+
+Troubleshooting in Kubernetes
+kubectl get nodes -o wide
+kubectl describe node [node-name]
+kubectl get pods
+kubectl logs [pod name]
+
+Kubernetes Key Points Review
+Scheduling - 5%
+  Use label selectors to schedule pods
+  Understand the role of DaemonSets
+  Understand how resource limits can affect pod scheduling
+  Understand how to run mulitple schedulers and how to configure pods to use them
+  Manually schedule a pod without a scheduler
+  Display scheduler events
+  Know how to configure the Kubernetes Scheduler
+Logging and Monitoring - 5%
+  Understand how to monitor cluster components
+  Understand how to monitor applications
+  Manage cluster component logs
+  Manage application logs
+Application Lifecycle Management - 8%
+  Understand deployments and how to perform updates and rollbacks
+  Know various ways to configure applications
+  Know how to scale applications
+  Understand the primitives necessary to create a self-healing application
+Cluster maintenance - 11%
+  Understand the Kubernetes Cluster upgrade process
+  Facilitate operating system upgrades
+  Implement backup and restore methodologies
+Security - 12%
+  Know how to configure authentication and authorization
+  Understand Kubernetes security primitives
+  Know how to configure network policies
+  Create and manage TLS certificates for cluster components
+  Work with images securely
+  Define security contexts
+  Secure your persistent key value store
+  Work with role based access control
+Storage - 7%
+  Understand persistent volumes and how to create them
+  Understand access modes for volumes
+  Understand persistent volume claims primitive
+  Understand Kubernetes storage objects
+  Know how to configure applications with persistent storage
+Troubleshooting - 10%
+  Troubleshoot application failure
+  Troubleshoot control plane failure
+  Troubleshoot worker node failure
+  Troubleshoot networking
+Core Concepts - 19%
+  Understand the Kubernetes API primitives
+  Understand the Kubernetes cluster architecture
+  Understand services and other network primitives
+Networking - 11%
+  Understand the networking configuration on the cluster nodes
+  Understand pod networking concepts
+  Understand service networking
+  Deploy and configure a network load balancer
+  Know how to use Ingress rules
+  Know how to configure and use the cluster DNS
+  Understand CNI
+Installation, Configuration, and Validation - 12%
+  Design a Kubernetes cluster
+  Install Kubernetes masters and nodes, including the use of TLS bootstrapping
+  Configure secure cluster communications
+  Configure a highly-available Kubernetes cluster
+  Know where to get the Kubernetes release binaries
+  Provision underlying infrastructure to deploy a Kubernetes cluster
+  Choose a network solution
+  Choose your Kubernetes infrastructure configuration
+  Run end-to-end tests on your cluster
+  Analyze end-to-end test results
+  Run node end-to-end tests
+Conclusion
+  Practice labs until it is second nature
+  Do each lab multiple times -- especially if you find it difficult
+  Review videos for concepts you had trouble with
+  Ask questions in the community
+  Watch "The Certified Kubernetes Administrator Exam Process"
+  Do the Practice Exam exercise
+  Watch "Some Words of Encouragement"
+Practice Exam
+1. Create a job that calculates pi to 2000 decimal points using the container with the
+  image named perl and the following entry point to the container:
+
+ ["perl",  "-Mbignum=bpi", "-wle", "print bpi(2000)"]
+Once the job has completed, save the result to your home directory in a file called pi.result.txt.
+
+pi.yaml to create the job is:
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: pi
+spec:
+  template:
+    spec:
+      containers:
+      - name: pi
+        image: perl
+        command: ["perl",  "-Mbignum=bpi", "-wle", "print bpi(2000)"]
+      restartPolicy: Never
+  backoffLimit: 4
+After it completes, you'll execute a kubectl logs pi > pi.result.txt
+
+
+
+2. Create yaml for a pod that uses the nginx image and listens on port 80.
+The pod should have the name nginx-pod and be labeled with app: nginx.
+Save the yaml to your home directory as nginx-pod.yaml and start the pod.
+nginx-pod.yaml:
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nginx-pod
+  labels:
+    app: nginx
+spec:
+  containers:
+    - name:
+      image: nginx
+      ports:
+        containerPort: 80
+
+
+
+
+3. Create yaml for a deployment of two replicas of nginx, listening on the container's port 80.
+They should bear the label of tier=frontend and app-nginx. The deployment should be named nginx-deployment.
+Leave a copy of the yaml in your home directory with the name nginx-deployment.yaml.
+nginx-deployment.yaml:
+
+apiVersion: apps/v1beta2
+kind: Deployment
+metadata:
+  name: nginx-deployment
+spec:
+  selector:
+    matchLabels:
+      app: nginx
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        app: nginx
+        tier: frontend
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.7.9
+        ports:
+        - containerPort: 80
+
+
+
+
+4. Create a pod called "with-files" with an nginx image listening on port 80.
+The pod should attach to emptyDir storage, mounted to /tmp in the container.
+Connect to the pod and create a file with zero bytes in the /tmp directory called
+linuxacademy.txt. Do not delete this pod. If you create other artifacts in the
+course working on this, you may delete them from your home directory or create a
+directory called extras in your home directory and move the files there.
+with-files.yaml:
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: with-files
+spec:
+  containers:
+  - image: nginx
+    name: write-files
+    volumeMounts:
+    - mountPath: /tmp
+      name: temp-volume
+  volumes:
+  - name: temp-volume
+    emptyDir: {}
+
+5. Label the worker node of your cluster with rack=qa.
+kubectl label node node-name rack=qa
+
+6. Create a file called counter.yaml in your home directory and paste the following yaml into it:
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: counter
+spec:
+  containers:
+  - name: count
+    image: busybox
+    args: [/bin/sh, -c, 'i=0; while true; do echo "$i: $(date)"; i=$((i+1)); sleep 1; done']
+Start this pod. Once its logs exceed a count of 20 (no need to be precise — any time after
+it has reached 20 is fine), save the logs into a file in your home directory called count.result.txt. Delete the pod.
+
+Use kubectl logs counter > count.result.txt
+
+7. Create a deployment with two replicas of nginx:1.7.9. The container listens on port 80.
+It should be named "web-dep" and be labeled with tier=frontend with an annotation of
+AppVersion=3.4. The containers must be running with the UID of 1000.
+web-dep.yaml:
+
+apiVersion: apps/v1beta2
+kind: Deployment
+metadata:
+  name: web-dep
+  annotations:
+    AppVersion: "3.4"
+spec:
+  selector:
+    matchLabels:
+      app: nginx
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        app: nginx
+        tier: frontend
+    spec:
+      securityContext:
+        runAsUser: 1000
+      containers:
+      - name: nginx
+        image: nginx:1.7.9
+        ports:
+        - containerPort: 80
+        command: ["sleep","1000"]
+
+
+8. Upgrade the image in use by the web-dep deployment to nginx:1.9.
+kubectl set image deployment web-dep nginx=1.9
+
+9. Roll the image in use by the web-dep deployment to the previous version.
+Do not set the version number of the image explicitly for this command.
+kubectl rollout undo deployment web-dep
+
+10. Scale the number of replicas of the web-dep deployment up to 3.
+kubectl scale deployment web-dep --replicas=3
+
+11. Expose the web-dep deployment as a service using a NodePort.
+kubectl expose deployment web-dep --type=NodePort --containerPort 80
+
+12. Configure a DaemonSet to run the image k8s.gcr.io/pause:2.0 in the cluster.
+ds.yaml
+
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: zuul
+spec:
+  selector:
+    matchLabels:
+      quiet: "pod"
+  template:
+    metadata:
+      labels:
+        quiet: pod
+    spec:
+      tolerations:
+      - key: node-role.kubernetes.io/master
+        effect: NoSchedule
+      containers:
+      - name: gozer
+        image: k8s.gcr.io/pause:2.0
+
+13. Configure the cluster to use 8.8.8.8 and 8.8.4.4 as upstream DNS servers.
+kube-dns.yaml:
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kube-dns
+  namespace: kube-system
+data:
+  upstreamNameservers: |
+    ["8.8.8.8", "8.8.4.4"]
+
+Using new (1.10+) CoreDNS Corefile would be:
+
+.:53 {
+        errors
+        health
+        kubernetes cluster.local  in-addr.arpa ip6.arpa {
+           upstream  8.8.8.8 8.8.4.4
+           pods insecure
+           fallthrough in-addr.arpa ip6.arpa
+        }
+        prometheus :9153
+        proxy .  8.8.8.8 8.8.4.4
+        cache 30
+    }
+
+14. A legacy application (yaml below) requires that the IP address or hostname of
+the web-dep endpoint be configured as an environment variable called "FROBOZZ" in
+the container. Alter the yaml accordingly, leave a copy in your home directory with
+the name zork.yaml, and start the pod.
+
+apiVersion: apps/v1beta2
+kind: Deployment
+metadata:
+  name: zork
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: zork-app
+  template:
+    metadata:
+      labels:
+        app: zork-app
+    spec:
+      containers:
+      - name: p114
+        image: k8s.gcr.io/pause:2.0
+
+zork.yaml:
+
+apiVersion: apps/v1beta2
+kind: Deployment
+metadata:
+  name: zork
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: zork-app
+  template:
+    metadata:
+      labels:
+        app: zork-app
+    spec:
+      containers:
+      - name: p114
+        image: k8s.gcr.io/pause:2.0
+        env:
+        - name: FROBOZZ
+          value: "web-dep.default"
+
+
+15. Create a pod using the k8s.gcr.io/pause:20 container image that is allowed to run on the master node if necessary, but does not have to be scheduled there.
+spy.yaml:
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: spy
+spec:
+  tolerations:
+  - key: node-role.kubernetes.io/master
+    effect: NoSchedule
+  containers:
+  - name: sneak
+    image: k8s.gcr.io/pause:20
+
+16. Copy all Kubernetes scheduler logs into a logs directory in your home directory.
+The Kubernetes logs are located in /var/log/pods/
+
+17. Run the pod below until the counter in its stdout exceeds 20 (no need to be precise)
+and then extract the legacy log file to the logs directory in your home directory. Delete the pod.
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: counter2
+spec:
+  containers:
+  - name: count
+    image: busybox
+    args: [/bin/sh, -c, 'i=0; while true; do echo "$i: $(date)"; echo "$(date) - File - $i" >> /var/www/countlog; i=$((i+1)); sleep 3; done']
+
+kubtctl exec -it counter2 -- cat /var/www/countlog > ~/home/logs/countlog
+
+18. Build a default network policy that disallows all traffic to pods in the default namespace.
+net-policy.yaml
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+
+19. Remove the taint from the master node so it can now accept any work — even from nodes with no tolerations of the master node.
+kubectl taint node master-node-name node-role.kubernetes.io/master-
+
+20. Create a yaml file for a secret called my-secret and saved in a file in your home directory called my-secret.yaml. The secret should have two fields: a username and password. The username should be set to admin and the password should be set to iHeartKittens.
+my-secret.yaml:
+
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-secret
+type: Opaque
+data:
+  username: YWRtaW4=
+  password: aUhlYXJ0S2l0dGVucw==
+Don't forget to run your secrets through base64!
+
