@@ -1,2 +1,80 @@
 LPI Linux Essentials
 
+How to Install Centos7 with VirtualBox
+  Install Virtualbox
+  Download Centos7 DVD ISO
+  New->Enter name, Linux, Redhat 64-bit
+  >2gb RAM, 4 pref
+  Create a virtual hard drive
+  dynamically allocated
+  20gb hard drive
+  Details>General>System>Boot Order>deselect floppy
+  2 processors
+  video memory 64mb
+  enable 3d acceleration
+  storage> choose optical disk file- delect centos iso
+  enable network adaptor
+  NAT
+  paravirtualized network
+  boot up machine
+  install centos 7
+  select date/time
+  network options
+  network interface slider
+  configure->general automatically connect to network when available
+  select environment
+  create root and user accounts
+
+Yum package management
+yum search httpd
+yum install httpd
+yum deplist httpd
+yum info httpd
+yum list installed httpd
+yum update
+yum remove httpd
+yum autoremove httpd - removes dependencies as well
+which httpd -
+yum repolist
+
+https://access.redhat.com/articles/yum-cheat-sheet
+
+repos stored in /etc/yum.repos.d directory
+yum clean all
+
+
+RPM Package Management
+doesn't work well with dependency management
+
+rpm -ivh package-name.rpm
+rpm -qi package-name -> get info about package
+rpm -qR package-name -> requirements
+rpm -Uvh package-name -> update
+rpm --test -e package-name -> see if there are any warnings about removing a package
+
+APT Package Management
+Used for Debian based systems
+/etc/apt/sources.list -> list of all repos
+update cache -> apt update
+apt-cache search <package-name>
+apt install <package-name>
+apt remove <package-name>
+apt remove --purge <package-name>
+apt autoremove
+apt upgrade
+apt full-upgrade
+
+dpkg Package Management
+original debian package management system
+dpkg --get-selections - list of all packages
+dpkg-deb -I <package-name.deb> -> info
+dpkg-deb --contents <debian file.deb>
+dpkg -i <package name.deb> -> install
+apt update
+apt -f upgrade
+dpkg -r <package> -> uninstall
+dpkg -l <package> -> see if package is installed
+dpgk -P <package> -> purge package and deps
+
+
+
