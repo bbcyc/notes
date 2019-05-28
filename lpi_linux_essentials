@@ -76,5 +76,515 @@ dpkg -r <package> -> uninstall
 dpkg -l <package> -> see if package is installed
 dpgk -P <package> -> purge package and deps
 
+Desktop Skills
+Debian - KDE desktop
+ALT-F2 - search window for apps
+CTRL-ALT-F1->F7 - open different terminal windows
+ALT-F5 -> to move to another terminal window from within terminal
 
+Virtualization
+Hypervisor and Guest
+
+Command Line Basics
+ls - list contents of dir
+-l long listing
+-lh - human-readable long
+-R list directories recursively
+-S sort by file size
+-t sort by last time modified
+-r -reverse sort
+
+which ls - shows where command is
+env - shows all environment vars
+echo $PATH
+./hello.sh - use the dot to run command in dir that is not in path - same as /home/user/hello.sh
+
+Basic Commands
+whoami - currently logged in user - same as $LOGNAME
+su liam - switch to user liam
+su - -> switch to root account
+reboot - restarts machine - init 6 is the same
+halt or poweroff - turns off machine
+shutdown -H - shuts down
+top - look at processes - quit with q
+
+uname - provides basic info about system
+uname === uname -s
+uname -r -> get kernel release number
+-v -> build version
+-m -> machine type === -p
+-o -> operating system
+-a -> all options
+
+pwd - print working directory === echo $PWD
+cd -> change to home dir
+cd - -> move to previous dir
+
+ls -a
+.bash_history - bash command history
+echo $HISTFILESIZE
+echo $HISTCONTROL
+history
+!<number of command>
+
+Login shell - text prompt or sshing into a system remotely
+Login shell -> /etc/profile
+then the first of these that is found is used and the others are ignored
+  ~/.bash_profile
+  ~/.bash_login
+  ~/.profile
+next .bashrc is called, followed by /etc/bashrc
+
+non-login-shell - runs when a script is run or when a terminal is opened from gui
+  reads .bashrc then /etc/bashrc
+
+Shell Variables
+$OLDPWD - stores old pwd
+set - environment variables in order
+TEST="testing" - creates local var
+echo $TEST
+export $TEST - makes var available to all terminal sessions
+PATH=$PATH:/opt -> add /opt to $PATH
+
+Globbing
+helps to find files
+ls *.txt - list all files ending with .txt
+ls test*
+* - any number of chars
+? - one char
+ls [Pp]*.csv -looks for files that start with P or p and end in .csv
+ls [Ww]eather[Rr]eport1999[0-9]?2017*
+ls [^WtTjP]* - carat excludes chars in [] from search
+
+Quoting
+double quotes - value of a var is printed
+single quotes - prints the varname
+\ - escape char
+echo "Hey, can I borrow \3.50?" - need to escape $ bc not var
+ls Secret\ Stuff - escape space so that dir with space in name can be searched
+\ can also be used to escape newline so commands can run on multiple lines
+
+Formatting Commands
+$ regular user
+# root user
+ls -l Documents/  ls-Command -l-Option Documents/-Argument
+Command-what to do
+Options-how to do it
+Arguments-what to do it on
+
+locate - will search every file the user owns for search term - uses its own database
+find [search_directory] -name '*.xml'  - search starting in search_directory name field for xml files - if globbing must use single quotes
+whereis cd - locates binary, source and/or man pages for a command
+
+Man pages
+Sections
+1 Executable programs and shell commands
+2 system calls provided by the kernel
+3 Library calls provided by the program libraries
+4 Device file (usually stored in /dev)
+5 File Formats
+6 Games
+7 Miscellaneous (macro packages, conventions, and so on)
+8 System adminsitrations commands (programs run mostly or exclusively by root)
+9 Kernel routines
+
+man <command>
+man 5 passwd -> go to section 5
+whatis passwd -> lists summaries in man page - same as man -f passwd
+apropos passwd -> search all man pages for search term - same as man -k passwd
+/print - when used on a man page, searches for print - ?print does same but in reverse
+
+info - similar to man, but has other functionality like hyperlinks
+? displays help info
+N - moves to next node in a linked series or level
+P - moves back in a series or level
+U - moves up one level in the node hierarchy
+arrow keys - move the cursor around the screen to select links
+page up, page down - scroll up and down within a single node
+enter - moves to a new node once you have selected it
+L - displays the last info page you read
+T - displays the top page for a topic
+Q - exits from the info page system
+
+Local documentation
+if it exists, can usually be found in
+    /usr/doc/packagename
+    /usr/share/doc/packagename
+    /usr/share/doc/packages/packagename
+
+Filesystem Hierarchy Standard
+http://www.pathname.com/fhs
+bin - executables
+boot - files needed to start computer
+dev - devices
+etc - config files
+home - any reg user has a folder
+lib and lib64 - library files
+media - cd drives, etc
+mnt - other hard drives
+opt - optional location for applications
+proc - info about running linux system
+root - home dir for root user
+sbin - home of sys admin tools
+srv - server applications
+sys - info about hardward on the system
+tmp - used for temporary data
+usr - contains own directory tree that closely mirrors root, some apps and system config files here
+var - contains files that vary in size
+
+Files and Directories
+mkdir museum
+cd museum
+mkdir documents maps art
+ls
+mkdir -p art/paintings/modern
+ls -R art
+mkdir statues
+rmdir statues
+cd documents
+touch ancient.txt
+cp documents/ancient.txt maps
+mv maps documents
+mv documents/map/ancient.txt documents/maps/ancient_maps.txt
+cp -R dir
+rm -r <directory>
+
+Archives and Compression
+tar - put everything in one file
+-c - create a new archive
+-z - pass the archive through gzip compression
+-j - pass the archive through bzip compression
+-f - file name of archive to create
+-x - extract an archive
+-v - verbose output
+zip - create a new compressed file
+-r - recursively create it
+unzip - extract a zip archive
+gzip - create a gzip archve
+gunzip - extract a gzip archive
+bzip2 - create a bzip2 archive
+bunzip2 - extract a bzip2 archive
+tar -cf [name of tarball to be created] [directory to tar]
+tar -tf [name of tarball] -> list contents of tarball
+tar -xf [filename] -> extract tarball
+tar -czf filename.tgz dir_name - gzip and tar
+tar -cjf filename.bz2 dir - bzip2 and tar
+tar -xzf filename.gz - extract archive
+tar -xvjf filename.bz2 - extract
+option order matters
+zip -r [nameofarchive] [directory] - need to have -r to also zip contents of dir
+
+Viewing text
+less - only loads one page of a file at a time
+arrow keys, page up/down, /, ?, q
+
+head - shows first 10 lines of a file
+head -n 20 filename - shows first 20 lines of a file
+
+tail - same as head but end of file
+
+tail -f filename - shows end of file in realtime
+
+Analyzing Text
+head -n 1 <filename> - print first line of file
+head -n 1 file.txt > ancient.txt - send first line to ancient.txt file
+> - overwrite
+>> - append
+cut -d" " -f 6- ancient.txt -> -d delimiter " " space delimiter -f fields 6- fields 6 through the end of the line ancient.txt - file to act on
+entries in the file look like
+The Project Gutenberg Ebook of The Republic, by Plato
+the cut command above will turn this into
+The Republic, by Plato
+sort -sort contents of file alphabetically
+echo >> ancient.txt - appends a blank line to file
+wc -lw files >> ancient.txt sends line count and word count to ancient.txt
+
+Pipes and Regular Expressions
+grep <pattern> <file to search>
+-i - case insensitive search
+| send output of one command to input of another
+grep -i republic plato_republic.txt | less
+grep -i '^republic' republic.txt -> returns only lines that start with republic
+grep -i 'republic$' republic.txt -> returns only lines that end with republic
+grep '^[^AaBb]' republic.txt -> returns lines that do not start with the chars AaBb
+grep 'www*' republic.txt -> returns lines that contain www
+
+Practicing with Pipes and Grep
+Log in to your Linux Essentials lab server.
+ssh cloud_user@[server_ip]
+
+Become the root account user.
+sudo su -
+
+List out the contents of the /var/log/messages log file and use pipes and the grep search utility to find anything that references DHCPREQUEST.
+cat /var/log/messages | grep DHCPREQUEST
+
+Using the last command, how would you also use pipes and the more utility to page through the multiple pages of returns?
+cat /var/log/messages | grep DHCPREQUEST | more
+
+How can we also use the grep and pipe utility to redirect the output data into a file called /root/file.log to then view those results?
+cat /var/log/messages | grep DHCPREQUEST > /root/file.log
+cat /root/file.log
+
+Now verify that the log that you redirected to the file.log file contains your output.
+cat /root/file.log
+
+nano
+nano toaster.txt
+^O - WriteOut - same as save
+alt-6 copy a line of text
+^T - spellcheck
+^\ - find and replace
+^X - exit
+
+vimtutor - built-in vim tutorial
+
+Shell Scripting
+#!/bin/bash - start with shebang and shell to use
+# comment line to say what the script does
+
+# display the calendar
+cal
+
+# display the date and time in UTC
+date -u
+
+# Daily greeting
+echo "Hello there $LOGNAME!"
+
+need to make script executable
+chmod +x daily.sh - gives executable bit for all users
+./daily.sh
+
+if [ "1" == "1" ] then
+    echo "Yep, they're the same"
+    fi
+
+append to daily.sh
+if [ "$PWD" == "$HOME" ]
+then
+    echo "You are home."
+else
+    echo "You are in $PWD."
+if
+
+for i in john mark jack pedro
+do
+    echo "$i"
+done
+
+for i in {1..10}
+do
+    echo "$i"
+done
+
+append to daily.sh
+# My daily routine script
+DOCUMENTS="/home/user/museum/documents"
+
+# Show us what we have to work on today
+for doc in "$DOCUMENTS"/*.txt
+do
+    echo "$doc"
+done
+
+# if user enters 'day' show calendar and date
+SHOWDAY=$1
+
+if [ $1 == "day" ]
+then
+   cal command
+   date command
+fi
+
+
+Windows, Mac, and Linux diffs
+windows -
+  proprietary software
+  Active Directory
+  Microsoft SQL Server
+
+apple
+  proprietary hardware and software
+  tight integration in own ecosystem
+
+linux
+  desktop is freeing and personal
+  server room flexibility
+
+Distribution Lifecycle Management
+  Design
+  Develop
+  Deploy
+  Manage
+  Retire
+
+Hardware
+cat /proc/cpuinfo - details about processor
+
+free = view ram stats -m mbs -g gbs
+
+dmidecode - shows details about the motherboard, BIOS, processor, and RAM on a system
+
+lsblk - view all block devices (such as hard disks) attached to the system
+
+df - shows disk free space on a hard disk -h human readable format
+
+top - show stats about processor, RAM, and running procs
+
+hard drives in /dev/sda, /dev/sdb, etc
+first in partition 1 is /dev/sda1
+
+Linux processes
+set of instructions loaded into memory
+PID 1 - primary process
+ps - shows processes
+ps -eH | less
+-u list all processes for a specific user
+-e list all processes running on the system
+-H list all processes with indented output, showing the hierarchy
+-f full format listing, including command arguments
+ps -e --forest -> also a hierarchy
+
+to kill a proc in top, press k followed by PID
+
+System Logging
+/var/log -location of most logs
+boot.log -  from system boot
+messages.log - good place to start
+secure.log - records all sudos
+dmesg - logs related to kernel ring buffer
+
+Basic Networking
+each computer has an IP address
+IP (internet Protocol) address
+Subnet mask (netmask address)
+Gateway address
+DNS Server address
+
+subnet mask - identifies computers on same LAN
+local network traffic stays within the subnet
+
+any requests for network services (websites, email, downloading files) outside of the
+subnet have to go through the gateway
+
+DNS is queried to find the IP address for a given domain name
+
+once the destination is determined, the data request has to leave the network via the gateway
+
+local address (loopback) IP: 127.0.0.1
+MAC (hardware address)
+
+Routers direct network traffic to their destinations
+Collections of routing information are stored in 'routing tables'
+
+Networking in Linux
+ip addr show
+ifconfig
+
+ip route show - shows gateway - similar to `route`
+netstat -r shows same as `route`
+
+cat /etc/resolv.conf - has dns server address
+host <domain.name>
+ping <host or ip>
+ping -c 3 google.com - sends 3 requests
+
+cat /etc/hosts - has loopback address
+
+To install DNS utilities on Ubuntu, use:
+# apt-get update
+# apt-get install dnsutils -y
+
+For CentOS, use:
+# yum install bind-utils
+
+Linux User
+who
+w - details about users
+id - shows user id uid, group id gid
+
+id user
+wheel group - group with special priveleges
+
+su -
+less /etc/sudoers
+account info - /etc/passwd
+example
+kenny:x:1003:1003::/home/kenny:/bin/bash
+kenny - user
+x - encrypted password
+1003 - userid for account
+1003 - primary group id for user
+:: comment field - full name of user, description of account purpose
+/home/kenny - abs path of user's home dir
+/bin/bash - user's default login shell
+
+/etc/group -  group file
+kenny:x:1003
+kenny - name of group
+x - password if set
+1003 - id of group
+other members in group
+
+system users has numbers under 1000
+root id is 0
+
+Adding users
+groupadd - create new group
+sudo groupadd curators
+cat /etc/group
+useradd - create new user
+sudo useradd -G 1004 -m -c "Eva Doe" eva
+cat /etc/default/useradd - defines some default behavior of the useradd command
+ls -a /etc/skel - contents within this directory are copied into home directories of newly created users
+sudo password eva - change password
+cat /etc/shadow
+format
+user:encrypted_password:number of days since jan 1 1970 that the password was changed:num days before user needs to change password:max password days:
+  password warning period:
+
+last - show who logged into system and when
+
+update a user
+usermod -C "Richard Layton"
+
+add a person to a group
+find group id in /etc/group
+usermod -G [groupid] [username]
+
+File and directory permissions
+ls -l
+drwxrwxr-x
+d for directory - for other b for block device and c for character device like keyboard
+first set of rwx for user
+second set for group
+third set for other
+- means not set
+rwx - symbolic permissions
+r = read = 4
+w = write = 2
+x = execute = 1
+
+Modifying Permissions
+chmod o-r secret.txt - remove read from other for secret.txt file
+chmod -R o-r Documents/* - remove read from other for all files in Documents dir
+chmod 600 secret.txt - remove all perms for group and other
+
+chown username:groupname filename
+chgrp groupname filename
+root is only user than can change user ownership of file
+
+Symbolic Links
+a type of shortcut
+ln -S filename linkname
+unlink linkname - remove symbolic link
+
+Special Files, Folders, and the sticky bit
+/var/tmp - temp files not removed on restart
+/tmp - anyone can write to, temp files
+chmod o+t dirname - adds sticky bit to dirname - only owners of files can remove them if sticky bit set
+chmod o-t dirname - remove sticky bit
+chmod 1777 dirname - set sticky bit to dirname
+chmod 777 dirname - removes sticky bit from dirname
 
