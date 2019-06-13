@@ -278,8 +278,580 @@ kubectl exec my-configmap-volume-pod -- ls /etc/config
 
 kubectl exec my-configmap-volume-pod -- cat /etc/config/myKey
 
+SecurityContexts
+Defines privelege and access control settings for a pod. If a container needs special operating
+system-level permissions, we can provide them using the securityContext.
+
+The securityContext is defined as part of a Pod's spec.
+
+First, create some users, groups, and files on both worker nodes which we can use for testing.
+sudo useradd -u 2000 container-user-0
+sudo groupadd -g 3000 container-group-0
+sudo useradd -u 2001 container-user-1
+sudo groupadd -g 3001 container-group-1
+sudo mkdir -p /etc/message/
+echo "Hello, World!" | sudo tee -a /etc/message/message.txt
+sudo chown 2000:3000 /etc/message/message.txt
+sudo chmod 640 /etc/message/message.txt
+
+On the controller, create a pod to read the message.txt file and print the message to the log.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-securitycontext-pod
+spec:
+  containers:
+  - name: myapp-container
+    image: busybox
+    command: ['sh', '-c', "cat /message/message.txt && sleep 3600"]
+    volumeMounts:
+    - name: message-volume
+      mountPath: /message
+  volumes:
+  - name: message-volume
+    hostPath:
+      path: /etc/message
+
+Check the pod's log to see the message from the file:
+kubectl logs my-securitycontext-pod
+
+Delete the pod and re-create it, this time with a securityContext set to use a user and group that do not have access to the file.
+kubectl delete pod my-securitycontext-pod --now
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-securitycontext-pod
+spec:
+  securityContext:
+    runAsUser: 2001
+    fsGroup: 3001
+  containers:
+  - name: myapp-container
+    image: busybox
+    command: ['sh', '-c', "cat /message/message.txt && sleep 3600"]
+    volumeMounts:
+    - name: message-volume
+      mountPath: /message
+  volumes:
+  - name: message-volume
+    hostPath:
+      path: /etc/message
+
+Check the log again. You should see a "permission denied" message.
+kubectl logs my-securitycontext-pod
+
+Delete the pod and re-create it again, this time with a user and group that are able to access the file.
+kubectl delete pod my-securitycontext-pod --now
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-securitycontext-pod
+spec:
+  securityContext:
+    runAsUser: 2000
+    fsGroup: 3000
+  containers:
+  - name: myapp-container
+    image: busybox
+    command: ['sh', '-c', "cat /message/message.txt && sleep 3600"]
+    volumeMounts:
+    - name: message-volume
+      mountPath: /message
+  volumes:
+  - name: message-volume
+    hostPath:
+      path: /etc/message
+
+Check the log once more. You should see the message from the file.
+kubectl logs my-securitycontext-pod
+
+Resource Requirements
+
+Resource request is the amount of resources necessary to run a container
+Resource limit - a maximum value for the resource usage of a container.
+
+Specify resource requests and resource limits in the container spec like this:
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-resource-pod
+spec:
+  containers:
+  - name: myapp-container
+    image: busybox
+    command: ['sh', '-c', 'echo Hello Kubernetes! && sleep 3600']
+    resources:
+      requests:
+        memory: "64Mi"
+        cpu: "250m"
+      limits:
+        memory: "128Mi"
+        cpu: "500m"
+
+Memory is measured in bytes. 64Mi means 64 Mebibytes
+CPU is measured in "cores" 250m mean 250 millicores or .25 CPU cores
+
+Secrets
+pieces of sensitive information stored in the Kubernetes cluster, such as passwords, tokens, and keys.
+If a container needs a sensitive piece of information, such as a password, it is more secure to store it as a secret
+than storing it in a pod spec or in the container itself
+https://kubernetes.io/docs/concepts/configuration/secret/
+
+Create a secret using a yaml definition like this. It is a good idea to delete the yaml file containing the sensitive data after the secret object has been created in the cluster.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-secret
+stringData:
+  myKey: myPassword
+
+Once a secret is created, pass the sensitive data to containers as an environment variable:
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-secret-pod
+spec:
+  containers:
+  - name: myapp-container
+    image: busybox
+    command: ['sh', '-c', "echo Hello, Kubernetes! && sleep 3600"]
+    env:
+    - name: MY_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: my-secret
+          key: myKey
+
+ServiceAccounts
+allows containers running in pods to access the Kube API. Some applications may need
+to interact with the cluster itself, and service accounts provide a way to let them
+do it securely, with properly limited permissions.
+
+You can determine the ServiceAccount that a pod will use by specifying a serviceAccountName
+in the pod spec:
+https://kubernetes.io/docs/reference/access-authn-authz/service-accounts-admin/
+https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/
+
+Creating a ServiceAccount looks like this:
+kubectl create serviceaccount my-serviceaccount
+
+Use the serviceAccountName attribute in the pod spec to specify which ServiceAccount the pod should use:
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-serviceaccount-pod
+spec:
+  serviceAccountName: my-serviceaccount
+  containers:
+  - name: myapp-container
+    image: busybox
+    command: ['sh', '-c', "echo Hello, Kubernetes! && sleep 3600"]
+
+Hands-On Lab: Configuring Kubernetes Pods
+Create a pod definition in /home/cloud_user/candy-service-pod.yml, and then create a pod in the cluster using this definition to make sure it works.
+
+The specifications are as follows:
+The current image for the container is linuxacademycontent/candy-service:1. You do not need a custom command or args.
+There is some configuration data the container will need:
+candy.peppermint.power=100000000
+candy.nougat-armor.strength=10
+It will expect to find this data in a file at /etc/candy-service/candy.cfg. Store the configuration data in a ConfigMap called candy-service-config and provide it to the container as a mounted volume.
+The container will need to run with the file system group with the id 2000. You will need to set this using the securityContext.
+The container should expect to use 64MiB of memory and 250m CPU (use resource requests).
+The container should be limited to 128MiB of memory and 500m CPU (use resource limits).
+The container needs access to a database password in order to authenticate with a backend database server. The password is Kub3rn3t3sRul3s!. It should be stored in a secure fashion (as a Kubernetes secret called db-password) and passed to the container as an environment variable called DB_PASSWORD.
+The container will need to access the Kubernetes API using the ServiceAccount candy-svc. The service account already exists, so just configure the pod to use it.
+
+candy-service-pod.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: candy-service
+spec:
+  securityContext:
+    fsGroup: 2000
+  containers:
+  - name: candy-service
+    image: linuxacademycontent/candy-service:1
+    resources:
+      requests:
+        memory: "64Mi"
+        cpu: "250m"
+      limits:
+        memory: "128Mi"
+        cpu: "500m"
+    volumeMounts:
+      - name: candy-service-volume
+        mountPath: /etc/candy-service/candy.cfg
+    env:
+    - name: DB_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: db-password
+          key: password
+  volumes:
+  - name: candy-service-volume
+    configMap:
+      name: candy-service-config
+  serviceAccountName: candy-svc
 
 
+config-map.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: candy-service-config
+data:
+  candy.cfg: |-
+    candy.peppermint.power=100000000
+    candy.nougat-armor.strength=10
+    candy.lemon.acceptability=0
 
+db-pass-secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: db-password
+stringData:
+  password: Kub3rn3t3sRul3s!
+
+Understanding Multi-Container Pods
+pods that have more than one container that work together as one unit
+https://kubernetes.io/docs/concepts/cluster-administration/logging/#using-a-sidecar-container-with-the-logging-agent
+https://kubernetes.io/docs/tasks/access-application-cluster/communicate-containers-same-pod-shared-volume/
+https://kubernetes.io/blog/2015/06/the-distributed-system-toolkit-patterns/
+
+Here is the YAML used to create a simple multi-container pod in the video:
+apiVersion: v1
+kind: Pod
+metadata:
+  name: multi-container-pod
+spec:
+  containers:
+  - name: nginx
+    image: nginx:1.15.8
+    ports:
+    - containerPort: 80
+  - name: busybox-sidecar
+    image: busybox
+    command: ['sh', '-c', 'while true; do sleep 30; done;']
+
+how do containers interact with one another in a pod
+1. shared networking space
+container 1 can connect to container 2 that is listening on port 1234 at localhost:1234
+
+2. shared storage volume
+if both containers mount the same volume, they can share info
+
+3. shared process namespace
+containers in the same pod can interact with and signal one another's processes
+enable process namespace sharing by setting `shareProcessNamespace: true` in Pod spec
+
+Design Patterns
+1. Sidecar Pod - Main container, Sidecar container - sidecar enhances or adds functionality to the main container
+2. Ambassador Pod - network traffic -> ambassador container -> main container
+uses an ambassador container to accept network traffic and pass it on to the main container.
+for example, an ambassador that listens on a custom port, and forwards traffic to the main container on its hard-coded port.
+3. Adaptor Pod - Main Container->Output->Adaptor Container->Formatted Output
+uses and adaptor container to change the output of the main container in some way. An example could be an adapter that formats and decorates
+log output from the main container.
+
+Hands-On Lab
+Forwarding Port Traffic with an Ambassador Container
+Your supermarket company is in the process of moving their infrastructure to a Kubernetes platform in the cloud.
+This is sometimes challenging, because some of the older, legacy portions of that infrastructure have non-standard requirements.
+One of these legacy applications is a web service that provides a list of the various types of fruit the company sells in its stores.
+
+This service has already been packaged into a container image, but there is one special requirement:
+The legacy app is hard-coded to only serve content on port 8775, but the team wants to be able to access the service using the standard port 80.
+Your task is to build a Kubernetes pod that runs this legacy container and uses the ambassador design pattern to expose access to the service on port 80.
+
+This setup will need to meet the following specifications:
+
+The pod should have the name fruit-service.
+The fruit-service pod should have a container that runs the legacy fruit service image: linuxacademycontent/legacy-fruit-service:1.
+The fruit-service pod should have an ambassador container that runs the haproxy:1.7 image and proxies incoming traffic on port 80 to the legacy service on port 8775 (the HAProxy configuration for this is provided below).
+Port 80 should be exposed as a containerPort. Note that you do not need to expose port 8775.
+The HAProxy configuration should be stored in a ConfigMap called fruit-service-ambassador-config.
+The HAProxy config should be provided to the ambassador container using a volume mount that places the data from the ConfigMap in a file at /usr/local/etc/haproxy/haproxy.cfg.
+haproxy.cfg should contain the following configuration data:
+global
+    daemon
+    maxconn 256
+
+defaults
+    mode http
+    timeout connect 5000ms
+    timeout client 50000ms
+    timeout server 50000ms
+
+listen http-in
+    bind *:80
+    server server1 127.0.0.1:8775 maxconn 32
+Once your pod is up and running, it's a good idea to test it to make sure you can access the service from within the cluster using port 80.
+In order to do this, you can create a busybox pod in the cluster, and then run a command to attempt to access the service from within the busybox pod.
+
+Create a descriptor for the busybox pod called busybox.yml.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: busybox
+spec:
+  containers:
+  - name: myapp-container
+    image: radial/busyboxplus:curl
+    command: ['sh', '-c', 'while true; do sleep 3600; done']
+
+Create the busybox testing pod.
+kubectl apply -f busybox.yml
+
+Use this command to access fruit-service using port 80 from within the busybox pod.
+kubectl exec busybox -- curl $(kubectl get pod fruit-service -o=custom-columns=IP:.status.podIP --no-headers):80
+
+If the service is working, you should see some JSON listing various types of fruit.
+
+Create a ConfigMap containing the configuration for the HAProxy ambassador.
+
+Create a YAML definition file called fruit-service-ambassador-config.yml.
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fruit-service-ambassador-config
+data:
+  haproxy.cfg: |-
+    global
+        daemon
+        maxconn 256
+
+    defaults
+        mode http
+        timeout connect 5000ms
+        timeout client 50000ms
+        timeout server 50000ms
+
+    listen http-in
+        bind *:80
+        server server1 127.0.0.1:8775 maxconn 32
+
+Create the ConfigMap in the cluster from the YAML definition file.
+kubectl apply -f fruit-service-ambassador-config.yml
+
+Create a multi-container pod which provides access to the legacy service on port 80.
+
+Create a YAML definition file for the pod called fruit-service.yml.
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: fruit-service
+spec:
+  containers:
+  - name: legacy-fruit-service
+    image: linuxacademycontent/legacy-fruit-service:1
+  - name: haproxy-ambassador
+    image: haproxy:1.7
+    ports:
+    - containerPort: 80
+    volumeMounts:
+    - name: config-volume
+      mountPath: /usr/local/etc/haproxy
+  volumes:
+  - name: config-volume
+    configMap:
+      name: fruit-service-ambassador-config
+
+Create the pod in the cluster.
+kubectl apply -f fruit-service.yml
+
+Liveness and Readiness probes
+Probes - allow you to customize how Kubernetes determines the status of your containers
+Liveness Probe - Indicates whether the container is running properly, and governs when the cluster will automatically
+  stop or restart the container
+Readiness Probe - Indicates whether the container is ready to service requests, and governs whether requests
+  will be forwarded to the pod
+
+https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#container-probes
+https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-probes/
+
+Lesson Reference
+Here is a pod with a liveness probe that uses a command:
+my-liveness-pod.yml:
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-liveness-pod
+spec:
+  containers:
+  - name: myapp-container
+    image: busybox
+    command: ['sh', '-c', "echo Hello, Kubernetes! && sleep 3600"]
+    livenessProbe:
+      exec:
+        command:
+        - echo
+        - testing
+      initialDelaySeconds: 5
+      periodSeconds: 5
+
+Here is a pod with a readiness probe that uses an http request:
+my-readiness-pod.yml:
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-readiness-pod
+spec:
+  containers:
+  - name: myapp-container
+    image: nginx
+    readinessProbe:
+      httpGet:
+        path: /
+        port: 80
+      initialDelaySeconds: 5
+      periodSeconds: 5
+
+Container Logging
+A container's normal console output goes into the container log.
+
+When managing containers, obtaining container logs is sometimes necessary in order to gain insight into what is going on inside a container.
+Kubernetes offers an easy way to view and interact with container logs using the kubectl logs command.
+In this lesson, we discuss container logs and demonstrate how to access them using kubectl logs.
+
+Relevant Documentation
+https://kubernetes.io/docs/concepts/cluster-administration/logging/
+
+Lesson Reference
+A sample pod that generates log output every second:
+apiVersion: v1
+kind: Pod
+metadata:
+  name: counter
+spec:
+  containers:
+  - name: count
+    image: busybox
+    args: [/bin/sh, -c, 'i=0; while true; do echo "$i: $(date)"; i=$((i+1)); sleep 1; done']
+
+Get the container's logs:
+kubectl logs counter
+
+For a multi-container pod, specify which container to get logs for using the -c flag:
+kubectl logs <pod name> -c <container name>
+
+Save container logs to a file:
+kubectl logs counter > counter.log
+
+Installing Metrics Server
+Provides and API which allows you to access data about your pods and nodes, such as CPU and memory usage.
+Clone the metrics server repo and install the server using kubectl apply:
+cd ~/
+git clone https://github.com/linuxacademy/metrics-server
+kubectl apply -f ~/metrics-server/deploy/1.8+/
+
+Once you have installed the metrics server, you can use this command to verify that it is responsive:
+kubectl get --raw /apis/metrics.k8s.io/
+
+Monitoring Applications
+Monitoring is an important part of managing any application infrastructure.
+In this lesson, we will discuss how to view the resource usage of pods and nodes using the kubectl top command.
+
+Relevant Documentation
+https://kubernetes.io/docs/tasks/debug-application-cluster/resource-usage-monitoring/
+
+Lesson Reference
+Here are some sample pods that can be used to test kubectl top. They are designed to use approximately 300m and 100m CPU, respectively.
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: resource-consumer-big
+spec:
+  containers:
+  - name: resource-consumer
+    image: gcr.io/kubernetes-e2e-test-images/resource-consumer:1.4
+    resources:
+      requests:
+        cpu: 500m
+        memory: 128Mi
+  - name: busybox-sidecar
+    image: radial/busyboxplus:curl
+    command: [/bin/sh, -c, 'until curl localhost:8080/ConsumeCPU -d "millicores=300&durationSec=3600"; do sleep 5; done && sleep 3700']
+
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: resource-consumer-small
+spec:
+  containers:
+  - name: resource-consumer
+    image: gcr.io/kubernetes-e2e-test-images/resource-consumer:1.4
+    resources:
+      requests:
+        cpu: 500m
+        memory: 128Mi
+  - name: busybox-sidecar
+    image: radial/busyboxplus:curl
+    command: [/bin/sh, -c, 'until curl localhost:8080/ConsumeCPU -d "millicores=100&durationSec=3600"; do sleep 5; done && sleep 3700']
+
+Here are the commands used in the lesson to view resource usage data in the cluster:
+kubectl top pods
+kubectl top pod resource-consumer-big
+kubectl top pods -n kube-system
+kubectl top nodes
+
+Debugging
+Problems will occur in any system, and Kubernetes provides some great tools to help locate and fix problems when they occur within a cluster.
+In this lesson, we will go through the process of debugging an issue in Kubernetes. We will use our knowledge of kubectl get
+and kubectl describe to locate a broken pod, and then explore various ways of editing Kubernetes objects to fix issues.
+
+Relevant Documentation
+https://kubernetes.io/docs/tasks/debug-application-cluster/debug-application/
+https://kubernetes.io/docs/tasks/debug-application-cluster/debug-pod-replication-controller/
+https://kubernetes.io/docs/tasks/debug-application-cluster/debug-service/
+
+Lesson Reference
+I prepared my cluster before the video by creating a broken pod in the nginx-ns namespace:
+kubectl create namespace nginx-ns
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nginx
+  namespace: nginx-ns
+spec:
+  containers:
+  - name: nginx
+    image: nginx:1.158
+
+Exploring the cluster to locate the problem
+kubectl get pods
+
+kubectl get namespace
+
+kubectl get pods --all-namespaces
+
+kubectl describe pod nginx -n nginx-ns
+
+Fixing the broken image name
+Edit the pod:
+kubectl edit pod nginx -n nginx-ns
+
+Change the container image to nginx:1.15.8.
+Exporting a descriptor to edit and re-create the pod.
+Export the pod descriptor and save it to a file:
+kubectl get pod nginx -n nginx-ns -o yaml --export > nginx-pod.yml
+
+Add this liveness probe to the container spec:
+livenessProbe:
+  httpGet:
+    path: /
+    port: 80
+
+Delete the pod and recreate it using the descriptor file. Be sure to specify the namespace:
+kubectl delete pod nginx -n nginx-ns
+kubectl apply -f nginx-pod.yml -n nginx-ns
 
 
