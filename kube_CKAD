@@ -854,4 +854,158 @@ Delete the pod and recreate it using the descriptor file. Be sure to specify the
 kubectl delete pod nginx -n nginx-ns
 kubectl apply -f nginx-pod.yml -n nginx-ns
 
+Hands-On Lab
+Configuring Probes for a Kubernetes Pod
+Your company just finished releasing a candy-themed mobile game. So far, things are going well, and the back end services running
+in your Kubernetes cluster are servicing thousands of requests. However, there have been a few issues with the back end service.
+
+Container Health Issues
+The first issue is caused by application instances entering an unhealthy state and responding to user requests with error messages.
+Unfortunately, this state does not cause the container to stop, so the Kubernetes cluster is not able to detect this state and
+restart the container. Luckily, the application has an internal endpoint that can be used to detect whether or not it is healthy.
+This endpoint is /healthz on port 8081. Your first task will be to create a probe to check this endpoint periodically.
+If the endpoint returns an error or fails to respond, the probe will detect this and the cluster will restart the container.
+
+Container Startup Issues
+Another issue is caused by new pods when they are starting up. The application takes a few seconds after startup before it is
+ready to service requests. As a result, some users are getting error message during this brief time. To fix this, you will
+need to create another probe. To detect whether the application is ready, the probe should simply make a request to the root
+endpoint, /, on port 80. If this request succeeds, then the application is ready.
+
+There is already a pod descriptor in the home directory: ~/candy-service-pod.yml. Edit this file to add the probes, then create the pod in the cluster to test it.
+
+Create a probe to detect and restart unhealthy containers
+Create a probe to detect when the container is ready to service requests
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: candy-service
+spec:
+  containers:
+  - name: candy-service
+    image: linuxacademycontent/candy-service:2
+    livenessProbe:
+      httpGet:
+        path: /healthz
+        port: 8081
+      initialDelaySeconds: 5
+      periodSeconds: 5
+    readinessProbe:
+      httpGet:
+        path: /
+        port: 80
+      initialDelaySeconds: 5
+      periodSeconds: 5
+
+Hands-On Lab
+Debugging in Kubernetes
+You recently got a new job at a company that has a robust Kubernetes infrastructure used by multiple teams.
+Congratulations! However, you were just told by the team that there is a problem with a service they use in the
+cluster and they want you to fix it. Unfortunately, no one is able to give you much information about the service.
+You don't even know what it is called or where it is located. All you know is there is likely a pod failing somewhere.
+
+Your team has asked you to take the lead in debugging the issue. They want you to locate the problem and collect
+some relevant debugging information that will help the team analyze the problem and correct it in the future.
+They also want you to go ahead and get the broken pod running again.
+
+You will need to do the following:
+
+Find the broken pod and save the pod name to the file /home/cloud_user/debug/broken-pod-name.txt.
+kubectl get pods --all-namespaces
+
+In the same namespace as the broken pod, find out which pod is using the most CPU and output the name of that pod to the file /home/cloud_user/debug/high-cpu-pod-name.txt.
+kubectl get pods --all-namespaces -o wide -> to see namespace broken pod belongs to
+kubectl top pod -n candy-store
+
+Get the broken pod's summary data in the JSON format and output it to the file /home/cloud_user/debug/broken-pod-summary.json.
+kubectl get po -n candy-store cart-ws -o json > file_name
+
+Get the broken pod's container logs and output them to the file /home/cloud_user/debug/broken-pod-logs.log.
+kubectl logs -n candy-store cart-ws
+
+Fix the problem with the broken pod so that it enters the Running state.
+Looks like it is hitting the wrong endpoint for the liveness probe
+kubectl get pod cart-ws -n candy-store -o yaml --export > broken-pod.yaml
+kubectl delete pod cart-ws -n candy-store
+fix the typo
+kubectl apply -f broken-pod.yaml
+kubectl get po cart-ws -n candy-store
+
+Labels, Selectors, and Annotations
+Labels are key-value pairs attached to Kubernetes objects.
+They are used for identifying various attributes of objects which can in turn
+be used to select and group various subsets of those objects.
+
+We can attach labels to objects by listing themin the metadata.labels section of
+an object descriptor
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-production-label-pod
+  labels:
+    app: my-app
+    environment: production
+spec:
+  containers:
+  - name: nginx
+    image: nginx
+
+You can view existing labels with kubectl describe.
+kubectl describe pod my-production-label-pod
+kubectl get pods --show-labels
+
+Here is another pod with different labels.
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-development-label-pod
+  labels:
+    app: my-app
+    environment: development
+spec:
+  containers:
+  - name: nginx
+    image: nginx
+
+Selectors are used for identifying and selecting a specific group of objects using their labels.
+One way to use selectors is to use them with kubectl get to retrieve a specific list of objects.
+We can specify a selector using the -l flag.
+
+You can use various selectors to select different subsets of objects.
+Equality
+kubectl get pods -l app=my-app
+kubectl get pods -l environment=production
+kubectl get pods -l environment=development
+Inequality
+kubectl get pods -l environment!=production
+Set-based
+kubectl get pods -l 'environment in (development,production)'
+Comma-delimited list
+kubectl get pods -l app=my-app,environment=production
+
+Annotations are similar to labels in that they can be used to store custom metadata about objects.
+However, unlike labels, annotations cannot be used to select or group objects in Kubernetes.
+External tools can read, write, and interact with annotations.
+
+We can attach annotations to objects using the metadata.annotations section of the object descriptor.
+
+Here is a simple pod with some annotations.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-annotation-pod
+  annotations:
+    owner: terry@linuxacademy.com
+    git-commit: bdab0c6
+spec:
+  containers:
+  - name: nginx
+    image: nginx
+
+Like labels, existing annotations can also be viewed using kubectl describe.
+kubectl describe pod my-annotation-pod
+
 
