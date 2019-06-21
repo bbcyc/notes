@@ -1512,3 +1512,256 @@ Create the service in the cluster.
 
 kubectl apply -f data-svc.yml
 
+Hands-On Lab
+Working with Kubernetes NetworkPolicies
+Your company has a set of services, one called inventory-svc and another called customer-data-svc.
+In the interest of security, both of these services and their corresponding pods have NetworkPolicies
+designed to restrict network communication to and from them. A new pod has just been deployed to the
+cluster called web-gateway, and this pod need to be able to access both inventory-svc and customer-data-svc.
+
+Unfortunately, whoever designed the services and their corresponding NetworkPolicies was a little lax
+in creating documentation. On top of that, they are not currently available to help you understand how
+to provide access to the services for the new pod.
+
+Examine the existing NetworkPolicies and determine how to alter the web-gateway pod so that it can
+access the pods associated with both services.
+
+You will not need to add, delete, or edit any NetworkPolicies in order to do this. Simply use the
+existing ones and modify the web-gateway pod to provide access. All work can be done in the default namespace.
+
+apiVersion: extensions/v1beta1
+kind: NetworkPolicy
+metadata:
+  annotations:
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"networking.k8s.io/v1","kind":"NetworkPolicy","metadata":{"annotations":{},"name":"customer-data-policy","namespace":"default"},"spec":{"egress":[{"ports":[{"port":80,"protocol":"TCP"}],"to":[{"podSelector":{"matchLabels":{"customer-data-access":"true"}}}]}],"ingress":[{"from":[{"podSelector":{"matchLabels":{"customer-data-access":"true"}}}],"ports":[{"port":80,"protocol":"TCP"}]}],"podSelector":{"matchLabels":{"app":"customer-data"}},"policyTypes":["Ingress","Egress"]}}
+  creationTimestamp: null
+  generation: 1
+  name: customer-data-policy
+  selfLink: /apis/extensions/v1beta1/namespaces/default/networkpolicies/customer-data-policy
+spec:
+  egress:
+  - ports:
+    - port: 80
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          customer-data-access: "true"
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          customer-data-access: "true"
+    ports:
+    - port: 80
+      protocol: TCP
+  podSelector:
+    matchLabels:
+      app: customer-data
+  policyTypes:
+  - Ingress
+  - Egress
+
+
+cloud_user@ip-10-0-1-101:~$ kubectl get networkPolicy/inventory-policy -o yaml
+apiVersion: extensions/v1beta1
+kind: NetworkPolicy
+metadata:
+  annotations:
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"networking.k8s.io/v1","kind":"NetworkPolicy","metadata":{"annotations":{},"name":"inventory-policy","namespace":"default"},"spec":{"egress":[{"ports":[{"port":80,"protocol":"TCP"}],"to":[{"podSelector":{"matchLabels":{"inventory-access":"true"}}}]}],"ingress":[{"from":[{"podSelector":{"matchLabels":{"inventory-access":"true"}}}],"ports":[{"port":80,"protocol":"TCP"}]}],"podSelector":{"matchLabels":{"app":"inventory"}},"policyTypes":["Ingress","Egress"]}}
+  creationTimestamp: "2019-06-21T18:25:29Z"
+  generation: 1
+  name: inventory-policy
+  namespace: default
+  resourceVersion: "743"
+  selfLink: /apis/extensions/v1beta1/namespaces/default/networkpolicies/inventory-policy
+  uid: f292f0e0-9451-11e9-9494-0a773889195c
+spec:
+  egress:
+  - ports:
+    - port: 80
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          inventory-access: "true"
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          inventory-access: "true"
+    ports:
+    - port: 80
+      protocol: TCP
+  podSelector:
+    matchLabels:
+      app: inventory
+  policyTypes:
+  - Ingress
+  - Egress
+
+To fix the issue add the labels for the podSelector from each networkPolicy to the pod
+
+Provide the `web-gateway` Pod with Network Access to the Pods Associated with the `inventory-svc` Service
+keyboard_arrow_up
+First, get a list of existing NetworkPolicies:
+
+kubectl get networkpolicy
+Examine inventory-policy more closely:
+
+kubectl describe networkpolicy inventory-policy
+Note that the policy selects pods with the label app: inventory, and provides incoming and outgoing network access to all pods with the label inventory-access: true.
+
+Modify the web-gateway pod with kubectl edit pod web-gateway.
+
+Add the inventory-access: "true" label to the pod under metdadata.labels.
+...
+metdadata:
+  labels:
+    inventory-access: "true"
+...
+Test access to the inventory-svc like so:
+
+kubectl exec web-gateway -- curl -m 3 inventory-svc
+
+Provide the `web-gateway` Pod with Network Access to the Pods Associated with the `customer-data-svc` Service
+keyboard_arrow_up
+Examine customer-data-policy more closely:
+
+kubectl describe networkpolicy customer-data-policy
+Note that the policy selects pods with the label app: customer-data, and provides incoming and outgoing network access to all pods with the label customer-data-access: true.
+
+Modify the web-gateway pod with kubectl edit pod web-gateway.
+
+Add the customer-data-access: "true" label to the pod under metdadata.labels:
+
+...
+metdadata:
+  labels:
+    inventory-access: "true"
+    customer-data-access: "true"
+...
+Test access to the customer-data-svc like so:
+
+kubectl exec web-gateway -- curl -m 3 customer-data-svc
+
+Volumes
+Container storage is designed to be as temporary as the containers themselves.
+However, sometimes we need storage that is able to survive beyond the short life of a container.
+Kubernetes volumes allow us to mount storage to a container that isn't in the container itself.
+In this lesson, we will discuss volumes and demonstrate how to mount a simple volume to a container in a pod.
+
+The internal storage of a container is ephemeral meaning that is is designed to be highly temporary.
+Volumes allow you to provide more permanent storage to a pod that exists beyond the life of a container.
+
+Relevant Documentation
+https://kubernetes.io/docs/concepts/storage/volumes/
+Lesson Reference
+This pod mounts a simple emptyDir volume, my-volume, to the container at the path /tmp/storage.
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: volume-pod
+spec:
+  containers:
+  - image: busybox
+    name: busybox
+    command: ["/bin/sh", "-c", "while true; do sleep 3600; done"]
+    volumeMounts:
+    - mountPath: /tmp/storage
+      name: my-volume
+  volumes:
+  - name: my-volume
+    emptyDir: {}
+
+EmptyDir volumes create storage on a node when the pod is assigned to the node.
+The storage disappears when the pod leaves the node.
+
+PersistentVolumes and PersistentVolumeClaims
+PersistentVolumes (PVs) and PersistentVolumeClaims (PVCs) provide a way to easily consume storage resources,
+especially in the context of a complex production environment that uses multiple storage solutions.
+In this lesson, we will talk about implementing persistent storage using PersistentVolumes and
+PersistentVolumeClaims, and we will demonstrate how to set up a PV and PVC to consume storage resources in a pod.
+
+Kubernetes is designed to manage stateless containers. Pods and containers can be easily deleted and/or replaced.
+When a container is removed, data stored inside the container's internal disk is lost.
+
+State persistence refers to maintaining data outside and potentially beyond the life of a container.
+
+This usually means storing data in some kind of persistent data store that can be accessed by containers.
+
+Kubernetes allows us to implement persistent storage using PersistentVolumes and PersistentVolumeClaims.
+
+PersistentVolumen or PV - represents a storage resource
+
+PersistentVolumeClaim or PVC - abstraction layer between user(pod) and the PV.
+
+PVCs will automatically bind themselves to a PV that has compatible StorageClass and accessModes.
+
+Relevant Documentation
+https://kubernetes.io/docs/concepts/storage/persistent-volumes/
+https://kubernetes.io/docs/tasks/configure-pod-container/configure-persistent-volume-storage/
+
+Lesson Reference
+Create the PersistentVolume:
+
+kind: PersistentVolume
+apiVersion: v1
+metadata:
+  name: my-pv
+spec:
+  storageClassName: local-storage
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: "/mnt/data"
+
+storageClassName - defines different categories of storage
+capacity - storage amount for the PV
+accessModes - determines what read/write modes can be used to mount the volume
+hostPath - uses the node's local filesystem for storage
+
+Create the PersistentVolumeClaim:
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: my-pvc
+spec:
+  storageClassName: local-storage
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 512Mi
+
+storageClassName - defines what storageCLass to use
+resources.requests.storage - defines how much storage the claim needs
+
+We can use kubectl to check the status of existing PVs and PVCs:
+kubectl get pv
+kubectl get pvc
+
+Create a pod to consume storage resources using a PVC:
+kind: Pod
+apiVersion: v1
+metadata:
+  name: my-pvc-pod
+spec:
+  containers:
+  - name: busybox
+    image: busybox
+    command: ["/bin/sh", "-c", "while true; do sleep 3600; done"]
+    volumeMounts:
+    - mountPath: "/mnt/storage"
+      name: my-storage
+  volumes:
+  - name: my-storage
+    persistentVolumeClaim:
+      claimName: my-pvc
+
+
