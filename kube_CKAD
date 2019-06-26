@@ -1764,4 +1764,390 @@ spec:
     persistentVolumeClaim:
       claimName: my-pvc
 
+Hands-On Lab
+Implement State Persistence for Kubernetes Pods
+Your company needs a small database server to support a new application.
+They have asked you to deploy a pod running a MySQL container, but they want
+the data to persist even if the pod is deleted or replaced. Therefore,
+the MySQL database pod requires persistent storage.
+
+You will need to do the following:
+
+Create a PersistentVolume:
+The PersistentVolume should be named mysql-pv.
+The volume needs a capacity of 1Gi.
+Use a storageClassName of localdisk.
+Use the accessMode ReadWriteOnce.
+Store the data locally on the node using a hostPath volume at the location /mnt/data.
+Create a PersistentVolumeClaim:
+The PersistentVolumeClaim should be named mysql-pv-claim.
+Set a resource request on the claim for 500Mi of storage.
+Use the same storageClassName and accessModes as the PersistentVolume so that this claim can bind to the PersistentVolume.
+Create a MySQL Pod configured to use the PersistentVolumeClaim:
+The Pod should be named mysql-pod.
+Use the image mysql:5.6.
+Expose the containerPort 3306.
+Set an environment variable called MYSQL_ROOT_PASSWORD with the value password.
+Add the PersistentVolumeClaim as a volume and mount it to the container at the path /var/lib/mysql.
+
+Create a PersistentVolume
+keyboard_arrow_up
+Create a descriptor file with vi mysql-pv.yml:
+
+kind: PersistentVolume
+apiVersion: v1
+metadata:
+  name: mysql-pv
+spec:
+  storageClassName: localdisk
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: "/mnt/data"
+Create the PersistentVolume.
+
+kubectl apply -f mysql-pv.yml
+
+Create a PersistentVolumeClaim
+keyboard_arrow_up
+Create a descriptor file with vi mysql-pv-claim.yml:
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mysql-pv-claim
+spec:
+  storageClassName: localdisk
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 500Mi
+Create the PersistentVolumeClaim:
+
+kubectl apply -f mysql-pv-claim.yml
+
+Create a MySQL Pod configured to use the PersistentVolumeClaim
+keyboard_arrow_up
+Create a descriptor file with vi mysql-pod.yml:
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: mysql-pod
+spec:
+  containers:
+  - name: mysql
+    image: mysql:5.6
+    ports:
+    - containerPort: 3306
+    env:
+    - name: MYSQL_ROOT_PASSWORD
+      value: password
+    volumeMounts:
+    - name: mysql-storage
+      mountPath: /var/lib/mysql
+  volumes:
+  - name: mysql-storage
+    persistentVolumeClaim:
+      claimName: mysql-pv-claim
+Create the Pod:
+
+kubectl apply -f mysql-pod.yml
+
+Check the status of the pod with kubectl get pod mysql-pod. After a few moments it should be in the RUNNING status.
+
+You can also verify that the pod is interacting with the filesystem at /mnt/data on the node.
+Log in to the node from the Kube master like this, using the same as the password for the kube master:
+
+ssh cloud_user@10.0.1.102
+Check the contents of the PersistentVolume directory:
+
+ls /mnt/data
+You should see files and directories there related to MySQL.
+These were created by the pod, meaning that your PersistentVolume
+and PersistentVolumeClaim are working!
+
+CKAD Practice Exam - Part 1
+Our pizza restaurant is working on a new web application designed to run in a Kubernetes cluster.
+The development team has designed a web service which serves a list of pizza toppings.
+The team has provided a set of specifications which the pizza topping web service needs in order to run.
+
+We have been asked to create a deployment that meets the app's specifications.
+Then, we need to expose the application using a NodePort service.
+This setup should meet the following criteria:
+
+All objects should be in the pizza namespace. This namespace already exists in the cluster.
+The deployment should be named pizza-deployment.
+The deployment should have 3 replicas.
+The deployment's pods should have one container using the linuxacademycontent/pizza-service image with the tag 1.14.6.
+Run the container with the command nginx.
+Run the container with the arguments "-g", "daemon off;".
+The pods should expose port 80 to the cluster.
+The pods should be configured to periodically check the /healthz endpoint on port 8081, and restart automatically if the request fails.
+The pods should not receive traffic from the service until the / endpoint on port 80 responds successfully.
+The service should be named pizza-service.
+The service should forward traffic to port 80 on the pods.
+The service should be exposed externally by listening on port 30080 on each node.
+
+Build the deployment and create it in the cluster
+Build a deployment descriptor called pizza-deployment.yml:
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pizza-deployment
+  namespace: pizza
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: pizza
+  template:
+    metadata:
+      labels:
+        app: pizza
+    spec:
+      containers:
+      - name: pizza
+        image: linuxacademycontent/pizza-service:1.14.6
+        command: ["nginx"]
+        args: ["-g", "daemon off;"]
+        ports:
+        - containerPort: 80
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8081
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 80
+
+Create the deployment in the cluster:
+kubectl apply -f pizza-deployment.yml
+
+Build the service and create it in the cluster
+
+Build a service descriptor called pizza-service.yml:
+apiVersion: v1
+kind: Service
+metadata:
+  name: pizza-service
+  namespace: pizza
+spec:
+  type: NodePort
+  selector:
+    app: pizza
+  ports:
+  - protocol: TCP
+    port: 80
+    nodePort: 30080
+
+Create the service in the cluster:
+kubectl apply -f pizza-service.yml
+
+You can verify the service is working by testing the nodePort with curl:
+curl localhost:30080
+
+CKAD Practice Exam - Part 2
+Our team has a pod which generates some log output. However, they want to consume the
+data using an external application, which requires the data to be in a specific format.
+Our task is to create a pod design that utilizes an adapter running fluentd to format
+the output from the main container.
+
+Create the pod descriptor in /usr/ckad/adapter-pod.yml. An empty file has already been created for us.
+The pod should be named counter.
+Add a container to the pod that runs the busybox image, and name it count.
+Run the count container with the following arguments:
+
+- /bin/sh
+- -c
+- >
+  i=0;
+  while true;
+  do
+    echo "$i: $(date)" >> /var/log/1.log;
+    echo "$(date) INFO $i" >> /var/log/2.log;
+    i=$((i+1));
+    sleep 1;
+  done
+
+Add another container called adapter to the pod, and make it run the k8s.gcr.io/fluentd-gcp:1.30 image.
+
+There is a fluentd configuration located on the server at /usr/ckad/fluent.conf. Load the data from this
+file into a ConfigMap called fluentd-config. Mount this ConfigMap to the adapter container so that the
+config data is located inside the container in a file at /fluentd/etc/fluent.conf.
+
+Add an environment variable to the adapter container called FLUENTD_ARGS with the value -c /fluentd/etc/fluent.conf.
+
+Create a volume for the pod in such a way that the storage will be deleted if the pod is removed from a node.
+
+Mount this volume to both containers at /var/log. The count container will output log data to this volume,
+and the adapter container will read the data from the same volume.
+
+Create a hostPath volume where the adapter container will output the formatted log data.
+Store the data at the /usr/ckad/log_output path. Mount the volume to the adapter container at /var/logout.
+
+Create a ConfigMap to store the fluentd configuration
+Switch to root so that you can read the config file:
+sudo -i
+
+Get the contents of the config file:
+cat /usr/ckad/fluent.conf
+
+Create a descriptor for the ConfigMap with vi fluentd-config.yml:
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fluentd-config
+data:
+  fluent.conf: |
+    <source>
+      type tail
+      format none
+      path /var/log/1.log
+      pos_file /var/log/1.log.pos
+      tag count.format1
+    </source>
+
+    <source>
+      type tail
+      format none
+      path /var/log/2.log
+      pos_file /var/log/2.log.pos
+      tag count.format2
+    </source>
+
+    <match **>
+      @type file
+      path /var/logout/count
+      time_slice_format %Y%m%d%H%M%S
+      flush_interval 5s
+      log_level trace
+    </match>
+
+Create the ConfigMap in the cluster:
+kubectl apply -f fluentd-config.yml
+
+Create the pod descriptor
+keyboard_arrow_up
+Switch to root so that you can work with the descriptor file:
+
+sudo -i
+Edit the descriptor file with vi /usr/ckad/adapter-pod.yml:
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: counter
+spec:
+  containers:
+  - name: count
+    image: busybox
+    args:
+    - /bin/sh
+    - -c
+    - >
+      i=0;
+      while true;
+      do
+        echo "$i: $(date)" >> /var/log/1.log;
+        echo "$(date) INFO $i" >> /var/log/2.log;
+        i=$((i+1));
+        sleep 1;
+      done
+    volumeMounts:
+    - name: varlog
+      mountPath: /var/log
+  - name: adapter
+    image: k8s.gcr.io/fluentd-gcp:1.30
+    env:
+    - name: FLUENTD_ARGS
+      value: -c /fluentd/etc/fluent.conf
+    volumeMounts:
+    - name: varlog
+      mountPath: /var/log
+    - name: config-volume
+      mountPath: /fluentd/etc
+    - name: logout
+      mountPath: /var/logout
+  volumes:
+  - name: varlog
+    emptyDir: {}
+  - name: config-volume
+    configMap:
+      name: fluentd-config
+  - name: logout
+    hostPath:
+      path: /usr/ckad/log_output
+
+Create the Pod in the cluster and make sure it is working
+Create the pod:
+kubectl apply -f /usr/ckad/adapter-pod.yml
+
+Verify that the pod starts up:
+kubectl get pod counter
+
+You can also verify that everything is working by checking the output directory on the worker node. Log in to the worker from the master:
+ssh cloud_user@<IP ADDRESS>
+
+Look for the fluentd output files in the output directory:
+ls /usr/ckad/log_output
+
+You can set up kubectl autocomplete like so:
+source <(kubectl completion bash)
+echo "source <(kubectl completion bash)" >> ~/.bashrc
+
+CKAD Practice Exam - Part 3
+Our company has a Kubernetes cluster that is running several pods and services.
+A service called oauth-provider in the gem namespace has stopped working.
+Our task is to investigate the service and determine what is causing the problem,
+save some relevant data for future analysis, and then fix the problem.
+
+The broken service is oauth-provider. It is located in the gem namespace.
+Identify which Kubernetes object is broken and causing the service to fail.
+Save the name of the object in the file /usr/ckad/broken-object-name.txt.
+Save the object's summary data in JSON format to the file /usr/ckad/broken-object.json.
+Edit the object to fix the problem.
+The oauth-provider service is a NodePort service listening on port 30080, so we can test it using curl localhost:30080.
+Note that there may be other objects in the cluster which appear to be broken.
+Our task is to identify what specifically is causing the oauth-provider service to fail.
+Ignore any object which doesn't affect the oauth-provider service.
+
+Identify the broken object and save its name and summary data
+Become the root user so that we can write to the file:
+sudo -i
+
+Describe the broken service:
+kubectl describe service oauth-provider -n gem
+Note that the service's selector selects pods with the label role: oauth.
+
+Get a list of pods with labels in order to locate the pod(s) selected by the service:
+kubectl get pods --all-namespaces --show-labels
+
+Note that the pod called bowline has the role: oauth label.
+Save the name of the broken pod:
+vi /usr/ckad/broken-object-name.txt
+Put the word bowline in there.
+
+Save the JSON summary data for the broken pod to the specified file:
+kubectl get pod bowline -n gem -o json > /usr/ckad/broken-object.json
+
+Fix the problem
+Examine the broken pod more closely:
+kubectl describe pod bowline -n gem
+
+Based on the event log and pod status, it appears something may be wrong with the pod image.
+Look at the pod's container image, which appears to be misspelled. Edit the pod:
+kubectl edit pod bowline -n gem
+
+Fix the image name by changing it to nginx:1.15.9.
+
+Verify that the pod is now working:
+kubectl get pod bowline -n gem
+
+Test the broken service to make sure it is working:
+curl localhost:30080
 
