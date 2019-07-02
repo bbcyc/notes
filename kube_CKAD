@@ -1,0 +1,2153 @@
+Certified Kubernetes Application Developer
+Build Your Practice Cluster
+On all 3 servers
+First, set up the Docker and Kubernetes repositories:
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+
+sudo add-apt-repository    "deb [arch=amd64] https://download.docker.com/linux/ubuntu \
+   $(lsb_release -cs) \
+   stable"
+
+curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -
+
+cat << EOF | sudo tee /etc/apt/sources.list.d/kubernetes.list
+deb https://apt.kubernetes.io/ kubernetes-xenial main
+EOF
+
+Install Docker and Kubernetes packages:
+Note that if you want to use a newer version of Kubernetes, change the version installed for kubelet, kubeadm, and kubectl. Make sure all three use the same version.
+Note: There is currently a bug in Kubernetes 1.13.4 (and earlier) that can cause problems installaing the packages. Use 1.13.5-00 to avoid this issue.
+
+sudo apt-get update
+sudo apt-get install -y docker-ce=18.06.1~ce~3-0~ubuntu kubelet=1.13.5-00 kubeadm=1.13.5-00 kubectl=1.13.5-00
+sudo apt-mark hold docker-ce kubelet kubeadm kubectl
+
+Enable iptables bridge call:
+echo "net.bridge.bridge-nf-call-iptables=1" | sudo tee -a /etc/sysctl.conf
+sudo sysctl -p
+
+On the Kube master server
+Initialize the cluster:
+sudo kubeadm init --pod-network-cidr=10.244.0.0/16
+
+Set up local kubeconfig:
+mkdir -p $HOME/.kube
+sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+Install Flannel networking:
+kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/bc79dd1505b0c8681ece4de4c0d86c5cd2643275/Documentation/kube-flannel.yml
+
+On each Kube node server
+Join the node to the cluster:
+sudo kubeadm join $controller_private_ip:6443 --token $token --discovery-token-ca-cert-hash $hash
+
+On the Kube master server
+Verify that all nodes are joined and ready:
+kubectl get nodes
+
+You should see all three servers with a status of Ready:
+NAME                      STATUS   ROLES    AGE   VERSION
+wboyd1c.mylabserver.com   Ready    master   54m   v1.13.4
+wboyd2c.mylabserver.com   Ready    <none>   49m   v1.13.4
+wboyd3c.mylabserver.com   Ready    <none>   49m   v1.13.4
+
+Kubernetes API Primitives
+also called Kubernetes Objects
+Data objects that represent the state of the cluster
+https://kubernetes.io/docs/concepts/overview/working-with-objects/kubernetes-objects/
+kubectl api-resources -o name  shows all resources in a cluster
+
+kubectl get pods -n kube-system
+
+kubectl get nodes
+
+kubectl get nodes $node_name
+
+kubectl get nodes $node_name -o yaml
+
+kubectl describe node $node_name
+
+spec - the desired state of the object
+status- the current state of the object
+
+Creating Pods
+Pods are the basic building blocks of any application running in Kube.
+Consists of one or more containers and a set of resources shared by those containers.
+All containers are part of a pod
+
+Create a new yaml file to contain the pod definition. Use whatever editor you like, but we used vi:
+vi my-pod.yml
+my-pod.yml:
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-pod
+  labels:
+    app: myapp
+spec:
+  containers:
+  - name: myapp-container
+    image: busybox
+    command: ['sh', '-c', 'echo Hello Kubernetes! && sleep 3600']
+
+Create a pod from the yaml definition file:
+kubectl create -f my-pod.yml
+
+Edit a pod by updating the yaml definiton and re-applying it:
+kubectl apply -f my-pod.yml
+
+You can also edit a pod like this:
+kubectl edit pod my-pod
+
+You can delete a pod like this:
+kubectl delete pod my-pod
+
+Namespaces
+provide a way to keep your objects organized with the cluster.
+Every object belongs to a namespace.
+When no namespace is specified, the cluster will assume default namespace.
+When creating an object, you can assign it to a namespace by specifying a namespace in the metadata.
+
+You can get a list of the namespaces in the cluster like this:
+kubectl get namespaces
+
+You can also create your own namespaces.
+kubectl create ns my-ns
+
+To assign an object to a custom namespace, simply specify its metadata.namespace attribute.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-ns-pod
+  namespace: my-ns
+  labels:
+    app: myapp
+spec:
+  containers:
+  - name: myapp-container
+    image: busybox
+    command: ['sh', '-c', 'echo Hello Kubernetes! && sleep 3600']
+
+Use the -n flag to specify a namespace when using commands like kubectl get.
+kubectl get pods -n my-ns
+
+You can also use -n to specify a namespace when using kubectl describe.
+kubectl describe pod my-ns-pod -n my-ns
+
+Basic Container Configuration
+You can specify the command that will be used to run a container in the Pod spec.
+This will override any built-in default command specified by the container image.
+
+You can specify custom commands for your containers.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-command-pod
+  labels:
+    app: myapp
+spec:
+  containers:
+  - name: myapp-container
+    image: busybox
+    command: ['echo']
+  restartPolicy: Never
+
+You can also add custom arguments like so:
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-args-pod
+  labels:
+    app: myapp
+spec:
+  containers:
+  - name: myapp-container
+    image: busybox
+    command: ['echo']
+    args: ['This is my custom argument']
+  restartPolicy: Never
+
+Here is a pod with a containerPort:
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-containerport-pod
+  labels:
+    app: myapp
+spec:
+  containers:
+  - name: myapp-container
+    image: nginx
+    ports:
+    - containerPort: 80
+
+Allows other containers on cluster to connect to nginx pod on port 80.
+
+You can check the status of your pods at any time with kubectl get pods.
+
+Hands-On Lab: Creating Kubernetes Pods
+Your company is getting ready to launch a new website, and they need you to set up an nginx web server in their Kubernetes cluster.
+The nginx server will need to be accessible via network in the future, so you will need to expose port 80 as a containerPort for the nginx container.
+Your team has also asked you to ensure that nginx runs in quiet mode for the time being to cut down on unnecessary log output.
+You can do this by setting the command to nginx and passing the following arg to the container: -g daemon off; -q.
+As this nginx server belongs to the Web team, you will need to create it in the team's web namespace.
+
+To summarize:
+Use the nginx container image.
+The container needs a containerPort of 80.
+Set the command to nginx
+Pass in the -g daemon off; -q args to run nginx in quiet mode.
+Create the pod in the web namespace.
+Once the pod is created, you should be able to find it with kubectl get pods -n web. Once the pod is created, you can get more information about its current status with kubectl describe pod nginx -n web.
+
+nginx.yaml
+apiVersion:v1
+kind: Pod
+metadata:
+  name: nginx
+  namespace: web
+spec:
+  containers:
+  - name: nginx
+    image: nginx
+    command: ["nginx"]
+    args: ["-g", "daemon off;", "-q"]
+    ports:
+    - containerPort: 80
+
+kubectl create -f nginx.yaml
+kubectl get pods -n web
+
+ConfigMaps
+Kubernetes object that stores configuration data in a key-value format.
+This config data can then be used to config software running in a container
+by referencing the configmap in the pod spec
+
+Here's an example of of a yaml descriptor for a ConfigMap containing some data:
+apiVersion: v1
+kind: ConfigMap
+metadata:
+   name: my-config-map
+data:
+   myKey: myValue
+   anotherKey: anotherValue
+
+Passing ConfigMap data to a container as an environment variable looks like this:
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-configmap-pod
+spec:
+  containers:
+  - name: myapp-container
+    image: busybox
+    command: ['sh', '-c', "echo $(MY_VAR) && sleep 3600"]
+    env:
+    - name: MY_VAR
+      valueFrom:
+        configMapKeyRef:
+          name: my-config-map
+          key: myKey
+
+It's also possible to pass ConfigMap data to containers, in the form of file using a mounted volume, like so:
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-configmap-volume-pod
+spec:
+  containers:
+  - name: myapp-container
+    image: busybox
+    command: ['sh', '-c', "echo $(cat /etc/config/myKey) && sleep 3600"]
+    volumeMounts:
+      - name: config-volume
+        mountPath: /etc/config
+  volumes:
+    - name: config-volume
+      configMap:
+        name: my-config-map
+
+In the lesson, we'll also use the following commands to explore how the ConfigMap data interacts with pods and containers:
+kubectl logs my-configmap-pod
+
+kubectl logs my-configmap-volume-pod
+
+kubectl exec my-configmap-volume-pod -- ls /etc/config
+
+kubectl exec my-configmap-volume-pod -- cat /etc/config/myKey
+
+SecurityContexts
+Defines privelege and access control settings for a pod. If a container needs special operating
+system-level permissions, we can provide them using the securityContext.
+
+The securityContext is defined as part of a Pod's spec.
+
+First, create some users, groups, and files on both worker nodes which we can use for testing.
+sudo useradd -u 2000 container-user-0
+sudo groupadd -g 3000 container-group-0
+sudo useradd -u 2001 container-user-1
+sudo groupadd -g 3001 container-group-1
+sudo mkdir -p /etc/message/
+echo "Hello, World!" | sudo tee -a /etc/message/message.txt
+sudo chown 2000:3000 /etc/message/message.txt
+sudo chmod 640 /etc/message/message.txt
+
+On the controller, create a pod to read the message.txt file and print the message to the log.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-securitycontext-pod
+spec:
+  containers:
+  - name: myapp-container
+    image: busybox
+    command: ['sh', '-c', "cat /message/message.txt && sleep 3600"]
+    volumeMounts:
+    - name: message-volume
+      mountPath: /message
+  volumes:
+  - name: message-volume
+    hostPath:
+      path: /etc/message
+
+Check the pod's log to see the message from the file:
+kubectl logs my-securitycontext-pod
+
+Delete the pod and re-create it, this time with a securityContext set to use a user and group that do not have access to the file.
+kubectl delete pod my-securitycontext-pod --now
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-securitycontext-pod
+spec:
+  securityContext:
+    runAsUser: 2001
+    fsGroup: 3001
+  containers:
+  - name: myapp-container
+    image: busybox
+    command: ['sh', '-c', "cat /message/message.txt && sleep 3600"]
+    volumeMounts:
+    - name: message-volume
+      mountPath: /message
+  volumes:
+  - name: message-volume
+    hostPath:
+      path: /etc/message
+
+Check the log again. You should see a "permission denied" message.
+kubectl logs my-securitycontext-pod
+
+Delete the pod and re-create it again, this time with a user and group that are able to access the file.
+kubectl delete pod my-securitycontext-pod --now
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-securitycontext-pod
+spec:
+  securityContext:
+    runAsUser: 2000
+    fsGroup: 3000
+  containers:
+  - name: myapp-container
+    image: busybox
+    command: ['sh', '-c', "cat /message/message.txt && sleep 3600"]
+    volumeMounts:
+    - name: message-volume
+      mountPath: /message
+  volumes:
+  - name: message-volume
+    hostPath:
+      path: /etc/message
+
+Check the log once more. You should see the message from the file.
+kubectl logs my-securitycontext-pod
+
+Resource Requirements
+
+Resource request is the amount of resources necessary to run a container
+Resource limit - a maximum value for the resource usage of a container.
+
+Specify resource requests and resource limits in the container spec like this:
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-resource-pod
+spec:
+  containers:
+  - name: myapp-container
+    image: busybox
+    command: ['sh', '-c', 'echo Hello Kubernetes! && sleep 3600']
+    resources:
+      requests:
+        memory: "64Mi"
+        cpu: "250m"
+      limits:
+        memory: "128Mi"
+        cpu: "500m"
+
+Memory is measured in bytes. 64Mi means 64 Mebibytes
+CPU is measured in "cores" 250m mean 250 millicores or .25 CPU cores
+
+Secrets
+pieces of sensitive information stored in the Kubernetes cluster, such as passwords, tokens, and keys.
+If a container needs a sensitive piece of information, such as a password, it is more secure to store it as a secret
+than storing it in a pod spec or in the container itself
+https://kubernetes.io/docs/concepts/configuration/secret/
+
+Create a secret using a yaml definition like this. It is a good idea to delete the yaml file containing the sensitive data after the secret object has been created in the cluster.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: my-secret
+stringData:
+  myKey: myPassword
+
+Once a secret is created, pass the sensitive data to containers as an environment variable:
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-secret-pod
+spec:
+  containers:
+  - name: myapp-container
+    image: busybox
+    command: ['sh', '-c', "echo Hello, Kubernetes! && sleep 3600"]
+    env:
+    - name: MY_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: my-secret
+          key: myKey
+
+ServiceAccounts
+allows containers running in pods to access the Kube API. Some applications may need
+to interact with the cluster itself, and service accounts provide a way to let them
+do it securely, with properly limited permissions.
+
+You can determine the ServiceAccount that a pod will use by specifying a serviceAccountName
+in the pod spec:
+https://kubernetes.io/docs/reference/access-authn-authz/service-accounts-admin/
+https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/
+
+Creating a ServiceAccount looks like this:
+kubectl create serviceaccount my-serviceaccount
+
+Use the serviceAccountName attribute in the pod spec to specify which ServiceAccount the pod should use:
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-serviceaccount-pod
+spec:
+  serviceAccountName: my-serviceaccount
+  containers:
+  - name: myapp-container
+    image: busybox
+    command: ['sh', '-c', "echo Hello, Kubernetes! && sleep 3600"]
+
+Hands-On Lab: Configuring Kubernetes Pods
+Create a pod definition in /home/cloud_user/candy-service-pod.yml, and then create a pod in the cluster using this definition to make sure it works.
+
+The specifications are as follows:
+The current image for the container is linuxacademycontent/candy-service:1. You do not need a custom command or args.
+There is some configuration data the container will need:
+candy.peppermint.power=100000000
+candy.nougat-armor.strength=10
+It will expect to find this data in a file at /etc/candy-service/candy.cfg. Store the configuration data in a ConfigMap called candy-service-config and provide it to the container as a mounted volume.
+The container will need to run with the file system group with the id 2000. You will need to set this using the securityContext.
+The container should expect to use 64MiB of memory and 250m CPU (use resource requests).
+The container should be limited to 128MiB of memory and 500m CPU (use resource limits).
+The container needs access to a database password in order to authenticate with a backend database server. The password is Kub3rn3t3sRul3s!. It should be stored in a secure fashion (as a Kubernetes secret called db-password) and passed to the container as an environment variable called DB_PASSWORD.
+The container will need to access the Kubernetes API using the ServiceAccount candy-svc. The service account already exists, so just configure the pod to use it.
+
+candy-service-pod.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: candy-service
+spec:
+  securityContext:
+    fsGroup: 2000
+  containers:
+  - name: candy-service
+    image: linuxacademycontent/candy-service:1
+    resources:
+      requests:
+        memory: "64Mi"
+        cpu: "250m"
+      limits:
+        memory: "128Mi"
+        cpu: "500m"
+    volumeMounts:
+      - name: candy-service-volume
+        mountPath: /etc/candy-service/candy.cfg
+    env:
+    - name: DB_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: db-password
+          key: password
+  volumes:
+  - name: candy-service-volume
+    configMap:
+      name: candy-service-config
+  serviceAccountName: candy-svc
+
+
+config-map.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: candy-service-config
+data:
+  candy.cfg: |-
+    candy.peppermint.power=100000000
+    candy.nougat-armor.strength=10
+    candy.lemon.acceptability=0
+
+db-pass-secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: db-password
+stringData:
+  password: Kub3rn3t3sRul3s!
+
+Understanding Multi-Container Pods
+pods that have more than one container that work together as one unit
+https://kubernetes.io/docs/concepts/cluster-administration/logging/#using-a-sidecar-container-with-the-logging-agent
+https://kubernetes.io/docs/tasks/access-application-cluster/communicate-containers-same-pod-shared-volume/
+https://kubernetes.io/blog/2015/06/the-distributed-system-toolkit-patterns/
+
+Here is the YAML used to create a simple multi-container pod in the video:
+apiVersion: v1
+kind: Pod
+metadata:
+  name: multi-container-pod
+spec:
+  containers:
+  - name: nginx
+    image: nginx:1.15.8
+    ports:
+    - containerPort: 80
+  - name: busybox-sidecar
+    image: busybox
+    command: ['sh', '-c', 'while true; do sleep 30; done;']
+
+how do containers interact with one another in a pod
+1. shared networking space
+container 1 can connect to container 2 that is listening on port 1234 at localhost:1234
+
+2. shared storage volume
+if both containers mount the same volume, they can share info
+
+3. shared process namespace
+containers in the same pod can interact with and signal one another's processes
+enable process namespace sharing by setting `shareProcessNamespace: true` in Pod spec
+
+Design Patterns
+1. Sidecar Pod - Main container, Sidecar container - sidecar enhances or adds functionality to the main container
+2. Ambassador Pod - network traffic -> ambassador container -> main container
+uses an ambassador container to accept network traffic and pass it on to the main container.
+for example, an ambassador that listens on a custom port, and forwards traffic to the main container on its hard-coded port.
+3. Adaptor Pod - Main Container->Output->Adaptor Container->Formatted Output
+uses and adaptor container to change the output of the main container in some way. An example could be an adapter that formats and decorates
+log output from the main container.
+
+Hands-On Lab
+Forwarding Port Traffic with an Ambassador Container
+Your supermarket company is in the process of moving their infrastructure to a Kubernetes platform in the cloud.
+This is sometimes challenging, because some of the older, legacy portions of that infrastructure have non-standard requirements.
+One of these legacy applications is a web service that provides a list of the various types of fruit the company sells in its stores.
+
+This service has already been packaged into a container image, but there is one special requirement:
+The legacy app is hard-coded to only serve content on port 8775, but the team wants to be able to access the service using the standard port 80.
+Your task is to build a Kubernetes pod that runs this legacy container and uses the ambassador design pattern to expose access to the service on port 80.
+
+This setup will need to meet the following specifications:
+
+The pod should have the name fruit-service.
+The fruit-service pod should have a container that runs the legacy fruit service image: linuxacademycontent/legacy-fruit-service:1.
+The fruit-service pod should have an ambassador container that runs the haproxy:1.7 image and proxies incoming traffic on port 80 to the legacy service on port 8775 (the HAProxy configuration for this is provided below).
+Port 80 should be exposed as a containerPort. Note that you do not need to expose port 8775.
+The HAProxy configuration should be stored in a ConfigMap called fruit-service-ambassador-config.
+The HAProxy config should be provided to the ambassador container using a volume mount that places the data from the ConfigMap in a file at /usr/local/etc/haproxy/haproxy.cfg.
+haproxy.cfg should contain the following configuration data:
+global
+    daemon
+    maxconn 256
+
+defaults
+    mode http
+    timeout connect 5000ms
+    timeout client 50000ms
+    timeout server 50000ms
+
+listen http-in
+    bind *:80
+    server server1 127.0.0.1:8775 maxconn 32
+Once your pod is up and running, it's a good idea to test it to make sure you can access the service from within the cluster using port 80.
+In order to do this, you can create a busybox pod in the cluster, and then run a command to attempt to access the service from within the busybox pod.
+
+Create a descriptor for the busybox pod called busybox.yml.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: busybox
+spec:
+  containers:
+  - name: myapp-container
+    image: radial/busyboxplus:curl
+    command: ['sh', '-c', 'while true; do sleep 3600; done']
+
+Create the busybox testing pod.
+kubectl apply -f busybox.yml
+
+Use this command to access fruit-service using port 80 from within the busybox pod.
+kubectl exec busybox -- curl $(kubectl get pod fruit-service -o=custom-columns=IP:.status.podIP --no-headers):80
+
+If the service is working, you should see some JSON listing various types of fruit.
+
+Create a ConfigMap containing the configuration for the HAProxy ambassador.
+
+Create a YAML definition file called fruit-service-ambassador-config.yml.
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fruit-service-ambassador-config
+data:
+  haproxy.cfg: |-
+    global
+        daemon
+        maxconn 256
+
+    defaults
+        mode http
+        timeout connect 5000ms
+        timeout client 50000ms
+        timeout server 50000ms
+
+    listen http-in
+        bind *:80
+        server server1 127.0.0.1:8775 maxconn 32
+
+Create the ConfigMap in the cluster from the YAML definition file.
+kubectl apply -f fruit-service-ambassador-config.yml
+
+Create a multi-container pod which provides access to the legacy service on port 80.
+
+Create a YAML definition file for the pod called fruit-service.yml.
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: fruit-service
+spec:
+  containers:
+  - name: legacy-fruit-service
+    image: linuxacademycontent/legacy-fruit-service:1
+  - name: haproxy-ambassador
+    image: haproxy:1.7
+    ports:
+    - containerPort: 80
+    volumeMounts:
+    - name: config-volume
+      mountPath: /usr/local/etc/haproxy
+  volumes:
+  - name: config-volume
+    configMap:
+      name: fruit-service-ambassador-config
+
+Create the pod in the cluster.
+kubectl apply -f fruit-service.yml
+
+Liveness and Readiness probes
+Probes - allow you to customize how Kubernetes determines the status of your containers
+Liveness Probe - Indicates whether the container is running properly, and governs when the cluster will automatically
+  stop or restart the container
+Readiness Probe - Indicates whether the container is ready to service requests, and governs whether requests
+  will be forwarded to the pod
+
+https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#container-probes
+https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-probes/
+
+Lesson Reference
+Here is a pod with a liveness probe that uses a command:
+my-liveness-pod.yml:
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-liveness-pod
+spec:
+  containers:
+  - name: myapp-container
+    image: busybox
+    command: ['sh', '-c', "echo Hello, Kubernetes! && sleep 3600"]
+    livenessProbe:
+      exec:
+        command:
+        - echo
+        - testing
+      initialDelaySeconds: 5
+      periodSeconds: 5
+
+Here is a pod with a readiness probe that uses an http request:
+my-readiness-pod.yml:
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-readiness-pod
+spec:
+  containers:
+  - name: myapp-container
+    image: nginx
+    readinessProbe:
+      httpGet:
+        path: /
+        port: 80
+      initialDelaySeconds: 5
+      periodSeconds: 5
+
+Container Logging
+A container's normal console output goes into the container log.
+
+When managing containers, obtaining container logs is sometimes necessary in order to gain insight into what is going on inside a container.
+Kubernetes offers an easy way to view and interact with container logs using the kubectl logs command.
+In this lesson, we discuss container logs and demonstrate how to access them using kubectl logs.
+
+Relevant Documentation
+https://kubernetes.io/docs/concepts/cluster-administration/logging/
+
+Lesson Reference
+A sample pod that generates log output every second:
+apiVersion: v1
+kind: Pod
+metadata:
+  name: counter
+spec:
+  containers:
+  - name: count
+    image: busybox
+    args: [/bin/sh, -c, 'i=0; while true; do echo "$i: $(date)"; i=$((i+1)); sleep 1; done']
+
+Get the container's logs:
+kubectl logs counter
+
+For a multi-container pod, specify which container to get logs for using the -c flag:
+kubectl logs <pod name> -c <container name>
+
+Save container logs to a file:
+kubectl logs counter > counter.log
+
+Installing Metrics Server
+Provides and API which allows you to access data about your pods and nodes, such as CPU and memory usage.
+Clone the metrics server repo and install the server using kubectl apply:
+cd ~/
+git clone https://github.com/linuxacademy/metrics-server
+kubectl apply -f ~/metrics-server/deploy/1.8+/
+
+Once you have installed the metrics server, you can use this command to verify that it is responsive:
+kubectl get --raw /apis/metrics.k8s.io/
+
+Monitoring Applications
+Monitoring is an important part of managing any application infrastructure.
+In this lesson, we will discuss how to view the resource usage of pods and nodes using the kubectl top command.
+
+Relevant Documentation
+https://kubernetes.io/docs/tasks/debug-application-cluster/resource-usage-monitoring/
+
+Lesson Reference
+Here are some sample pods that can be used to test kubectl top. They are designed to use approximately 300m and 100m CPU, respectively.
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: resource-consumer-big
+spec:
+  containers:
+  - name: resource-consumer
+    image: gcr.io/kubernetes-e2e-test-images/resource-consumer:1.4
+    resources:
+      requests:
+        cpu: 500m
+        memory: 128Mi
+  - name: busybox-sidecar
+    image: radial/busyboxplus:curl
+    command: [/bin/sh, -c, 'until curl localhost:8080/ConsumeCPU -d "millicores=300&durationSec=3600"; do sleep 5; done && sleep 3700']
+
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: resource-consumer-small
+spec:
+  containers:
+  - name: resource-consumer
+    image: gcr.io/kubernetes-e2e-test-images/resource-consumer:1.4
+    resources:
+      requests:
+        cpu: 500m
+        memory: 128Mi
+  - name: busybox-sidecar
+    image: radial/busyboxplus:curl
+    command: [/bin/sh, -c, 'until curl localhost:8080/ConsumeCPU -d "millicores=100&durationSec=3600"; do sleep 5; done && sleep 3700']
+
+Here are the commands used in the lesson to view resource usage data in the cluster:
+kubectl top pods
+kubectl top pod resource-consumer-big
+kubectl top pods -n kube-system
+kubectl top nodes
+
+Debugging
+Problems will occur in any system, and Kubernetes provides some great tools to help locate and fix problems when they occur within a cluster.
+In this lesson, we will go through the process of debugging an issue in Kubernetes. We will use our knowledge of kubectl get
+and kubectl describe to locate a broken pod, and then explore various ways of editing Kubernetes objects to fix issues.
+
+Relevant Documentation
+https://kubernetes.io/docs/tasks/debug-application-cluster/debug-application/
+https://kubernetes.io/docs/tasks/debug-application-cluster/debug-pod-replication-controller/
+https://kubernetes.io/docs/tasks/debug-application-cluster/debug-service/
+
+Lesson Reference
+I prepared my cluster before the video by creating a broken pod in the nginx-ns namespace:
+kubectl create namespace nginx-ns
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nginx
+  namespace: nginx-ns
+spec:
+  containers:
+  - name: nginx
+    image: nginx:1.158
+
+Exploring the cluster to locate the problem
+kubectl get pods
+
+kubectl get namespace
+
+kubectl get pods --all-namespaces
+
+kubectl describe pod nginx -n nginx-ns
+
+Fixing the broken image name
+Edit the pod:
+kubectl edit pod nginx -n nginx-ns
+
+Change the container image to nginx:1.15.8.
+Exporting a descriptor to edit and re-create the pod.
+Export the pod descriptor and save it to a file:
+kubectl get pod nginx -n nginx-ns -o yaml --export > nginx-pod.yml
+
+Add this liveness probe to the container spec:
+livenessProbe:
+  httpGet:
+    path: /
+    port: 80
+
+Delete the pod and recreate it using the descriptor file. Be sure to specify the namespace:
+kubectl delete pod nginx -n nginx-ns
+kubectl apply -f nginx-pod.yml -n nginx-ns
+
+Hands-On Lab
+Configuring Probes for a Kubernetes Pod
+Your company just finished releasing a candy-themed mobile game. So far, things are going well, and the back end services running
+in your Kubernetes cluster are servicing thousands of requests. However, there have been a few issues with the back end service.
+
+Container Health Issues
+The first issue is caused by application instances entering an unhealthy state and responding to user requests with error messages.
+Unfortunately, this state does not cause the container to stop, so the Kubernetes cluster is not able to detect this state and
+restart the container. Luckily, the application has an internal endpoint that can be used to detect whether or not it is healthy.
+This endpoint is /healthz on port 8081. Your first task will be to create a probe to check this endpoint periodically.
+If the endpoint returns an error or fails to respond, the probe will detect this and the cluster will restart the container.
+
+Container Startup Issues
+Another issue is caused by new pods when they are starting up. The application takes a few seconds after startup before it is
+ready to service requests. As a result, some users are getting error message during this brief time. To fix this, you will
+need to create another probe. To detect whether the application is ready, the probe should simply make a request to the root
+endpoint, /, on port 80. If this request succeeds, then the application is ready.
+
+There is already a pod descriptor in the home directory: ~/candy-service-pod.yml. Edit this file to add the probes, then create the pod in the cluster to test it.
+
+Create a probe to detect and restart unhealthy containers
+Create a probe to detect when the container is ready to service requests
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: candy-service
+spec:
+  containers:
+  - name: candy-service
+    image: linuxacademycontent/candy-service:2
+    livenessProbe:
+      httpGet:
+        path: /healthz
+        port: 8081
+      initialDelaySeconds: 5
+      periodSeconds: 5
+    readinessProbe:
+      httpGet:
+        path: /
+        port: 80
+      initialDelaySeconds: 5
+      periodSeconds: 5
+
+Hands-On Lab
+Debugging in Kubernetes
+You recently got a new job at a company that has a robust Kubernetes infrastructure used by multiple teams.
+Congratulations! However, you were just told by the team that there is a problem with a service they use in the
+cluster and they want you to fix it. Unfortunately, no one is able to give you much information about the service.
+You don't even know what it is called or where it is located. All you know is there is likely a pod failing somewhere.
+
+Your team has asked you to take the lead in debugging the issue. They want you to locate the problem and collect
+some relevant debugging information that will help the team analyze the problem and correct it in the future.
+They also want you to go ahead and get the broken pod running again.
+
+You will need to do the following:
+
+Find the broken pod and save the pod name to the file /home/cloud_user/debug/broken-pod-name.txt.
+kubectl get pods --all-namespaces
+
+In the same namespace as the broken pod, find out which pod is using the most CPU and output the name of that pod to the file /home/cloud_user/debug/high-cpu-pod-name.txt.
+kubectl get pods --all-namespaces -o wide -> to see namespace broken pod belongs to
+kubectl top pod -n candy-store
+
+Get the broken pod's summary data in the JSON format and output it to the file /home/cloud_user/debug/broken-pod-summary.json.
+kubectl get po -n candy-store cart-ws -o json > file_name
+
+Get the broken pod's container logs and output them to the file /home/cloud_user/debug/broken-pod-logs.log.
+kubectl logs -n candy-store cart-ws
+
+Fix the problem with the broken pod so that it enters the Running state.
+Looks like it is hitting the wrong endpoint for the liveness probe
+kubectl get pod cart-ws -n candy-store -o yaml --export > broken-pod.yaml
+kubectl delete pod cart-ws -n candy-store
+fix the typo
+kubectl apply -f broken-pod.yaml
+kubectl get po cart-ws -n candy-store
+
+Labels, Selectors, and Annotations
+Labels are key-value pairs attached to Kubernetes objects.
+They are used for identifying various attributes of objects which can in turn
+be used to select and group various subsets of those objects.
+
+We can attach labels to objects by listing themin the metadata.labels section of
+an object descriptor
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-production-label-pod
+  labels:
+    app: my-app
+    environment: production
+spec:
+  containers:
+  - name: nginx
+    image: nginx
+
+You can view existing labels with kubectl describe.
+kubectl describe pod my-production-label-pod
+kubectl get pods --show-labels
+
+Here is another pod with different labels.
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-development-label-pod
+  labels:
+    app: my-app
+    environment: development
+spec:
+  containers:
+  - name: nginx
+    image: nginx
+
+Selectors are used for identifying and selecting a specific group of objects using their labels.
+One way to use selectors is to use them with kubectl get to retrieve a specific list of objects.
+We can specify a selector using the -l flag.
+
+You can use various selectors to select different subsets of objects.
+Equality
+kubectl get pods -l app=my-app
+kubectl get pods -l environment=production
+kubectl get pods -l environment=development
+Inequality
+kubectl get pods -l environment!=production
+Set-based
+kubectl get pods -l 'environment in (development,production)'
+Comma-delimited list
+kubectl get pods -l app=my-app,environment=production
+
+Annotations are similar to labels in that they can be used to store custom metadata about objects.
+However, unlike labels, annotations cannot be used to select or group objects in Kubernetes.
+External tools can read, write, and interact with annotations.
+
+We can attach annotations to objects using the metadata.annotations section of the object descriptor.
+
+Here is a simple pod with some annotations.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-annotation-pod
+  annotations:
+    owner: terry@linuxacademy.com
+    git-commit: bdab0c6
+spec:
+  containers:
+  - name: nginx
+    image: nginx
+
+Like labels, existing annotations can also be viewed using kubectl describe.
+kubectl describe pod my-annotation-pod
+
+Deployments
+provide a way to declaritively manage a dynamic set of replica pods.
+They provide powerful functionality such as scaling and rolling updates.
+
+A deployment defines a desired state for the replica pods.
+The cluster will constantly work to maintain that desired state, creating,
+removing, and modifying the replica pods accordingly.
+
+A deployment is a Kubernetes object that can be created using a descriptor:
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-deployment
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.7.9
+        ports:
+        - containerPort: 80
+
+Note the following:
+spec.replicas - the number of replica pods
+spec.template - a template pod descriptor which defines the pods which will be created
+spec.selector - the deployment will manage all pods whose labels match the selector
+
+You can explore and manage deployments using the same kubectl commands you would use for other object types.
+kubectl get deployments
+kubectl get deployment <deployment name>
+kubectl describe deployment <deployment name>
+kubectl edit deployment <deployment name>
+kubectl delete deployment <deployment name>
+
+Rolling Updates and Rollbacks
+One powerful feature of Kubernetes deployments is the ability to perform rolling updates and rollbacks.
+These allow you to push out new versions without incurring downtime, and they allow you to quickly return
+to a previous state in order to recover from problems that may arise when deploying changes. In this lesson,
+we will discuss rolling updates and rollback, and we will demonstrate the process of performing them on a deployment in the cluster.
+
+Rolling updates provide a way to update a deployment to a new container version by gradually updating replicas
+so that there is no downtime. Execute a rolling update with `kubectl set image`
+
+kubectl set image deployment/<deployment name> <container name>=<image name> --record
+
+The --record flag records information about the update so that it can be rolled back later.
+
+Relevant Documentation
+https://v1-12.docs.kubernetes.io/docs/concepts/workloads/controllers/deployment/#updating-a-deployment
+https://v1-12.docs.kubernetes.io/docs/concepts/workloads/controllers/deployment/#rolling-back-a-deployment
+
+Lesson Reference
+Here is a sample deployment you can use to practice rolling updates and rollbacks.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rolling-deployment
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.7.1
+        ports:
+        - containerPort: 80
+
+Perform a rolling update.
+kubectl set image deployment/rolling-deployment nginx=nginx:1.7.9 --record
+
+Explore the rollout history of the deployment.
+kubectl rollout history deployment/rolling-deployment
+kubectl rollout history deployment/rolling-deployment --revision=2
+
+Rollbacks allow us to revert to a previous state. For example, if a rolling update breaks something, we can quickly
+recover by using a rollback.
+
+Get a list of previous updates with `kubectl rollout history`
+The --revision flag will give more information on a specific revision number
+
+You can roll back to the previous revision like so.
+kubectl rollout undo deployment/rolling-deployment
+
+You can also roll back to a specific earlier revision by providing the revision number.
+kubectl rollout undo deployment/rolling-deployment --to-revision=1
+
+You can also control how rolling updates are performed by setting maxSurge and maxUnavailable in the deployment spec:
+maxSurge - how many extra replicas can exist during update - percent or number
+maxUnavailable - max number of replicas that can be unavailabe at a time - percent or number
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rolling-deployment
+spec:
+  strategy:
+    rollingUpdate:
+      maxSurge: 3
+      maxUnavailable: 2
+  replicas: 3
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.7.1
+        ports:
+        - containerPort: 80
+
+Jobs and CronJobs
+Kubernetes provides the ability to easily run container workloads in a distributed cluster,
+but not all workloads need to run constantly. With jobs, we can run container workloads until
+they complete, then shut down the container. CronJobs allow us to do the same, but re-run the
+workload regularly according to a schedule. In this lesson, we will discuss Jobs and CronJobs
+and explore how to create and manage them.
+
+Jobs can be used to reliably execute a workload until it completes. The job will create one or more
+pods. When the job is finished, the container(s) will exit and the pod(s) will enter the Completed state.
+
+Relevant Documentation
+https://kubernetes.io/docs/concepts/workloads/controllers/jobs-run-to-completion/
+https://kubernetes.io/docs/concepts/workloads/controllers/cron-jobs/
+https://kubernetes.io/docs/tasks/job/automated-tasks-with-cron-jobs/
+
+Lesson Reference
+This Job calculates the first 2000 digits of pi.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: pi
+spec:
+  template:
+    spec:
+      containers:
+      - name: pi
+        image: perl
+        command: ["perl",  "-Mbignum=bpi", "-wle", "print bpi(2000)"]
+      restartPolicy: Never
+  backoffLimit: 4
+
+You can use kubectl get to list and check the status of Jobs.
+kubectl get jobs
+
+Cronjobs build upon the functionality of jobs by allowing you to execute jobs according to a schedule.
+
+A CronJob's spec contains a schedule, where we can specify a cron expression
+to determin when and how often the job will be executed. It also contains a jobTemplate,
+where we can specify the job we want to run.
+
+Here is a CronJob that prints some text to the console every minute.
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: hello
+spec:
+  schedule: "*/1 * * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: hello
+            image: busybox
+            args:
+            - /bin/sh
+            - -c
+            - date; echo Hello from the Kubernetes cluster
+          restartPolicy: OnFailure
+
+You can use kubectl get to list and check the status of CronJobs.
+kubectl get cronjobs
+
+Hands-On Lab
+Rolling Updates with Kubernetes Deployments
+Your company's developers have just finished developing a new version of their candy-themed mobile game.
+They are ready to update the backend services that are running in your Kubernetes cluster.
+There is a deployment in the cluster managing the replicas for this application. The deployment is
+called candy-deployment. You have been asked to update the image for the container named candy-ws in
+this deployment template to a new version, linuxacademycontent/candy-service:3.
+
+After you have updated the image using a rolling update, check on the status of the update to make
+sure it is working. If it is not working, perform a rollback to the previous state.
+
+Perform a rolling update of the container version
+Update the deployment to the new version like so:
+kubectl set image deployment/candy-deployment candy-ws=linuxacademycontent/candy-service:3 --record
+
+Check the progress of the rolling update:
+kubectl rollout status deployment/candy-deployment
+
+If the update is not finished after a few minutes, something may be wrong with the update.
+
+Roll back to the previous working state
+In this scenario, the rolling update should fail. This is because the specified image, linuxacademycontent/candy-service:3, does not exist.
+Roll back to the previous version to get things working again.
+
+Get a list of previous revisions.
+kubectl rollout history deployment/candy-deployment
+
+Undo the last revision.
+kubectl rollout undo deployment/candy-deployment
+
+Check the status of the rollout.
+kubectl rollout status deployment/candy-deployment
+
+This command should complete soon, saying the rollout was successful.
+
+Hands-On Lab
+Configuring CronJobs in Kubernetes
+Your company has a simple data cleanup process that is run periodically for maintenance purposes.
+They would like to stop doing this manually in order to save time, so you have been asked to
+implement a cron job in the Kubernetes cluster to run this process. Create a cron job called cleanup-cronjob
+using the linuxacademycontent/data-cleanup:1 image. Have the job run every minute with the following cron expression: */1 * * * *.
+
+Create the cron job in the cluster
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: cleanup-cronjob
+spec:
+  schedule: "*/1 * * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: data-cleanup
+            image: linuxacademycontent/data-cleanup:1
+          restartPolicy: OnFailure
+
+Allow the cron job to run successfully
+kubectl get cronjob cleanup-cronjob
+
+Services
+Deployments make it easy to create a set of replica pods that can be dynamically scaled, updated, and replaced.
+However, providing network access to those pods for other components is difficult.
+Services provide a layer of abstraction that solves this problem. Clients can simply access the service,
+which dynamically proxies traffic to the current set of replicas. In this lesson, we will discuss services and
+demonstrate how to create one that exposes a deployment's replica pods.
+
+Services create an abstraction layer which provides network access to a dynamic set of pods.
+Network Traffic -> Service -> Pod
+
+Most services use a selector to determine which pods will receive traffic through the service.
+As pods included in the service are created and removed dynamically, clients can receive uninterrupted access
+by using the service.
+
+Services are Kube objects, which means that they can be created using yaml descriptors.
+
+Relevant Documentation
+https://kubernetes.io/docs/concepts/services-networking/service/
+https://kubernetes.io/docs/tutorials/kubernetes-basics/expose/expose-intro/
+
+Lesson Reference
+Create a deployment:
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-deployment
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.7.9
+        ports:
+        - containerPort: 80
+
+Expose the deployment's replica pods with a service:
+type - specifies the service type
+selector - service that will forward traffic to any pods with the label app=nginx
+port - specifies the port the service will listen on, and which one clients will use to access it.
+targetPort - specifies the port that traffic will be forwarded to on the pods. if the port and targetPort
+are the same, it's safe to omit the targetPort.
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-service
+spec:
+  type: ClusterIP
+  selector:
+    app: nginx
+  ports:
+  - protocol: TCP
+    port: 8080
+    targetPort: 80
+
+You can get more information about the service with these commands:
+kubectl get svc
+kubectl get endpoints my-service
+
+There are four service types in Kubernetes:
+ClusterIP - The service is exposed within the cluster using an interal IP address.
+The service is also accessible using the cluster DNS
+
+NodePort - The service is exposed externally via a port which listens on
+each node in the cluster.
+
+LoadBalancer - This only works if your cluster is set up to work with a cloud provider.
+The service is exposed through a load balancer that is created on the cloud platform.
+
+ExternalName - This maps the service to an external address. It is used to allow
+resources within the cluster to access things outside the cluster through a service.
+This only sets up a DNS mapping, it does not proxy traffic.
+
+NetworkPolicies
+From a security perspective, it is often a good idea to place network-level restrictions on any
+communication between different parts of your infrastructure. NetworkPolicies allow you to restrict
+and control the network traffic going to and from your pods. In this lesson, we will discuss NetworkPolicies and demonstrate how to create a simple policy to restrict access to a pod.
+
+By default, all pods in the cluster can communicate with any other pod, and
+reach out to any available IP.
+
+NetworkPolicies allow you to limit what network traffic is allowed to and from
+pods in your cluster
+
+Relevant Documentation
+https://kubernetes.io/docs/concepts/services-networking/network-policies/
+
+Lesson Reference
+In order to use NetworkPolicies in the cluster, we need to have a network plugin that supports them. We can accomplish this alongside an existing flannel setup using canal:
+wget -O canal.yaml https://docs.projectcalico.org/v3.5/getting-started/kubernetes/installation/hosted/canal/canal.yaml
+
+kubectl apply -f canal.yaml
+
+Create a sample nginx pod:
+apiVersion: v1
+kind: Pod
+metadata:
+  name: network-policy-secure-pod
+  labels:
+    app: secure-app
+spec:
+  containers:
+  - name: nginx
+    image: nginx
+    ports:
+    - containerPort: 80
+
+Create a client pod which can be used to test network access to the Nginx pod:
+apiVersion: v1
+kind: Pod
+metadata:
+  name: network-policy-client-pod
+spec:
+  containers:
+  - name: busybox
+    image: radial/busyboxplus:curl
+    command: ["/bin/sh", "-c", "while true; do sleep 3600; done"]
+
+Use this command to get the cluster IP address of the Nginx pod:
+kubectl get pod network-policy-secure-pod -o wide
+
+Use the secure pod's IP address to test network access from the client pod to the secure Nginx pod:
+kubectl exec network-policy-client-pod -- curl <secure pod cluster ip address>
+
+Create a network policy that restricts all access to the secure pod, except to and from pods which bear the allow-access: "true" label:
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: my-network-policy
+spec:
+  podSelector:
+    matchLabels:
+      app: secure-app
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          allow-access: "true"
+    ports:
+    - protocol: TCP
+      port: 80
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          allow-access: "true"
+    ports:
+    - protocol: TCP
+      port: 80
+
+podSelector - determines which pods the networkPolicy applies to
+policyTypes - sets whether the policy governs incoming traffic(ingress),
+  outgoing traffic(egress), or both
+ingress - rules for incoming traffic
+egress - rules for outgoing traffic
+rules - both ingress and egress rules are whitelist-based, meaning that
+any traffic that doesn't match at least one rule will be blocked
+ports - specifies the protocols and ports that match the rule
+from/to selectors - specifies the sources and destinations of network
+traffic that matches the rule
+
+Get information about NetworkPolicies in the cluster:
+kubectl get networkpolicies
+kubectl describe networkpolicy my-network-policy
+
+From/To selectors are used to specify which traffic sources and destinations are allowed by the rule.
+There are multiple types of selectors:
+podSelector - matches traffic from/to pods which match the selector
+namespaceSelector - matches traffic from/to pods within namespaces which match the selector.
+  Note that when podSelector and namespaceSelector are both present, the matching pods must also be
+  within a matching namespace
+ipBlock - specifies a cidr range of IPs that will match the rule. This is mostly used for traffic from/to
+outside the cluster. You can also specify exceptions to the range using except.
+
+Hands-On Lab
+Exposing Services in Kubernetes
+
+Your company has just deployed two components of a web application to a Kubernetes cluster,
+using deployments with multiple replicas. They need a way to provide dynamic network access
+to these replicas so that there will be uninterrupted access to the components whenever replicas
+are created, removed, and replaced. One deployment is called auth-deployment, an authentication
+provider that needs to be accessible from outside the cluster. The other is called data-deployment,
+and it is a component designed to be accessed only by other pods within the cluster.
+
+The team wants you to create two services to expose these two components. Examine the two deployments, and create two services that meet the following criteria:
+
+auth-svc
+The service name is auth-svc.
+The service exposes the pod replicas managed by the deployment named auth-deployment.
+The service listens on port 8080 and its targetPort matches the port exposed by the pods.
+The service type is NodePort.
+data-svc
+The service name is data-svc.
+The service exposes the pod replicas managed by the deployment named data-deployment.
+The service listens on port 8080 and its targetPort matches the port exposed by the pods.
+The service type is ClusterIP.
+Note: All work should be done in the default namespace.
+
+Create the `auth-svc` service
+keyboard_arrow_up
+Examine the auth-deployment. Take note of the labels specified in the pod template, as well as the containerPort exposed by the containers.
+
+kubectl get deployment auth-deployment -o yaml
+Create a service descriptor file called auth-svc.yml.
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-svc
+spec:
+  type: NodePort
+  selector:
+    app: auth
+  ports:
+  - protocol: TCP
+    port: 8080
+    targetPort: 80
+
+Create the service in the cluster.
+kubectl apply -f auth-svc.yml
+
+Create the `data-svc` service
+Examine the data-deployment. Take note of the labels specified in the pod template, as well as the containerPort exposed by the containers.
+kubectl get deployment data-deployment -o yaml
+
+Create a service descriptor file called data-svc.yml.
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: data-svc
+spec:
+  type: ClusterIP
+  selector:
+    app: data
+  ports:
+  - protocol: TCP
+    port: 8080
+    targetPort: 80
+Create the service in the cluster.
+
+kubectl apply -f data-svc.yml
+
+Hands-On Lab
+Working with Kubernetes NetworkPolicies
+Your company has a set of services, one called inventory-svc and another called customer-data-svc.
+In the interest of security, both of these services and their corresponding pods have NetworkPolicies
+designed to restrict network communication to and from them. A new pod has just been deployed to the
+cluster called web-gateway, and this pod need to be able to access both inventory-svc and customer-data-svc.
+
+Unfortunately, whoever designed the services and their corresponding NetworkPolicies was a little lax
+in creating documentation. On top of that, they are not currently available to help you understand how
+to provide access to the services for the new pod.
+
+Examine the existing NetworkPolicies and determine how to alter the web-gateway pod so that it can
+access the pods associated with both services.
+
+You will not need to add, delete, or edit any NetworkPolicies in order to do this. Simply use the
+existing ones and modify the web-gateway pod to provide access. All work can be done in the default namespace.
+
+apiVersion: extensions/v1beta1
+kind: NetworkPolicy
+metadata:
+  annotations:
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"networking.k8s.io/v1","kind":"NetworkPolicy","metadata":{"annotations":{},"name":"customer-data-policy","namespace":"default"},"spec":{"egress":[{"ports":[{"port":80,"protocol":"TCP"}],"to":[{"podSelector":{"matchLabels":{"customer-data-access":"true"}}}]}],"ingress":[{"from":[{"podSelector":{"matchLabels":{"customer-data-access":"true"}}}],"ports":[{"port":80,"protocol":"TCP"}]}],"podSelector":{"matchLabels":{"app":"customer-data"}},"policyTypes":["Ingress","Egress"]}}
+  creationTimestamp: null
+  generation: 1
+  name: customer-data-policy
+  selfLink: /apis/extensions/v1beta1/namespaces/default/networkpolicies/customer-data-policy
+spec:
+  egress:
+  - ports:
+    - port: 80
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          customer-data-access: "true"
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          customer-data-access: "true"
+    ports:
+    - port: 80
+      protocol: TCP
+  podSelector:
+    matchLabels:
+      app: customer-data
+  policyTypes:
+  - Ingress
+  - Egress
+
+
+cloud_user@ip-10-0-1-101:~$ kubectl get networkPolicy/inventory-policy -o yaml
+apiVersion: extensions/v1beta1
+kind: NetworkPolicy
+metadata:
+  annotations:
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"networking.k8s.io/v1","kind":"NetworkPolicy","metadata":{"annotations":{},"name":"inventory-policy","namespace":"default"},"spec":{"egress":[{"ports":[{"port":80,"protocol":"TCP"}],"to":[{"podSelector":{"matchLabels":{"inventory-access":"true"}}}]}],"ingress":[{"from":[{"podSelector":{"matchLabels":{"inventory-access":"true"}}}],"ports":[{"port":80,"protocol":"TCP"}]}],"podSelector":{"matchLabels":{"app":"inventory"}},"policyTypes":["Ingress","Egress"]}}
+  creationTimestamp: "2019-06-21T18:25:29Z"
+  generation: 1
+  name: inventory-policy
+  namespace: default
+  resourceVersion: "743"
+  selfLink: /apis/extensions/v1beta1/namespaces/default/networkpolicies/inventory-policy
+  uid: f292f0e0-9451-11e9-9494-0a773889195c
+spec:
+  egress:
+  - ports:
+    - port: 80
+      protocol: TCP
+    to:
+    - podSelector:
+        matchLabels:
+          inventory-access: "true"
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          inventory-access: "true"
+    ports:
+    - port: 80
+      protocol: TCP
+  podSelector:
+    matchLabels:
+      app: inventory
+  policyTypes:
+  - Ingress
+  - Egress
+
+To fix the issue add the labels for the podSelector from each networkPolicy to the pod
+
+Provide the `web-gateway` Pod with Network Access to the Pods Associated with the `inventory-svc` Service
+keyboard_arrow_up
+First, get a list of existing NetworkPolicies:
+
+kubectl get networkpolicy
+Examine inventory-policy more closely:
+
+kubectl describe networkpolicy inventory-policy
+Note that the policy selects pods with the label app: inventory, and provides incoming and outgoing network access to all pods with the label inventory-access: true.
+
+Modify the web-gateway pod with kubectl edit pod web-gateway.
+
+Add the inventory-access: "true" label to the pod under metdadata.labels.
+...
+metdadata:
+  labels:
+    inventory-access: "true"
+...
+Test access to the inventory-svc like so:
+
+kubectl exec web-gateway -- curl -m 3 inventory-svc
+
+Provide the `web-gateway` Pod with Network Access to the Pods Associated with the `customer-data-svc` Service
+keyboard_arrow_up
+Examine customer-data-policy more closely:
+
+kubectl describe networkpolicy customer-data-policy
+Note that the policy selects pods with the label app: customer-data, and provides incoming and outgoing network access to all pods with the label customer-data-access: true.
+
+Modify the web-gateway pod with kubectl edit pod web-gateway.
+
+Add the customer-data-access: "true" label to the pod under metdadata.labels:
+
+...
+metdadata:
+  labels:
+    inventory-access: "true"
+    customer-data-access: "true"
+...
+Test access to the customer-data-svc like so:
+
+kubectl exec web-gateway -- curl -m 3 customer-data-svc
+
+Volumes
+Container storage is designed to be as temporary as the containers themselves.
+However, sometimes we need storage that is able to survive beyond the short life of a container.
+Kubernetes volumes allow us to mount storage to a container that isn't in the container itself.
+In this lesson, we will discuss volumes and demonstrate how to mount a simple volume to a container in a pod.
+
+The internal storage of a container is ephemeral meaning that is is designed to be highly temporary.
+Volumes allow you to provide more permanent storage to a pod that exists beyond the life of a container.
+
+Relevant Documentation
+https://kubernetes.io/docs/concepts/storage/volumes/
+Lesson Reference
+This pod mounts a simple emptyDir volume, my-volume, to the container at the path /tmp/storage.
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: volume-pod
+spec:
+  containers:
+  - image: busybox
+    name: busybox
+    command: ["/bin/sh", "-c", "while true; do sleep 3600; done"]
+    volumeMounts:
+    - mountPath: /tmp/storage
+      name: my-volume
+  volumes:
+  - name: my-volume
+    emptyDir: {}
+
+EmptyDir volumes create storage on a node when the pod is assigned to the node.
+The storage disappears when the pod leaves the node.
+
+PersistentVolumes and PersistentVolumeClaims
+PersistentVolumes (PVs) and PersistentVolumeClaims (PVCs) provide a way to easily consume storage resources,
+especially in the context of a complex production environment that uses multiple storage solutions.
+In this lesson, we will talk about implementing persistent storage using PersistentVolumes and
+PersistentVolumeClaims, and we will demonstrate how to set up a PV and PVC to consume storage resources in a pod.
+
+Kubernetes is designed to manage stateless containers. Pods and containers can be easily deleted and/or replaced.
+When a container is removed, data stored inside the container's internal disk is lost.
+
+State persistence refers to maintaining data outside and potentially beyond the life of a container.
+
+This usually means storing data in some kind of persistent data store that can be accessed by containers.
+
+Kubernetes allows us to implement persistent storage using PersistentVolumes and PersistentVolumeClaims.
+
+PersistentVolumen or PV - represents a storage resource
+
+PersistentVolumeClaim or PVC - abstraction layer between user(pod) and the PV.
+
+PVCs will automatically bind themselves to a PV that has compatible StorageClass and accessModes.
+
+Relevant Documentation
+https://kubernetes.io/docs/concepts/storage/persistent-volumes/
+https://kubernetes.io/docs/tasks/configure-pod-container/configure-persistent-volume-storage/
+
+Lesson Reference
+Create the PersistentVolume:
+
+kind: PersistentVolume
+apiVersion: v1
+metadata:
+  name: my-pv
+spec:
+  storageClassName: local-storage
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: "/mnt/data"
+
+storageClassName - defines different categories of storage
+capacity - storage amount for the PV
+accessModes - determines what read/write modes can be used to mount the volume
+hostPath - uses the node's local filesystem for storage
+
+Create the PersistentVolumeClaim:
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: my-pvc
+spec:
+  storageClassName: local-storage
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 512Mi
+
+storageClassName - defines what storageCLass to use
+resources.requests.storage - defines how much storage the claim needs
+
+We can use kubectl to check the status of existing PVs and PVCs:
+kubectl get pv
+kubectl get pvc
+
+Create a pod to consume storage resources using a PVC:
+kind: Pod
+apiVersion: v1
+metadata:
+  name: my-pvc-pod
+spec:
+  containers:
+  - name: busybox
+    image: busybox
+    command: ["/bin/sh", "-c", "while true; do sleep 3600; done"]
+    volumeMounts:
+    - mountPath: "/mnt/storage"
+      name: my-storage
+  volumes:
+  - name: my-storage
+    persistentVolumeClaim:
+      claimName: my-pvc
+
+Hands-On Lab
+Implement State Persistence for Kubernetes Pods
+Your company needs a small database server to support a new application.
+They have asked you to deploy a pod running a MySQL container, but they want
+the data to persist even if the pod is deleted or replaced. Therefore,
+the MySQL database pod requires persistent storage.
+
+You will need to do the following:
+
+Create a PersistentVolume:
+The PersistentVolume should be named mysql-pv.
+The volume needs a capacity of 1Gi.
+Use a storageClassName of localdisk.
+Use the accessMode ReadWriteOnce.
+Store the data locally on the node using a hostPath volume at the location /mnt/data.
+Create a PersistentVolumeClaim:
+The PersistentVolumeClaim should be named mysql-pv-claim.
+Set a resource request on the claim for 500Mi of storage.
+Use the same storageClassName and accessModes as the PersistentVolume so that this claim can bind to the PersistentVolume.
+Create a MySQL Pod configured to use the PersistentVolumeClaim:
+The Pod should be named mysql-pod.
+Use the image mysql:5.6.
+Expose the containerPort 3306.
+Set an environment variable called MYSQL_ROOT_PASSWORD with the value password.
+Add the PersistentVolumeClaim as a volume and mount it to the container at the path /var/lib/mysql.
+
+Create a PersistentVolume
+keyboard_arrow_up
+Create a descriptor file with vi mysql-pv.yml:
+
+kind: PersistentVolume
+apiVersion: v1
+metadata:
+  name: mysql-pv
+spec:
+  storageClassName: localdisk
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: "/mnt/data"
+Create the PersistentVolume.
+
+kubectl apply -f mysql-pv.yml
+
+Create a PersistentVolumeClaim
+keyboard_arrow_up
+Create a descriptor file with vi mysql-pv-claim.yml:
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mysql-pv-claim
+spec:
+  storageClassName: localdisk
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 500Mi
+Create the PersistentVolumeClaim:
+
+kubectl apply -f mysql-pv-claim.yml
+
+Create a MySQL Pod configured to use the PersistentVolumeClaim
+keyboard_arrow_up
+Create a descriptor file with vi mysql-pod.yml:
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: mysql-pod
+spec:
+  containers:
+  - name: mysql
+    image: mysql:5.6
+    ports:
+    - containerPort: 3306
+    env:
+    - name: MYSQL_ROOT_PASSWORD
+      value: password
+    volumeMounts:
+    - name: mysql-storage
+      mountPath: /var/lib/mysql
+  volumes:
+  - name: mysql-storage
+    persistentVolumeClaim:
+      claimName: mysql-pv-claim
+Create the Pod:
+
+kubectl apply -f mysql-pod.yml
+
+Check the status of the pod with kubectl get pod mysql-pod. After a few moments it should be in the RUNNING status.
+
+You can also verify that the pod is interacting with the filesystem at /mnt/data on the node.
+Log in to the node from the Kube master like this, using the same as the password for the kube master:
+
+ssh cloud_user@10.0.1.102
+Check the contents of the PersistentVolume directory:
+
+ls /mnt/data
+You should see files and directories there related to MySQL.
+These were created by the pod, meaning that your PersistentVolume
+and PersistentVolumeClaim are working!
+
+CKAD Practice Exam - Part 1
+Our pizza restaurant is working on a new web application designed to run in a Kubernetes cluster.
+The development team has designed a web service which serves a list of pizza toppings.
+The team has provided a set of specifications which the pizza topping web service needs in order to run.
+
+We have been asked to create a deployment that meets the app's specifications.
+Then, we need to expose the application using a NodePort service.
+This setup should meet the following criteria:
+
+All objects should be in the pizza namespace. This namespace already exists in the cluster.
+The deployment should be named pizza-deployment.
+The deployment should have 3 replicas.
+The deployment's pods should have one container using the linuxacademycontent/pizza-service image with the tag 1.14.6.
+Run the container with the command nginx.
+Run the container with the arguments "-g", "daemon off;".
+The pods should expose port 80 to the cluster.
+The pods should be configured to periodically check the /healthz endpoint on port 8081, and restart automatically if the request fails.
+The pods should not receive traffic from the service until the / endpoint on port 80 responds successfully.
+The service should be named pizza-service.
+The service should forward traffic to port 80 on the pods.
+The service should be exposed externally by listening on port 30080 on each node.
+
+Build the deployment and create it in the cluster
+Build a deployment descriptor called pizza-deployment.yml:
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pizza-deployment
+  namespace: pizza
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: pizza
+  template:
+    metadata:
+      labels:
+        app: pizza
+    spec:
+      containers:
+      - name: pizza
+        image: linuxacademycontent/pizza-service:1.14.6
+        command: ["nginx"]
+        args: ["-g", "daemon off;"]
+        ports:
+        - containerPort: 80
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8081
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 80
+
+Create the deployment in the cluster:
+kubectl apply -f pizza-deployment.yml
+
+Build the service and create it in the cluster
+
+Build a service descriptor called pizza-service.yml:
+apiVersion: v1
+kind: Service
+metadata:
+  name: pizza-service
+  namespace: pizza
+spec:
+  type: NodePort
+  selector:
+    app: pizza
+  ports:
+  - protocol: TCP
+    port: 80
+    nodePort: 30080
+
+Create the service in the cluster:
+kubectl apply -f pizza-service.yml
+
+You can verify the service is working by testing the nodePort with curl:
+curl localhost:30080
+
+CKAD Practice Exam - Part 2
+Our team has a pod which generates some log output. However, they want to consume the
+data using an external application, which requires the data to be in a specific format.
+Our task is to create a pod design that utilizes an adapter running fluentd to format
+the output from the main container.
+
+Create the pod descriptor in /usr/ckad/adapter-pod.yml. An empty file has already been created for us.
+The pod should be named counter.
+Add a container to the pod that runs the busybox image, and name it count.
+Run the count container with the following arguments:
+
+- /bin/sh
+- -c
+- >
+  i=0;
+  while true;
+  do
+    echo "$i: $(date)" >> /var/log/1.log;
+    echo "$(date) INFO $i" >> /var/log/2.log;
+    i=$((i+1));
+    sleep 1;
+  done
+
+Add another container called adapter to the pod, and make it run the k8s.gcr.io/fluentd-gcp:1.30 image.
+
+There is a fluentd configuration located on the server at /usr/ckad/fluent.conf. Load the data from this
+file into a ConfigMap called fluentd-config. Mount this ConfigMap to the adapter container so that the
+config data is located inside the container in a file at /fluentd/etc/fluent.conf.
+
+Add an environment variable to the adapter container called FLUENTD_ARGS with the value -c /fluentd/etc/fluent.conf.
+
+Create a volume for the pod in such a way that the storage will be deleted if the pod is removed from a node.
+
+Mount this volume to both containers at /var/log. The count container will output log data to this volume,
+and the adapter container will read the data from the same volume.
+
+Create a hostPath volume where the adapter container will output the formatted log data.
+Store the data at the /usr/ckad/log_output path. Mount the volume to the adapter container at /var/logout.
+
+Create a ConfigMap to store the fluentd configuration
+Switch to root so that you can read the config file:
+sudo -i
+
+Get the contents of the config file:
+cat /usr/ckad/fluent.conf
+
+Create a descriptor for the ConfigMap with vi fluentd-config.yml:
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fluentd-config
+data:
+  fluent.conf: |
+    <source>
+      type tail
+      format none
+      path /var/log/1.log
+      pos_file /var/log/1.log.pos
+      tag count.format1
+    </source>
+
+    <source>
+      type tail
+      format none
+      path /var/log/2.log
+      pos_file /var/log/2.log.pos
+      tag count.format2
+    </source>
+
+    <match **>
+      @type file
+      path /var/logout/count
+      time_slice_format %Y%m%d%H%M%S
+      flush_interval 5s
+      log_level trace
+    </match>
+
+Create the ConfigMap in the cluster:
+kubectl apply -f fluentd-config.yml
+
+Create the pod descriptor
+keyboard_arrow_up
+Switch to root so that you can work with the descriptor file:
+
+sudo -i
+Edit the descriptor file with vi /usr/ckad/adapter-pod.yml:
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: counter
+spec:
+  containers:
+  - name: count
+    image: busybox
+    args:
+    - /bin/sh
+    - -c
+    - >
+      i=0;
+      while true;
+      do
+        echo "$i: $(date)" >> /var/log/1.log;
+        echo "$(date) INFO $i" >> /var/log/2.log;
+        i=$((i+1));
+        sleep 1;
+      done
+    volumeMounts:
+    - name: varlog
+      mountPath: /var/log
+  - name: adapter
+    image: k8s.gcr.io/fluentd-gcp:1.30
+    env:
+    - name: FLUENTD_ARGS
+      value: -c /fluentd/etc/fluent.conf
+    volumeMounts:
+    - name: varlog
+      mountPath: /var/log
+    - name: config-volume
+      mountPath: /fluentd/etc
+    - name: logout
+      mountPath: /var/logout
+  volumes:
+  - name: varlog
+    emptyDir: {}
+  - name: config-volume
+    configMap:
+      name: fluentd-config
+  - name: logout
+    hostPath:
+      path: /usr/ckad/log_output
+
+Create the Pod in the cluster and make sure it is working
+Create the pod:
+kubectl apply -f /usr/ckad/adapter-pod.yml
+
+Verify that the pod starts up:
+kubectl get pod counter
+
+You can also verify that everything is working by checking the output directory on the worker node. Log in to the worker from the master:
+ssh cloud_user@<IP ADDRESS>
+
+Look for the fluentd output files in the output directory:
+ls /usr/ckad/log_output
+
+You can set up kubectl autocomplete like so:
+source <(kubectl completion bash)
+echo "source <(kubectl completion bash)" >> ~/.bashrc
+
+CKAD Practice Exam - Part 3
+Our company has a Kubernetes cluster that is running several pods and services.
+A service called oauth-provider in the gem namespace has stopped working.
+Our task is to investigate the service and determine what is causing the problem,
+save some relevant data for future analysis, and then fix the problem.
+
+The broken service is oauth-provider. It is located in the gem namespace.
+Identify which Kubernetes object is broken and causing the service to fail.
+Save the name of the object in the file /usr/ckad/broken-object-name.txt.
+Save the object's summary data in JSON format to the file /usr/ckad/broken-object.json.
+Edit the object to fix the problem.
+The oauth-provider service is a NodePort service listening on port 30080, so we can test it using curl localhost:30080.
+Note that there may be other objects in the cluster which appear to be broken.
+Our task is to identify what specifically is causing the oauth-provider service to fail.
+Ignore any object which doesn't affect the oauth-provider service.
+
+Identify the broken object and save its name and summary data
+Become the root user so that we can write to the file:
+sudo -i
+
+Describe the broken service:
+kubectl describe service oauth-provider -n gem
+Note that the service's selector selects pods with the label role: oauth.
+
+Get a list of pods with labels in order to locate the pod(s) selected by the service:
+kubectl get pods --all-namespaces --show-labels
+
+Note that the pod called bowline has the role: oauth label.
+Save the name of the broken pod:
+vi /usr/ckad/broken-object-name.txt
+Put the word bowline in there.
+
+Save the JSON summary data for the broken pod to the specified file:
+kubectl get pod bowline -n gem -o json > /usr/ckad/broken-object.json
+
+Fix the problem
+Examine the broken pod more closely:
+kubectl describe pod bowline -n gem
+
+Based on the event log and pod status, it appears something may be wrong with the pod image.
+Look at the pod's container image, which appears to be misspelled. Edit the pod:
+kubectl edit pod bowline -n gem
+
+Fix the image name by changing it to nginx:1.15.9.
+
+Verify that the pod is now working:
+kubectl get pod bowline -n gem
+
+Test the broken service to make sure it is working:
+curl localhost:30080
+
