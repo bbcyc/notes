@@ -2042,7 +2042,86 @@ Use nginx:latest for the image.
 Click map additional ports and map port 8081 to 80 on the container.
 Click the Deploy container button.
 
------------
+Hands-On Lab: Using Watchtower to Keep Containers up to Date
+In this lab, we will be using Watchtower to monitor containers for updates. In order to complete this learning activity, we will need a Docker Hub account.
+
+In the home directory of cloud_user we will find the lab directory. Change to that directory.
+
+Create the Dockerfile
+The base image should be node.
+Using the RUN instruction, make a directory called /var/node.
+Use the ADD instruction to add the contents of the src directory into /var/node.
+Make /var/node the working directory.
+Execute an npm install.
+Set ./bin/www as the command.
+From the command line, log in to Docker Hub.
+Build the image using <USERNAME>/lab-watchtower.
+Push the image to Docker Hub.
+Create the demo-app
+Create a Docker container called demo-app.
+The port mapping should be port 80 on the host, mapping to 3000 on the container.
+The restart policy should be set to always.
+Use the image that we created, <USERNAME>/lab-express.
+Create the Watchtower container
+Create a Docker container called watchtower.
+The restart policy should be set to always.
+Use the -v flag to set /var/run/docker.sock:/var/run/docker.sock.
+Use the v2tec/watchtower followed by the -i flag, to set the iteration to 30 seconds.
+Update the Docker image
+After creating /var/node, add an instruction to create /var/test. 1.Rebuild the image.
+Push the image to Docker Hub.
+Watchtower will update demo-app
+The Watchtower interval is set to 15 seconds.
+After about 15 seconds, check to see if the container has been updated by executing docker ps.
+
+
+Create the Dockerfile
+Create a Dockerfile:
+[cloud_user@host]$ vi Dockerfile
+
+The Dockerfile should contain the following:
+FROM node
+RUN mkdir -p /var/node
+ADD src/ /var/node/
+WORKDIR /var/node
+RUN npm install
+EXPOSE 3000
+CMD ./bin/www
+
+Build the Docker Image
+Build the Docker image:
+[cloud_user@host]$ docker image build -t USERNAME/lab-watchtower -f Dockerfile .
+
+Push the Image to Docker Hub
+Login to Docker Hub:
+docker login
+
+Push the image to Docker Hub:
+docker image push USERNAME/lab-watchtower
+
+Create a Demo Container
+Create the container that Watchtower will monitor:
+[cloud_user@host]$ docker container run -d --name demo-app -p 80:3000 --restart always USERNAME/lab-watchtower
+
+Create the Watchtower Container
+Create the Watchtower container that will monitor the demo-app container:
+[cloud_user@host]$ docker run -d --name watchtower --restart always -v /var/run/docker.sock:/var/run/docker.sock v2tec/watchtower -i 30
+
+Update the Docker Image
+After creating /var/node, add an instruction to create /var/test.
+
+Update the Docker image:
+[cloud_user@host]$ vi Dockerfile
+
+Add change to Dockerfile:
+RUN mkdir -p /var/test
+
+Rebuild the image:
+[cloud_user@host]$ docker build -t USERNAME/lab-watchtower -f Dockerfile .
+
+Push the new image:
+[cloud_user@host]$ docker image push USERNAME/lab-watchtower
+
 
 Docker Compose
 Installing Docker Compose
@@ -2233,4 +2312,1020 @@ docker network ls
 
 Docker Compose Documentation https://docs.docker.com/compose/compose-file/
 
+Hands-On Lab: Building a Microservice with Docker Compose
+In the lab directory you will find two directories. The nginx directory has Dockerfie and nginx.conf file. Nginx will be used to load balance the weather-app. The weather-app directory has the Dockerfile and source code.
 
+In the lab directory, create a docker compose file.
+
+Setting up the weather-app
+Make sure the version you are using is 3
+Create three weather-app services: weather-app1, weather-app2, weather-app3.
+Each one should build an image that is located in the weather-app directory.
+It will take one argument VERSION and set it to v2.0.
+For weather-app1 publish port 8080 to 3000 on the container.
+For weather-app2 publish port 8081 to 3000 on the container.
+For weather-app3 publish port 8082 to 3000 on the container.
+All three weather-app containers will be on the weather_app network which is internal.
+The NODE_ENV environment variable will be set to production.
+
+Setting up Nginx
+Create a service called nginx.
+Update upstream localhost in nginx.conf to include the three containers with their private port.
+Example: server [APP-NAME]:[PORT]
+Build an image using the Dockerfile in the nginx directory.
+Set tty to true.
+Publish port 80 to port 80 on the container.
+The nginx container will be on two networks: frontend and weather_app.
+
+Setting up the Networks:
+Create a public network called frontend.
+Create an internal network called weather_app.
+
+Deploy the services:
+Bring up the services. Test to make sure that everything is working by curling localhost.
+
+Create the compose file
+keyboard_arrow_up
+Create docker-compose.yml:
+
+vi docker-compose.yml
+docker-compose.yml
+
+version: '3'
+services:
+  weather-app1:
+    build:
+      context: ./weather-app
+      args:
+        - VERSION=v2.0
+    ports:
+      - "8080:3000"
+    networks:
+     - weather_app
+    environment:
+      - NODE_ENV=production
+  weather-app2:
+    build:
+      context: ./weather-app
+      args:
+        - VERSION=v2.0
+    ports:
+      - "8081:3000"
+    networks:
+     - weather_app
+    environment:
+      - NODE_ENV=production
+  weather-app3:
+    build:
+      context: ./weather-app
+      args:
+        - VERSION=v2.0
+    ports:
+      - "8082:3000"
+    networks:
+     - weather_app
+    environment:
+      - NODE_ENV=production
+  nginx:
+      build: ./nginx
+      tty: true
+      ports:
+       - '80:80'
+      networks:
+       - frontend
+       - weather_app
+
+networks:
+  frontend:
+  weather_app:
+    internal: true
+
+Add the services to nginx.conf
+Update nginx/nginx.conf:
+vi nginx/nginx.conf
+nginx.conf:
+events { worker_connections 1024; }
+
+http {
+  upstream localhost {
+    server weather-app1:3000;
+    server weather-app2:3000;
+    server weather-app3:3000;
+  }
+  server {
+    listen 80;
+    server_name localhost;
+    location / {
+      proxy_pass http://localhost;
+      proxy_set_header Host $host;
+    }
+  }
+}
+
+Create the Docker Compose service
+
+Create the compose service:
+docker-compose up -d
+
+Introduction to Docker Swarm
+In this lesson, we'll look at the highlights of Docker Swarm before we start working with it.
+
+Swarm 101
+Swarm has two major components:
+An enterprise grade secure cluster:
+
+Manage one or more Docker nodes as a cluster
+Encrypted distributed cluster store
+Encrypted networks
+Secure join tokens
+An orchestration engine for creating mircoservices:
+
+API for deploying and managing microservices
+Declarative manifest files for defining apps
+Provides availability to scale apps, and perform rolling updates and rollbacks
+Swarm was initially a separate product layered on Docker, since Docker 1.12 it has become a part of the engine.
+
+The Cluster
+A swarm consists of one or more Docker nodes.
+Nodes are either a managers or a worker.
+Managers:
+Manage the state of the cluster
+Dispatch tasks to workers
+Workers:
+Accepts and execute tasks
+State is held in etcd
+Swarm uses Transport Layer Security (TLS):
+Encrypted communication
+Authenticated nodes
+Authorized roles
+Orchestration
+The atomic unit of scheduling is a swarm service.
+The service construct adds the following to a container:
+scaling
+rolling updates
+rollback
+updates
+A container wrapped in a service is a task or a replica.
+
+Running Docker in Swarm Mode
+In this lesson, we will create two new docker servers. These servers will be used in a swarm configuration. 
+Then we will initialize the swarm manager and have the two new nodes join the swarm.
+
+Install the Swarm Worker Node
+Now create two new servers in Cloud Playground that will be used as worker nodes.
+
+Prerequisites
+Uninstall old versions:
+sudo yum remove -y docker \
+                  docker-client \
+                  docker-client-latest \
+                  docker-common \
+                  docker-latest \
+                  docker-latest-logrotate \
+                  docker-logrotate \
+                  docker-engine
+
+Install Docker CE
+Add the Docker repository:
+sudo yum install -y yum-utils \
+  device-mapper-persistent-data \
+  lvm2
+
+Set up the stable repository:
+sudo yum-config-manager \
+    --add-repo \
+    https://download.docker.com/linux/centos/docker-ce.repo
+
+Install Docker CE:
+sudo yum -y install docker-ce
+
+Enable and Start Docker:
+sudo systemctl start docker && sudo systemctl enable docker
+
+Add cloud_user to the docker group:
+sudo usermod -aG docker cloud_user
+
+Initialize the manager:
+docker swarm init \
+--advertise-addr [PRIVATE_IP]
+
+Add the worker to the cluster:
+docker swarm join --token [TOKEN] \
+[PRIVATE_IP]:2377
+
+List the nodes in the swarm:
+docker node ls
+
+Managing Swarm Nodes:
+In this lesson, we learn how to manage the nodes in the swarm.
+
+Docker node commands:
+demote: Demotes one or more nodes from manager in the swarm
+inspect: Displays detailed information on one or more nodes
+ls: Lists nodes in the swarm
+promote: Promotes one or more nodes to manager in the swarm
+ps: Lists tasks running on one or more nodes, defaults to current node
+rm: Removes one or more nodes from the swarm
+update: Updates a node
+
+Docker swarm commands:
+ca: Displays and rotate the root CA
+init: Initializes a swarm
+join: Joins a swarm as a node and/or manager
+join-token: Manages join tokens
+leave: Leaves the swarm
+unlock: Unlocks swarm
+unlock-key: Manages the unlock key
+update: Updates the swarm
+
+Managing swarm nodes:
+Listing nodes:
+docker node ls
+
+Inspecting a node:
+docker node inspect [NODE_NAME]
+
+Promoting a worker to a manager:
+docker node promote [NODE_NAME]
+
+Demoting a manager to a worker:
+docker node demote [NODE_NAME]
+
+Removing a node form the swarm (node must be demoted first):
+docker node rm -f [NODE_NAME]
+
+Make a node leave the swarm:
+docker swarm leave
+
+Getting the join-token:
+docker swarm join-token [worker|manager]
+
+Make the node rejoin the swarm:
+docker swarm join --token [TOKEN] \
+<PRIVATE_IP>:2377
+
+Working with Services
+In this lesson, we'll see how to create and manage a service running in Docker Swarm.
+
+Docker service commands:
+create: Creates a new service
+inspect: Displays detailed information on one or more services
+logs: Fetches the logs of a service or task
+ls: Lists services
+ps: Lists the tasks of one or more services
+rm: Removes one or more services
+rollback: Reverts changes to a service's configuration
+scale: Scales one or multiple replicated services
+update: Updates a service
+
+Creating a service:
+docker service create -d --name [NAME] \
+-p [HOST_PORT]:[CONTAINER_PORT] \
+--replicas [REPLICAS] \
+[IMAGE] [CMD]
+
+List services:
+docker service ls
+
+Inspecting a service:
+docker service inspect [NAME]
+
+Get logs for a service:
+docker service logs [NAME]
+
+List all tasks of a service:
+docker service ps [NAME]
+
+Scale a service up or down:
+docker service scale [NAME]=[REPLICAS]
+
+Update a service:
+docker service update [OPTIONS] [NAME]
+
+Create nginx_service:
+docker service create -d --name nginx_service -p 8080:80 --replicas 2 nginx:latest
+
+List the swarm services:
+docker service ls
+
+Inspect nginx_service:
+docker service inspect nginx_service
+
+Find the network:
+docker network ls --no-trunc | grep [NETOWRK_ID]
+
+View the running tasks for nginx_service:
+docker service ps nginx_service
+
+Scale nginx_service to 3 replicas:
+docker service scale nginx_service=3
+
+Using Networks in Swarm Mode
+In this lesson, we'll look more into overlay networks and how they are used with a swarm.
+
+Create a overlay network:
+docker network create -d overlay [NAME]
+
+Creating a service with an overlay network:
+docker service create -d --name [NAME] \
+--network [NETWORK] \
+-p [HOST_PORT]:[CONTAINER_PORT] \
+--replicas [REPLICAS] \
+[IMAGE] [CMD]
+
+Add a service to a network:
+docker service update --network-add [NETWORK] [SERVICE]
+
+Remove a service from a network:
+docker service update --network-rm [NETWORK] [SERVICE]
+
+Create a overlay network:
+docker network create -d overlay my_overlay
+
+Create an encrypted overlay network:
+docker network create -d overlay --opt encrypted encrypted_overlay
+
+Inspect encrypted_overlay:
+docker network inspect encrypted_overlay
+
+Inspect my_overlay:
+docker network inspect my_overlay
+
+Create a service using my_overlay:
+docker service create -d --name nginx_overlay  --network my_overlay -p 8081:80 --replicas 2 nginx:latest
+
+Adding the my_overlay network to nginx_service:
+docker service update --network-add my_overlay nginx_service
+
+Inspect nginx_service:
+docker service inspect nginx_service
+
+Removing the ingress network from nginx_service:
+docker service update --network-rm my_overlay nginx_service
+
+Inspect nginx_service:
+docker service inspect nginx_service
+
+Remove encrypted_overlay:
+docker network rm encrypted_overlay
+
+Using Volumes in Swarm Mode
+In this lesson we will start learning about plugins, and using volumes in swarm mode. 
+The local driver only creates a volume on the node that a command is executed on. 
+This requires using a third party driver that is specific to the environment.
+
+Add Plugins:
+docker plugin install [PLUGIN] [OPTIONS]
+
+List plugins:
+docker plugin ls
+
+Volume Plugins:
+Hedvig
+Pure Storage
+HPE Nimble Storage
+Nutanix DVP
+Blockbridge
+NexentaStor
+StorageOS
+Rex-Ray
+
+Install the Splunk plugin:
+docker plugin install store/splunk/docker-logging-plugin:2.0.0 --alias splunk-logging-plugin
+
+Disable a plugin:
+docker plugin disable [ID]
+
+Remove a plugin:
+docker plugin rm [ID]
+
+Digital Ocean example:
+docker plugin install rexray/dobs \
+DOBS_REGION=<DO_REGION> \
+DOBS_TOKEN=<DIGITAL_OCEAN_TOKEN> \
+DOBS_CONVERTUNDERSCORES=true
+
+Create a volume using a driver:
+docker volume create -d [DRIVER] [NAME]
+docker service create -d --name [NAME] \
+--mount type=[TYPE],src=[SOURCE],dst=[DESTINATION] \
+-p [HOST_PORT]:[CONTAINER_PORT] \
+--replicas [REPLICAS] \
+[IMAGE] [CMD]
+
+Create a volume on the manager:
+docker volume create -d local portainer_data
+
+Create a portainers service that uses a volume:
+docker service create \
+--name portainer \
+--publish 8000:9000 \
+--constraint 'node.role == manager' \
+--mount type=volume,src=portainer_data,dst=/data \
+--mount type=bind,src=/var/run/docker.sock,dst=/var/run/docker.sock \
+portainer/portainer \
+-H unix:///var/run/docker.sock
+
+Volume Drivers Rex-Ray Volume Driver https://rexray.readthedocs.io/en/stable/user-guide/schedulers/docker/plug-ins/
+
+Deploying Stacks in Docker Swarm
+In this lesson, we will learn how to deploy stacks to Docker Swarm using Docker Compose.
+
+Docker stack commands:
+deploy: Deploys a new stack or update an existing stack
+ls: Lists stacks
+ps: Lists the tasks in the stack
+rm: Removes one or more stacks
+services: Lists the services in the stack
+
+Setup environment:
+mkdir -p swarm/prometheus
+cd swarm/prometheus
+
+Create the prometheus.yml file:
+vi prometheus.yml
+
+prometheus.yml contents:
+global:
+  scrape_interval: 15s
+  scrape_timeout: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: prometheus
+    scrape_interval: 5s
+    static_configs:
+    - targets:
+      - prometheus_main:9090
+
+  - job_name: nodes
+    scrape_interval: 5s
+    static_configs:
+    - targets:
+      - [MANAGER]:9100
+      - [WORKER1]:9100
+      - [WORKER2]:9100
+
+  - job_name: cadvisor
+    scrape_interval: 5s
+    static_configs:
+    - targets:
+      - [MANAGER]:8081
+      - [WORKER1]:8081
+      - [WORKER2]:8081
+
+Create a compose file:
+vi docker-compose.yml
+
+docker-compose.yml contents:
+version: '3'
+services:
+  main:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - 8080:9090
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus/data
+    volumes:
+    - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    - data:/prometheus/data
+    depends_on:
+      - cadvisor
+      - node-exporter
+  cadvisor:
+    image: google/cadvisor:latest
+    container_name: cadvisor
+    deploy:
+      mode: global
+    restart: unless-stopped
+    ports:
+      - 8081:8080
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:rw
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: node-exporter
+    deploy:
+      mode: global
+    restart: unless-stopped
+    ports:
+      - 9100:9100
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - --collector.filesystem.ignored-mount-points
+      - "^/(sys|proc|dev|host|etc|rootfs/var/lib/docker/containers|rootfs/var/lib/docker/overlay2|rootfs/run/docker/netns|rootfs/var/lib/docker/aufs)($$|/)"
+  grafana:
+    image: grafana/grafana
+    container_name: grafana
+    ports:
+      - 8082:3000
+    volumes:
+    - grafana_data:/var/lib/grafana
+    - grafana_plugins:/var/lib/grafana/plugins
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=P4ssW0rd0!
+    depends_on:
+      - prometheus
+      - cadvisor
+      - node-exporter
+
+volumes:
+  data:
+  grafana_data:
+  grafana_plugins:
+
+Deploy the stack:
+docker stack deploy --compose-file docker-compose.yml prometheus
+
+List stacks:
+docker stack ls
+
+List services:
+docker service ls
+
+Fix volume permissions:
+sudo chown nfsnobody:nfsnobody -R /var/lib/docker/volumes/prometheus_data
+
+Hands-On Lab: Setting Up Docker Swarm
+Setting up the Swarm:
+Login to your Swarm manager and initialize the swarm. Use the advertise-addr flag and supply the private IP of the manager.
+
+Use the join command that gets generated, and have the worker node join the swarm.
+
+Test the swarm by listing the nodes.
+
+Create a Service:
+Create an Nginx service that runs in the background.
+Name it nginx_service.
+Publish port 8080 on the host to port 80 on the container.
+Make sure that the service has two replicas.
+Make sure to user the latest image of Nginx.
+
+Initialize the Swarm
+On the manager node, initialize the swarm:
+[cloud_user@manager]$ docker swarm init \
+--advertise-addr [MANAGER_PRIVATE_IP]
+
+Add the Worker to the Cluster
+Add the worker to the cluster:
+[cloud_user@worker]$ docker swarm join --token [TOKEN] \
+[MANAGER_PRIVATE_IP]:2377
+
+Create a Swarm Service
+Create nginx_service:
+[cloud_user@master]$ docker service create -d --name nginx_service -p 8080:80 --replicas 2 nginx:latest
+
+Hands-On Lab: Creating a Stack with Docker Compose
+Complete the Swarm Setup
+On the manager node, go and initialize the Swarm. Get the worker token and have the worker node join the swarm.
+
+Create a Compose File
+In the cloud_user directory of your lab server, create a docker-compose.yml file.
+The version of compose should be set to 3.
+Create two services: db and blog.
+
+DB Service
+The db service will use the mysql image tagged to 5.7.
+Create a volume called db_data and mount it in /var/lib/mysql.
+Make sure the service is attached to the mysql_internal network. Configure the following environment variables:
+
+Set MYSQL_ROOT_PASSWORD to P4ssw0rd0!
+Set MYSQL_DATABASE to wordpress
+Set MYSQL_USER to wordpress
+Set MYSQL_PASSWORD to P4ssw0rd0!
+Blog Service
+Make sure that the db service comes online first.
+Use the latest wordpress image.
+The service should be attached to the mysql_internal and wordpress_public networks.
+Publish port 80 on the host to port 80 on the container.
+Configure the following environment variables:
+
+Set WORDPRESS_DB_HOST to db:3306
+Set WORDPRESS_DB to wordpress
+Set WORDPRESS_DB_USER to wordpress
+Set WORDPRESS_DB_PASSWORD to P4ssw0rd0!
+Volumes
+Create the db_data volume.
+
+Networks
+Configure mysql_internal to be an internal network.
+The wordpress_public network will be public.
+
+Deploy and Test the Stack
+Deploy the stack using the docker-compose.yml file. The stack will be called wp. When the stack comes online, 
+open a browser and access the Wordpress blog using the public IP of the manager. Complete the setup of Wordpress.
+
+Complete the Swarm Setup
+Get a join token:
+[cloud_user@manager]$ docker swarm join-token worker
+Add a worker node to the swarm:
+[cloud_user@worker]$ docker swarm join --token [TOKEN] [MANAGER_PRIVATE_IP]:2377
+
+Create the Compose File
+Create the compose file:
+[cloud_user@manager]$ vi docker-compose.yml
+docker-compose.yml:
+version: '3'
+
+services:
+   db:
+     image: mysql:5.7
+     volumes:
+       - db_data:/var/lib/mysql
+     networks:
+       mysql_internal:
+         aliases: ["db"]
+     environment:
+       MYSQL_ROOT_PASSWORD: P4ssw0rd0!
+       MYSQL_DATABASE: wordpress
+       MYSQL_USER: wordpress
+       MYSQL_PASSWORD: P4ssw0rd0!
+
+   blog:
+     depends_on:
+       - db
+     image: wordpress:latest
+     networks:
+       mysql_internal:
+       wordpress_public:
+     ports:
+       - "80:80"
+     environment:
+       WORDPRESS_DB_HOST: db:3306
+       WORDPRESS_DB_USER: wordpress
+       WORDPRESS_DB_PASSWORD: P4ssw0rd0!
+
+volumes:
+    db_data:
+networks:
+  mysql_internal:
+    internal: true
+  wordpress_public:
+
+Create the Wordpress Blog
+Deploy the stack:
+docker stack deploy --compose-file docker-compose.yml wp
+
+Complete the Wordpress Setup
+Natviate to public IP of your manager node.
+Fill out the form and complete the setup.
+
+
+Docker Security
+Introduction to Docker Security
+We'll begin exploring ways to secure Docker by using security features native to both the operating system and Docker itself.
+
+Docker Security 101
+Security is all about layers
+
+Linux security:
+Namespaces
+Control Groups
+Mandatory Access Control (MAC)
+Seccomp
+
+Docker security:
+Docker Swarm
+Docker Content Trust
+Docker Security Scanner
+Docker secrets
+
+Namespaces
+Docker creates a set of namespaces and control groups for the container. Docker containers are an organized collections of namespaces.
+Namespaces provide isolation.
+Each container also gets its own network stack.
+
+Docker on Linux namespaces:
+Process ID (pid)
+network (net)
+Filesystem/mount (mount)
+Inter-process Communication (ipc)
+User (user)
+UTS (uts)
+Control Groups
+
+Control Groups are about setting limits for:
+CPU
+RAM
+Disk I/O
+
+They help to mitigate denial-of-service attacks, and are important on multi-tenant platforms.
+Capabilities
+Capabilities turn the binary “root/non-root” dichotomy into a fine-grained access control system. 
+In most cases, containers do not need “real” root privileges at all. 
+This means root within a container has much less privileges than the real root. 
+It also means that even if an intruder manages to escalate to root within a container, it is much harder to do serious damage, or to escalate to the host.
+
+Mandatory Access Control systems
+Two major MAC technologies are:
+SELinux
+AppArmor
+Seccomp
+This limits the syscalls a container can make to the host's kernel. All new containers get a default seccomp configured
+Docker Swarm
+Swarm Mode:
+Cryptographic node Ids
+Mutual authentication via TLS
+Secure join tokens
+CA configuration with automatic certificate rotation
+Encrypted cluster store
+Encrypted networks
+docker swarm update --cert-expiry [INT]h
+Docker Secrets
+
+These store sensitive data like:
+Passwords
+TLS Certificates
+API Keys
+
+Secrets Workflow:
+A secret is created and posted to the Swarm.
+The secret is encrypted and stored.
+A service is created and the secret is attached.
+Secrets are stored in-flight.
+The secret is mounted into the container of a service.
+When the task is complete, the in-memory is torn down.
+
+Working with Docker Security
+In this lesson we will start implementing some of the Docker security practices.
+
+Seccomp Profile
+docker container run --security-opt seccomp=[PROFILE] [IMAGE] [CMD]
+
+Testing Seccomp:
+docker container run --rm -it alpine sh
+whoami
+mount /dev/sda1 /tmp
+swapoff -a
+
+Using a custom Seccomp profile:
+mkdir -p seccomp/profiles/chmod
+cd seccomp/profiles/chmod
+wget https://raw.githubusercontent.com/moby/moby/master/profiles/seccomp/default.json
+
+Remove chmod, fchmod and fchmodat from the syscalls whitelist. Syscalls starts at line 52.
+
+Applying the custom Seccomp profile:
+
+docker container run --rm -it --security-opt seccomp=./default.json alpine sh
+chmod +r /usr
+
+Capabilities:
+Dropping Capabilities:
+docker container run --cap-drop=[CAPABILITY] [IMAGE] [CMD]
+
+Test mknod:
+docker container run --rm -it alpine sh
+mknod /dev/random2 c 1 8
+
+Disable mknod:
+docker container run --rm -it --cap-drop=MKNOD alpine sh
+mknod /dev/random2 c 1 8
+Runtime privilege and Linux capabilities https://docs.docker.com/engine/reference/run/#runtime-privilege-and-linux-capabilities
+
+Control Groups
+Limiting CPU and memory:
+docker container run -it --cpus=[VALUE] --memory=[VALUE][SIZE] --memory-swap [VALUE][SIZE] [IMAGE] [CMD]
+
+Setting memory limits on a container:
+docker container run -d --name resource-limits --cpus=".5" --memory=512M --memory-swap=1G rivethead42/weather-app
+
+Inspect resource-limits:
+docker container inspect resource-limits
+
+Runtime constraints on resources More info on resource constraints https://docs.docker.com/engine/reference/run/#runtime-constraints-on-resources
+
+Running Docker Bench for Security
+Running Docker Bench Security:
+
+docker container run --rm -it --network host --pid host --userns host --cap-add audit_control \
+    -e DOCKER_CONTENT_TRUST=$DOCKER_CONTENT_TRUST \
+    -v /var/lib:/var/lib \
+    -v /var/run/docker.sock:/var/run/docker.sock \
+    -v /usr/lib/systemd:/usr/lib/systemd \
+    -v /etc:/etc --label docker_bench_security \
+    docker/docker-bench-security
+Docker Bench Security https://github.com/docker/docker-bench-security
+
+Docker Content Trust
+In this lesson you will learn how to sign images and enable Docker Content Trust to ensure that the images you are pulling have been verified.
+
+Commands
+Creating a Key:
+docker trust key generate [NAME]
+
+Importing a Key:
+docker trust key load [PEM] --name [NAME]
+
+Add a signer:
+docker trust signer add --key [PEM] [NAME] [REPOSITORY]
+
+Remove a signer:
+docker trust signer remove [NAME] [REPOSITORY]
+
+Signing an image:
+docker trust sign [IMAGE]:[TAG]
+
+Using DCT to sign an image
+Tag the image that will be signed:
+docker image tag [USERNAME]/weather-app:latest [USERNAME]/dct:latest
+
+Create a Key:
+docker trust key generate [NAME]
+
+Add your signer user:
+docker trust signer add --key [NAME].pub [NAME] [USERNAME]/dct
+
+Sign and push your image to Docker Hub:
+docker trust sign [USERNAME]/dct:
+export DOCKER_CONTENT_TRUST=1
+docker image push [USERNAME]/dct:latest
+
+Remove the Docker image [USERNAME]/weather-app:
+docker image rm [USERNAME]/weather-app:latest
+
+Pull [USERNAME]/weather-app:
+docker image pull [USERNAME]/weather-app
+
+Remove the Nginx image:
+docker image rm nginx:latest
+
+Pull the image:
+docker image pull nginx:latest
+
+Enabling DCT
+vi /etc/docker/daemon.json
+/etc/docker/daemon.json:
+
+{
+    "content-trust": {
+        "mode": "enforced"
+    }
+}
+
+Working with Secrets
+In this lesson, we will start working with Docker Secrets to protect sensitive data, such as passwords and API Keys.
+
+Docker secrets commands:
+create: Create a secret from a file or STDIN as content
+inspect: Display detailed information on one or more secrets
+ls: List secrets
+rm: Remove one or more secrets
+
+Creating a secret:
+STDIN | docker secret create [NAME] -
+
+List secrets:
+docker secret ls
+
+Inspecting a secret:
+docker secret inspect [NAME]
+
+Using secrets:
+docker service create --name [NAME] --secret [SECERT] [IMAGE]
+
+Deleting a secret:
+docker secret rm [NAME]
+
+Setup environment:
+mkdir Secrets
+cd secrets
+
+Create a secret using STDIN:
+openssl rand -base64 20 | docker secret create my_secret_data -
+
+Create a secret using a file:
+openssl rand -base64 20 > secret.txt
+docker secret create my_secret_data2 secret.txt
+
+Create a service using a secret:
+docker service create --name redis --secret my_secret_data redis:alpine
+
+Find the node the service is running on:
+docker service ps redis
+
+Remove secret my_secret_data2:
+docker secret rm my_secret_data2
+
+Generate password files:
+openssl rand -base64 20 > db_password.txt
+openssl rand -base64 20 > db_root_password.txt
+
+Create a Wordpress Stack:
+vi docker-compose.yml
+
+docker-compose.yml contents:
+version: '3.1'
+
+services:
+   db:
+     image: mysql:5.7
+     volumes:
+       - db_data:/var/lib/mysql
+     networks:
+       mysql_internal:
+         aliases: ["db"]
+     environment:
+       MYSQL_ROOT_PASSWORD_FILE: /run/secrets/db_root_password
+       MYSQL_DATABASE: wordpress
+       MYSQL_USER: wordpress
+       MYSQL_PASSWORD_FILE: /run/secrets/db_password
+     secrets:
+       - db_root_password
+       - db_password
+
+   wordpress:
+     depends_on:
+       - db
+     image: wordpress:latest
+     networks:
+       mysql_internal:
+         aliases: ["wordpress"]
+       wordpress_public:
+     ports:
+       - "8001:80"
+     environment:
+       WORDPRESS_DB_HOST: db:3306
+       WORDPRESS_DB_USER: wordpress
+       WORDPRESS_DB_PASSWORD_FILE: /run/secrets/db_password
+     secrets:
+       - db_password
+
+secrets:
+   db_password:
+     file: db_password.txt
+   db_root_password:
+     file: db_root_password.txt
+
+volumes:
+    db_data:
+networks:
+  mysql_internal:
+    driver: "overlay"
+    internal: true
+  wordpress_public:
+    driver: "overlay"
+
+Deploy stack:
+docker stack deploy --compose-file docker-compose.yml wp
+
+Hands-On Lab: Using Docker Secrets to Manage Sensitive Data
+Complete the Swarm Setup
+On the manager node, the swarm has already been initialized. Get the worker token and have the worker node join the swarm.
+
+Randomly generate the MySQL passwords
+Use openssl rand -base64 20 to randomly generate a password for mysql_root_password and save it to mysql_root_password.txt.
+
+Use openssl rand -base64 20 to randomly generate a password for mysql_password and save it to mysql_password.
+
+Create the MySQL Service
+Create an overlay network called mysql_private and use the overlay driver.
+
+Create a service called mysql_secrets.
+The service should have 1 replica.
+Make sure it is attached to mysql_private. Mount a volume to /var/lib/mysql.
+Make sure the service uses the following: secret mysql_root_password and mysql_password.
+Create the following environment variables:
+
+MYSQL_ROOT_PASSWORD_FILE: Set it to the in memory path to the mysql_root_password secret.
+MYSQL_PASSWORD_FILE: Set it to the in memory path to the mysql_password secret.
+MYSQL_USER: Set it to myUser.
+MYSQL_DATABASE: Set it to myDB.
+Use the mysql:5.7 image.
+
+Create Secrets
+Create the MySQL root password:
+openssl rand -base64 20 > mysql_root_password.txt
+docker secret create mysql_root_password mysql_root_password.txt
+Create a MySQL user password:
+openssl rand -base64 20 > mysql_password.txt
+docker secret create mysql_password mysql_password.txt
+
+Create an Overlay Network for the Service
+Create an Overlay network:
+docker network create -d overlay mysql_private
+
+Create the MySQL Service
+Create a MySQL service:
+docker service create \
+     --name mysql_secrets \
+     --replicas 1 \
+     --network mysql_private \
+     --mount type=volume,destination=/var/lib/mysql \
+     --secret mysql_root_password \
+     --secret mysql_password \
+     -e MYSQL_ROOT_PASSWORD_FILE="/run/secrets/mysql_root_password" \
+     -e MYSQL_PASSWORD_FILE="/run/secrets/mysql_password" \
+     -e MYSQL_USER="myUser" \
+     -e MYSQL_DATABASE="myDB" \
+     mysql:5.7
