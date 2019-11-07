@@ -122,7 +122,7 @@ Docker objects
     Create a new image based on its current state
     Isolated from other containers and the host machine
   Services
-    Scale containers acros multiple Docker daemons
+    Scale containers across multiple Docker daemons
     Docker Swarm
     Define the desired state
     Service is load-balanced
@@ -368,14 +368,14 @@ docker container run:
 -v, --volume list Mount a volume (the bind type of mount)
 --mount mount Attach a filesystem mount to the container
 --network string Connect a container to a network (default "default")
+
 Create a container and attach to it:
-
 docker container run –it busybox
+
 Create a container and run it in the background:
-
 docker container run –d nginx
-Create a container that you name and run it in the background:
 
+Create a container that you name and run it in the background:
 docker container run –d –name myContainer busybox
 
 docker container run --help
@@ -390,21 +390,20 @@ Exposing and Publishing Container Ports
 Building on what we've already learned, this lesson will focus on exposing ports on a container, as well as how to publish them.
 
 Exposing:
-
 Expose a port or a range of ports
 This does not publish the port
 Use --expose [PORT]
 docker container run --expose 1234 [IMAGE]
-Publishing:
 
+Publishing:
 Maps a container's port to a host`s port
 -p or --publish publishes a container's port(s) to the host
 -P, or --publish-all publishes all exposed ports to random ports
 docker container run -p [HOST_PORT]:[CONTAINER_PORT] [IMAGE]
 docker container run -p [HOST_PORT]:[CONTAINER_PORT]/tcp -p [HOST_PORT]:[CONTAINER_PORT]/udp [IMAGE]
 docker container run -P
-Lists all port mappings or a specific mapping for a container:
 
+Lists all port mappings or a specific mapping for a container:
 docker container port [Container_NAME]
 
 docker run -d nginx
@@ -428,22 +427,21 @@ Executing Container Commands
 In this lesson we'll see three different ways to execute commands on containers.
 
 Executing a command:
-
 Dockerfile
 During a Docker run
 Using the exec command
-Commands can be:
 
+Commands can be:
 One and done Commands
 Long running Commands
+
 Start a container with a command:
-
 docker container run [IMAGE] [CMD]
+
 Execute a command on a container:
-
 docker container exec -it [NAME] [CMD]
-Example:
 
+Example:
 docker container run -d -p 8080:80 nginx
 docker container ps
 docker container exec -it [NAME] /bin/bash
@@ -461,25 +459,25 @@ curl <ipAddress from above>
 docker container exec -it <containerID> ls /usr/share/nginx/html
 
 Container Logging
-In this lesson, you will learn how to view the logs of a container to get vital output of your application. You will also learn about some of the logging best practices of containerized applications.
+In this lesson, you will learn how to view the logs of a container to get vital output of your application.
+You will also learn about some of the logging best practices of containerized applications.
 
 Create a container using the weather-app image.
 
 docker container run --name weather-app -d -p 80:3000 linuxacademycontent/weather-app
+
 Show information logged by a running container:
-
 docker container logs [NAME]
-Show information logged by all containers participating in a service:
 
+Show information logged by all containers participating in a service:
 docker service logs [SERVICE]
 Logs need to be output to STDOUT and STDERR.
 
 Nginx Example:
-
 RUN ln -sf /dev/stdout /var/log/nginx/access.log \
     && ln -sf /dev/stderr /var/log/nginx/error.log
-Debug a failed container deploy:
 
+Debug a failed container deploy:
 docker container run -d --name ghost_blog \
 -e database__client=mysql \
 -e database__connection__host=mysql \
@@ -488,6 +486,7 @@ docker container run -d --name ghost_blog \
 -e database__connection__database=ghost \
 -p 8080:2368 \
 ghost:1-alpine
+
 Useful links:
 12 Factor Logs https://12factor.net/logs
 Weather App Code https://github.com/linuxacademy/content-intermediate-docker-quest/tree/logging
@@ -532,39 +531,44 @@ ifconfig
 List all Docker network commands:
 
 docker network -h
-connect Connect a container to a network create Create a network disconnect Disconnect a container from a network inspect Display detailed information on one or more networks ls List networks prune Remove all unused networks rm Remove one or more networks
+connect Connect a container to a network
+create Create a network
+disconnect Disconnect a container from a network
+inspect Display detailed information on one or more networks
+ls List networks
+prune Remove all unused networks
+rm Remove one or more networks
 
 List all Docker networks on the host:
-
 docker network ls
 docker network ls --no-trunc
+
 Getting detailed info on a network:
-
 docker network inspect [NAME]
+
 Creating a network:
-
 docker network create br00
+
 Deleting a network:
-
 docker network rm [NAME]
-Remove all unused networks:
 
+Remove all unused networks:
 docker network prune
+
 Adding and Removing containers to a network
 Create a container with no network:
-
 docker container run -d --name network-test03 -p 8081:80 nginx
+
 Create a new network:
-
 docker network create br01
+
 Add the container to the bridge network:
-
 docker network connect br01 network-test03
+
 Inspect network-test03 to see the networks:
-
 docker container inspect network-test03
-Remove network-test03 from br01:
 
+Remove network-test03 from br01:
 docker network disconnect br01 network-test03
 
 ifconfig - show all adaptors
@@ -583,77 +587,78 @@ docker container inspect network-test03
 docker network disconnect br01 network-test03
 
 Networking Containers
-In this lesson, we will dig deeper into container networking by supplying our own subnet and gateway when creating a new network. We will then move on to networking two different containers using an internal network. This will allow one container to be publicly accessible while the other one is not.
+In this lesson, we will dig deeper into container networking by supplying our own subnet and gateway when creating a new network.
+We will then move on to networking two different containers using an internal network.
+This will allow one container to be publicly accessible while the other one is not.
 
 Creating a network and defining a Subnet and Gateway
 Create a bridge network with a subnet and gateway:
-
 docker network create --subnet 10.1.0.0/24 --gateway 10.1.0.1 br02
+
 Run ifconfig to view the bridge interface for br02:
-
 ifconfig
+
 Inspect the br02 network:
-
 docker network inspect br02
+
 Prune all unused networks:
-
 docker network prune
-Create a network with an IP range:
 
+Create a network with an IP range:
 docker network create --subnet 10.1.0.0/16 --gateway 10.1.0.1 \
 --ip-range=10.1.4.0/24 --driver=bridge --label=host4network br04
+
 Inspect the br04 network:
-
 docker network inspect br04
+
 Create a container using the br04 network:
-
 docker container run --name network-test01 -it --network br04 centos /bin/bash
-Install Net Tools:
 
+Install Net Tools:
 yum update -y
 yum install -y net-tools
+
 Get the IP info for the container:
-
 ifconfig
+
 Get the gateway info the container:
-
 netstat -rn
-Get the DNS info for the container:
 
+Get the DNS info for the container:
 cat /etc/resolv.conf
+
 Assigning IPs to a container:
 Create a new container and assign an IP to it:
-
 docker container run -d --name network-test02 --ip 10.1.4.102 --network br04 nginx
+
 Get the IP info for the container:
-
 docker container inspect network-test02 | grep IPAddr
-Inspect network-test03 to see that br01 was removed:
 
+Inspect network-test03 to see that br01 was removed:
 docker container inspect network-test04
+
 Networking two containers
 Create an internal network:
-
 docker network create -d bridge --internal localhost
-Create a MySQL container that is connected to localhost:
 
+Create a MySQL container that is connected to localhost:
 docker container run -d --name test_mysql \
 -e MYSQL_ROOT_PASSWORD=P4sSw0rd0 \
 --network localhost mysql:5.7
-Create a container that can ping the MySQL container:
 
+Create a container that can ping the MySQL container:
 docker container run -it --name ping-mysql \
 --network bridge --network localhost \
 centos
-Create a container that can't ping the MySQL container:
 
+Create a container that can't ping the MySQL container:
 docker container run -it --name cant-ping-mysql \
 centos
+
 Create a Nginx container that is not publicly accessible:
-
 docker container run -d --name private-nginx -p 8081:80 --network localhost nginx
-Inspect private-nginx:
 
+Inspect private-nginx:
 docker container inspect private-nginx
 
 docker network create --subnet 10.1.0.0/24 --gateway 10.1.0.1 br02
@@ -728,5 +733,1504 @@ docker network connect localhost frontend-app
 Connect frontend-app to the internal network
 Connect 'frontend-app' to the 'localhost' network.
 docker network connect localhost frontend-app
+
+Storage Overview
+In this lesson, we will look a how Docker handles storage for persistent and non-persistent data.
+
+Docker Storage 101
+Categories of data storage:
+Non-persistent
+Local storage
+Data that is ephemeral
+Every container has it
+Tied to the lifecycle of the contain
+Persistent
+Volumes
+Volumes are decoupled from containers
+
+Non-persistent Data
+Non-persistent data:
+By default all container use local storage
+Storage locations:
+Linux: /var/lib/docker/[STORAGE-DRIVER]/
+Windows: C:\ProgramData\Docker\windowsfilter\
+Storage Drivers:
+RHEL uses overlay2.
+Ubuntu uses overlay2 or aufs.
+SUSE uses btrfs.
+Windows uses its own.
+
+Persistent Data Using Volumes
+Volumes:
+Use a volume for persistent data:
+Create the volume first, then create your container.
+Mounted to a directory in the container
+Data is written to the volume
+Deleting a container does not delete the volume
+First-class citizens
+Uses the local driver
+
+Third party drivers:
+Block storage
+File storage
+Object storage
+
+Storage locations:
+Linux: /var/lib/docker/volumes/
+Windows: C:\ProgramData\Docker\volumes
+
+Volume Commands
+Volumes are the preferred method of maintaining persistent data in Docker.
+In this lesson, we will begin learning how to use the volume subcommand to list, create, and remove volumes.
+
+Volume Basics
+List all Docker volume commands:
+docker volume -h
+
+create: Create a volume.
+inspect: Display detailed information on one or more volumes.
+ls: List volumes.
+prune: Remove all unused local volumes.
+rm: Remove one or more volumes.
+
+List all volumes on a host:
+docker volume ls
+
+Create two new volumes:
+docker volume create test-volume1
+docker volume create test-volume2
+
+Get the flags available when creating a volume:
+docker volume create -h
+
+Inspecting a volume:
+docker volume inspect test-volume1
+
+Deleting a volume:
+docker volume rm test-volume
+
+Removing all unused volumes:
+docker volume prune
+
+Using Bind Mounts
+Bind mounts have been around since the early days of Docker.
+They have limited functionality compared to volumes.
+With bind mount, a file or directory on the host machine is mounted into a container.
+
+Volumes use a new directory that is created within Docker’s storage directory on the host machine,
+and Docker manages that directory’s contents.
+
+Using the mount flag:
+mkdir target
+
+docker container run -d \
+  --name nginx-bind-mount1 \
+  --mount type=bind,source="$(pwd)"/target,target=/app \
+  nginx
+docker container ls
+
+Bind mounts won't show up when listing volumes:
+docker volume ls
+
+Inspect the container to find the bind mount:
+docker container inspect nginx-bind-mount1
+
+Create a new file in /app on the container:
+
+docker container exec -it nginx-bind-mount1 /bin/bash
+cd target
+touch file1.txt
+ls
+exit
+Using the volume flag:
+
+docker container run -d \
+ --name nginx-bind-mount2 \
+ -v "$(pwd)"/target2:/app \
+ nginx
+Create /app/file3.txt in the container:
+
+docker container exec -it nginx-bind-mount2 touch /app/file3.txt
+ls target2
+Create an nginx.conf file:
+
+mkdir nginx
+cat << EOF >  nginx/nginx.conf
+user  nginx;
+worker_processes  1;
+
+error_log  /var/log/nginx/error.log warn;
+pid        /var/run/nginx.pid;
+
+
+events {
+    worker_connections  1024;
+}
+
+
+http {
+    include       /etc/nginx/mime.types;
+    default_type  application/octet-stream;
+
+    log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+                      '$status $body_bytes_sent "$http_referer" '
+                      '"$http_user_agent" "$http_x_forwarded_for"';
+
+    access_log  /var/log/nginx/access.log  main;
+
+    sendfile        on;
+    #tcp_nopush     on;
+
+    keepalive_timeout  65;
+
+    #gzip  on;
+
+    include /etc/nginx/conf.d/*.conf;
+}
+EOF
+Create an Nginx container that creates a bind mount to nginx.conf:
+
+docker container run -d \
+ --name nginx-bind-mount3 \
+ -v "$(pwd)"/nginx/nginx.conf:/etc/nginx/nginx.conf \
+ nginx
+Look at the bind mount by inspecting the container:
+
+docker container inspect nginx-bind-mount3
+
+Using Volumes for Persistent Storage
+In this lesson, we will take a deeper look into using volumes with our Docker containers. Volumes are the preferred method for maintaining persistent data.
+
+Volumes are easier to back up or migrate than bind mounts. You can manage volumes using Docker CLI commands or the Docker API. They work on both Linux and Windows containers. Volumes can be more safely shared among multiple containers. Volume drivers allow for:
+
+Storing volumes on remote hosts or cloud providers
+Encrypting the contents of volumes
+Add other functionality
+New volumes can have their content pre-populated by a container.
+
+Create a new volume for an Nginx container:
+docker volume create html-volume
+
+Creating a volume using that volume mount:
+docker container run -d \
+ --name nginx-volume1 \
+ --mount type=volume,source=html-volume,target=/usr/share/nginx/html/ \
+ nginx
+
+Inspect the volume:
+docker volume inspect html-volume
+
+List the contents of html-volume:
+sudo ls /var/lib/docker/volumes/html-volume/_data
+
+Creating a volume using that volume flag:
+docker container run -d \
+ --name nginx-volume2 \
+ -v html-volume:/usr/share/nginx/html/ \
+ nginx
+
+Edit index.html:
+sudo vi /var/lib/docker/volumes/html-volume/_data/index.html
+
+Inspect nginx-volume2 to get the private IP:
+docker container inspect nginx-volume2
+
+Login into nginx-volume1 and go to the html directory:
+docker container exec -it nginx-volume1 /bin/bash
+cd /usr/share/nginx/html
+cat index.hml
+
+Install Vim:
+apt-get update -y
+apt-get install vim -y
+
+Using a readonly volume:
+docker run -d \
+  --name=nginx-volume3 \
+  --mount source=html-volume,target=/usr/share/nginx/html,readonly \
+  nginx
+
+Login into nginx-volume3 and go to the html directory:
+docker container exec -it nginx-volume3 /bin/bash
+cd /usr/share/nginx/html
+cat index.hml
+
+Install Vim:
+apt-get update -y
+apt-get install vim -y
+
+Hands-On Lab - Docker Volumes
+Create a volume called mysql_data, then deploy a MySQL database called app-database.
+Use the mysql latest image, and use the -e flag to set MYSQL_ROOT_PASSWORD to P4sSw0rd0.
+Use the mount flag to mount the mysql_data volume to /var/lib/mysql. The container should run in the background.
+
+Create a Volume Called `mysql_data`
+Use the docker volume command to create a volume called mysql_data.
+
+[cloud_user@host]$ docker volume create mysql_data
+Create a MySQL Container
+Use the docker container command to create a MySQL container:
+
+[cloud_user@host]$ docker container run -d --name app-database \
+ --mount type=volume,source=mysql_data,target=/var/lib/mysql \
+ -e MYSQL_ROOT_PASSWORD=P4ssW0rd0! \
+ mysql:latest
+
+Introduction to the Dockerfile
+In this lesson we will start learning about building images using a Dockerfile.
+
+What is the Dockerfile?
+Dockerfiles are instructions. They contains all of the commands used to build an image.
+
+Docker images consist of read-only layers.
+Each represents a Dockerfile instruction.
+Layers are stacked.
+Each layer is a result of the changes from the previous layer.
+Images are built using the docker image build command.
+Dockerfile Layers
+Dockerfile:
+FROM ubuntu:15.04
+COPY . /app
+RUN make /app
+CMD python /app/app.py
+FROM creates a layer from the ubuntu:15.04 Docker image.
+COPY adds files from your Docker client’s current directory.
+RUN builds your application with make.
+CMD specifies what command to run within the container.
+
+Best Practices
+General guidelines:
+Keep containers as ephemeral as possible.
+Follow Principle 6 of the 12 Factor App.
+Avoid including unnecessary files.
+Use .dockerignore.
+Use multi-stage builds.
+Don’t install unnecessary packages.
+Decouple applications.
+Minimize the number of layers.
+Sort multi-line arguments.
+Leverage build cache.
+
+Working with Instructions
+FROM: Initializes a new build stage and sets the Base Image
+
+RUN: Will execute any commands in a new layer
+
+CMD: Provides a default for an executing container. There can only be one CMD instruction in a Dockerfile
+
+LABEL: Adds metadata to an image
+
+EXPOSE: Informs Docker that the container listens on the specified network ports at runtime
+
+ENV: Sets the environment variable <key> to the value <value>
+
+ADD: Copies new files, directories or remote file URLs from <src> and adds them to the filesystem of the image at the path <dest>.
+
+COPY: Copies new files or directories from <src> and adds them to the filesystem of the container at the path <dest>.
+
+ENTRYPOINT: Allows for configuring a container that will run as an executable
+
+VOLUME: Creates a mount point with the specified name and marks it as holding externally mounted volumes from native host or other containers
+
+USER: Sets the user name (or UID) and optionally the user group (or GID) to use when running the image and for any RUN, CMD, and ENTRYPOINT instructions that follow it in the Dockerfile
+
+WORKDIR: Sets the working directory for any RUN, CMD, ENTRYPOINT, COPY, and ADD instructions that follow it in the Dockerfile
+
+ARG: Defines a variable that users can pass at build-time to the builder with the docker build command, using the --build-arg <varname>=<value> flag
+
+ONBUILD: Adds a trigger instruction to the image that will be executed at a later time, when the image is used as the base for another build
+
+HEALTHCHECK: Tells Docker how to test a container to check that it is still working
+
+SHELL: Allows the default shell used for the shell form of commands to be overridden
+
+To set up the environment:
+sudo yum install git -y
+mkdir docker_images
+cd docker_images
+mkdir weather-app
+cd weather-app
+git clone https://github.com/linuxacademy/content-weather-app.git src
+
+Create the Dockerfile:
+vi Dockerfile
+
+Dockerfile contents:
+# Create an image for the weather-app
+FROM node
+LABEL org.label-schema.version=v1.1
+RUN mkdir -p /var/node
+ADD src/ /var/node/
+WORKDIR /var/node
+RUN npm install
+EXPOSE 3000
+CMD ./bin/www
+
+Build the weather-app image:
+docker image build -t linuxacademy/weather-app:v1 .
+
+List the images:
+docker image ls
+
+Create the weather-app container:
+docker container run -d --name weather-app1 -p 8081:3000 linuxacademy/weather-app:v1
+
+List all running containers:
+docker container ls
+
+ADD or Copy https://docs.docker.com/develop/develop-images/dockerfile_best-practices/#add-or-copy
+
+Environment Variables
+To make new software easier to run, you can use ENV to update the PATH environment variable for the software that your container installs.
+
+Setup your environment:
+cd docker_images
+mkdir env
+cd env
+Use the --env flag to pass an environment variable when building an image:
+--env [KEY]=[VALUE]
+
+Use the ENV instruction in the Dockerfile:
+ENV [KEY]=[VALUE]
+ENV [KEY] [VALUE]
+
+Clone the weather-app:
+git clone https://github.com/linuxacademy/content-weather-app.git src
+
+Create the Dockerfile
+vi Dockerfile
+
+Dockerfile contents:
+# Create an image for the weather-app
+FROM node
+LABEL org.label-schema.version=v1.1
+ENV NODE_ENV="development"
+ENV PORT 3000
+
+RUN mkdir -p /var/node
+ADD src/ /var/node/
+WORKDIR /var/node
+RUN npm install
+EXPOSE $PORT
+CMD ./bin/www
+
+Create the weather-app container:
+docker image build -t linuxacademy/weather-app:v2 .
+
+Inspect the container to see the environment variables:
+docker image inspect linuxacademy/weather-app:v2
+
+Deploy the weather-dev application:
+docker container run -d --name weather-dev -p 8082:3001 --env PORT=3001 linuxacademy/weather-app:v2
+
+Inspect the development container to see the environment variables:
+docker container inspect weather-dev
+
+Deploy the weather-app to production:
+docker container run -d --name weather-app2 -p 8083:3001 --env PORT=3001 --env NODE_ENV=production linuxacademy/weather-app:v2
+
+Inspect the production container to see the environment variables:
+docker container inspect weather-app2
+
+Get the logs for weather-app2:
+docker container logs weather-app2
+
+docker container run -d --name weather-prod -p 8084:3000 --env NODE_ENV=production linuxacademy/weather-app:v2
+
+Build Arguments
+In this lesson, we will explore using build arguments to paramerterize an image build.
+
+Use the --build-arg flag when building an image:
+--build-arg [NAME]=[VALUE]
+
+Use the ARG instruction in the Dockerfile:
+ARG [NAME]=[DEFAULT_VALUE]
+
+Navigate to the args directory:
+cd docker_images
+mkdir args
+cd args
+
+Clone the weather-app:
+git clone https://github.com/linuxacademy/content-weather-app.git src
+
+Create the Dockerfile:
+vi Dockerfile
+
+Dockerfile:
+# Create an image for the weather-app
+FROM node
+LABEL org.label-schema.version=v1.1
+ARG SRC_DIR=/var/node
+
+RUN mkdir -p $SRC_DIR
+ADD src/ $SRC_DIR
+WORKDIR $SRC_DIR
+RUN npm install
+EXPOSE 3000
+CMD ./bin/www
+
+Create the weather-app container:
+docker image build -t linuxacademy/weather-app:v3 --build-arg SRC_DIR=/var/code .
+
+Inspect the image:
+docker image inspect linuxacademy/weather-app:v3 | grep WorkingDir
+
+Create the weather-app container:
+docker container run -d --name weather-app3 -p 8085:3000 linuxacademy/weather-app:v3
+
+Verify that the container is working by executing curl:
+curl localhost:8085
+
+Working with Non-privileged Users
+In this lesson, you will learn how to use the USER instruction to create a non-privileged user.
+Rather than using root, we can use a non-privileged user to configure and run an application.
+
+Setup your environment:
+cd docker_images
+mkdir non-privileged-user
+cd non-privileged-user
+
+Create the Dockerfile:
+vi Dockerfile
+
+Dockerfile contents:
+
+# Creates a CentOS image that uses cloud_user as a non-privileged user
+FROM centos:latest
+RUN useradd -ms /bin/bash cloud_user
+USER cloud_user
+
+Build the new image:
+docker image build -t centos7/nonroot:v1 .
+
+Create a container using the new image:
+docker container run -it --name test-build centos7/nonroot:v1 /bin/bash
+
+Connecting as a privileged user:
+docker container start test-build
+docker container exec -u 0 -it test-build /bin/bash
+
+Set up the environment:
+cd ~/docker_images
+mkdir node-non-privileged-user
+cd node-non-privileged-user
+
+Create the Dockerfile:
+vi Dockerfile
+
+Dockerfile contents:
+# Create an image for the weather-app
+FROM node
+LABEL org.label-schema.version=v1.1
+RUN useradd -ms /bin/bash node_user
+USER node_user
+ADD src/ /home/node_user
+WORKDIR /home/node_user
+RUN npm install
+EXPOSE 3000
+CMD ./bin/www
+git clone https://github.com/linuxacademy/content-weather-app.git src
+
+Build the weather-app image using the non-privileged user node_user:
+docker image build -t linuxacademy/weather-app-nonroot:v1 .
+
+Create a container using the linuxacademy/weather-app-nonroot:v1 image:
+docker container run -d --name weather-app-nonroot -p 8086:3000 linuxacademy/weather-app-nonroot:v1
+
+Order of Execution
+This lesson focuses on the order that instructions are executed in when building an image.
+Some instructions may have unintended consequences that can cause your build to fail.
+
+Setup your environment:
+cd docker_images
+mkdir centos-conf
+cd centos-conf
+
+Create the Dockerfile:
+vi Dockerfile
+
+Dockerfile contents:
+# Creates a CentOS image that uses cloud_user as a non-privileged user
+FROM centos:latest
+RUN mkdir -p ~/new-dir1
+RUN useradd -ms /bin/bash cloud_user
+USER cloud_user
+RUN mkdir -p ~/new-dir2
+RUN mkdir -p /etc/myconf
+RUN echo "Some config data" >> /etc/myconf/my.conf
+
+Build the new image:
+docker image build -t centos7/myconf:v1 .
+
+Using the Volume Instruction
+In this lesson, we will use the VOLUME instruction to automatically create a mount point in a Docker image.
+When a container is created using this image, a volume will be created and mounted to the specified directory.
+
+Set up your environment:
+cd docker_images
+mkdir volumes
+cd volumes
+
+Create the Dockerfile:
+vi Dockerfile
+
+Build an Nginx image that uses a volume:
+FROM nginx:latest
+VOLUME ["/usr/share/nginx/html/"]
+
+Build the new image:
+docker image build -t linuxacademy/nginx:v1 .
+
+Create a new container using the linuxacademy/nginx:v1 image:
+docker container run -d --name nginx-volume linuxacademy/nginx:v1
+
+Inspect nginx-volume:
+docker container inspect nginx-volume
+
+List the volumes:
+docker volume ls | grep [VOLUME_NAME]
+
+Inspect the volumes:
+docker volume inspect [VOLUME_NAME]
+
+Entrypoint vs. Command
+In this lesson, we will begin working with the ENTRYPOINT instruction. Though ENTRYPOINT functions very similarly to CMD it's behaviors are vary different.
+
+ENTRYPOINT allows us to configure a container that will run as an executable.
+We can override all elements specified using CMD.
+Using the docker run --entrypoint flag will override the ENTRYPOINT instruction.
+
+Setup your environment:
+cd docker_images
+mkdir entrypoint
+cd entrypoint
+
+Create the Dockerfile:
+vi Dockerfile
+
+Dockerfile contents:
+# Create an image for the weather-app
+FROM node
+LABEL org.label-schema.version=v1.1
+ENV NODE_ENV="production"
+ENV PORT 3001
+RUN mkdir -p /var/node
+ADD src/ /var/node/
+WORKDIR /var/node
+RUN npm install
+EXPOSE $PORT
+ENTRYPOINT ./bin/www
+
+Clone the image:
+git clone https://github.com/linuxacademy/content-weather-app.git src
+
+Build the image:
+docker image build -t linuxacademy/weather-app:v4 .
+
+Deploy the weather-app:
+docker container run -d --name weather-app4 linuxacademy/weather-app:v4
+
+Inspect weather-app4:
+docker container inspect weather-app4 | grep Cmd
+docker container inspect weather-app-nonroot
+docker container inspect weather-app4
+
+Create the weather-app container:
+docker container run -d --name weather-app5 -p 8083:3001 linuxacademy/weather-app:v4 echo "Hello World"
+
+Inspect weather-app5:
+docker container inspect weather-app5
+
+Create the volumes for Prometheus:
+docker volume create prometheus
+docker volume create prometheus_data
+
+sudo chown -R nfsnobody:nfsnobody /var/lib/docker/volumes/prometheus/
+sudo chown -R nfsnobody:nfsnobody /var/lib/docker/volumes/prometheus_data/
+
+Create the Prometheus container:
+docker run --name prometheus -d -p 8084:9090 \
+  -v prometheus:/etc/prometheus \
+  -v prometheus_data:/prometheus/data \
+  prom/prometheus \
+  --config.file=/etc/prometheus/prometheus.yml \
+  --storage.tsdb.path=/prometheus/data
+
+Inspect Prometheus:
+docker container inspect prometheus
+
+Prometheus Dockerfile https://github.com/prometheus/prometheus/blob/master/Dockerfile
+
+Using .dockerignore
+In this lesson, we'll create a .dockerignore file, so that we can exclude files we don't want copied over when building an image.
+
+Setup your environment:
+
+cd docker_images
+mkdir dockerignore
+cd dockerignore
+git clone https://github.com/linuxacademy/content-weather-app.git src
+cd src
+git checkout dockerignore
+cd ../
+Create the .dockerignore file:
+
+vi .dockerignore
+Add the following to .dockerignore:
+
+# Ignore these files
+*/*.md
+*/.git
+src/docs/
+*/tests/
+Create the Dockerfile:
+
+vi Dockerfile
+Dockerfile contents:
+
+# Create an image for the weather-app
+FROM node
+LABEL org.label-schema.version=v1.1
+ENV NODE_ENV="production"
+ENV PORT 3000
+
+RUN mkdir -p /var/node
+ADD src/ /var/node/
+WORKDIR /var/node
+RUN npm install
+EXPOSE $PORT
+ENTRYPOINT ["./bin/www"]
+
+Build the image:
+docker image build -t linuxacademy/weather-app:v5 .
+
+Create the weather-app container:
+docker container run -d --name weather-app-ignore linuxacademy/weather-app:v5
+
+List the contents of /var/node:
+docker container exec weather-app-ignore ls -la /var/node
+
+Building Images
+In this lesson, we will learn some alternate ways of building images.
+To build one:
+docker image build -t <NAME>:<TAG> .
+
+Useful flags:
+-f, --file string: This is the name of the Dockerfile (Default is PATH/Dockerfile).
+--force-rm: Always remove intermediate containers.
+--label list: Set metadata for an image.
+--rm: Remove intermediate containers after a successful build (default is true).
+--ulimit ulimit: This sets ulimit options (default is []).
+cd docker_images/weather-app
+cp Dockerfile Dockerfile.test
+docker image build -t linuxacademy/weather-app:path-example1 -f Dockerfile.test .
+docker image build -t linuxacademy/weather-app:path-example2 --label com.linuxacademy.version=v1.8 -f Dockerfile.test .
+
+Building image by piping the Dockerfile through STDIN:
+docker image build -t <NAME>:<TAG> -<<EOF
+Build instructions
+EOF
+
+Example:
+docker image build -t linuxacademy/nginx:stind --rm -<<EOF
+FROM nginx:latest
+VOLUME ["/usr/share/nginx/html/"]
+EOF
+
+Building an image using a URL:
+docker image build -t <NAME>:<TAG> <GIT_URL>#<REF>
+docker image build -t <NAME>:<TAG> <GIT_URL>#:<DIRECTORY>
+docker image build -t <NAME>:<TAG> <GIT_URL>#<REF>:<DIRECTORY>
+
+Example:
+docker image build -t linuxacademy/weather-app:github https://github.com/linuxacademy/content-weather-app.git#remote-build
+
+Building an image from a zip file:
+docker image build -t <NAME>:<TAG> - < <FILE>.tar.gz
+
+Example:
+cd docker_images
+mkdir tar_image
+cd tar_image
+git clone https://github.com/linuxacademy/content-weather-app.git
+cd content-weather-app
+git checkout remote-build
+tar -zcvf weather-app.tar.gz Dockerfile src
+docker image build -t linuxacademy/weather-app:from-tar - < weather-app.tar.gz
+
+Using Multi-Stage Builds
+In this lesson, we will learn how to build smaller images using multi-stage builds.
+By default, the stages are not named
+Stages are numbered with integers
+Starting with 0 for the first FROM instruction
+Name the stage by adding as to the FROM instruction
+Reference the stage name in the COPY instruction
+
+Set up your environment:
+cd docker_images
+mkdir multi-stage-builds
+cd multi-stage-builds
+git clone https://github.com/linuxacademy/content-weather-app.git src
+
+Create the Dockerfile:
+vi Dockerfile
+
+Dockerfile contents:
+
+# Create an image for the weather-app using multi-stage build
+FROM node AS build
+RUN mkdir -p /var/node/
+ADD src/ /var/node/
+WORKDIR /var/node
+RUN npm install
+
+FROM node:alpine
+ARG VERSION=V1.1
+LABEL org.label-schema.version=$VERSION
+ENV NODE_ENV="production"
+COPY --from=build /var/node /var/node
+WORKDIR /var/node
+EXPOSE 3000
+ENTRYPOINT ["./bin/www"]
+
+Build the image:
+docker image build -t linuxacademy/weather-app:multi-stage-build --rm --build-arg VERSION=1.5 .
+
+List images to see the size difference:
+docker image ls
+
+Create the weather-app container:
+docker container run -d --name multi-stage-build -p 8087:3000 linuxacademy/weather-app:multi-stage-build
+
+Tagging
+In this lesson, we will talk about how to use the tag command, and best practices to keep in mind when tagging.
+
+Add a name and an optional tag with -t or --tag, in the name:tag format:
+docker image build -t <name>:<tag>
+docker image build --tag <name>:<tag>
+
+List your images:
+docker image ls
+
+Use our Git commit hash as the image tag:
+git log -1 --pretty=%H
+
+Use the Docker tag to a create a new tagged image:
+docker tag <SOURCE_IMAGE><:TAG> <TARGET_IMAGE>:<TAG>
+
+Get the commit hash:
+cd docker_images/weather-app/src
+git log -1 --pretty=%H
+cd ../
+
+Build the image using the Git hash as the tag:
+docker image build -t linuxacademy/weather-app:<GIT_HASH> .
+
+Tag the weather-app as the latest using the image tagged with the commit hash:
+docker image tag linuxacademy/weather-app:<GIT_HASH> linuxacademy/weather-app:latest
+
+Distributing Images on Docker Hub
+In this lesson, we'll walk through how to tag and push an image to Docker Hub. You will need a Docker Hub account.
+
+Create a Docker Hub account:
+https://hub.docker.com/
+
+Docker Push:
+docker image push <USERNAME>/<IMAGE_NAME>:<TAG>
+
+Creating an image for Docker Hub:
+docker image tag <IMAGE_NAME>:<TAG> <linuxacademy>/<IMAGE_NAME>:<TAG>
+
+Set up your environment:
+cd docker_images
+mkdir dockerhub
+cd dockerhub
+
+Create the Dockerfile:
+vi Dockerfile
+
+Dockerfile contents:
+# Create an image for the weather-app using multi-stage build
+FROM node AS build
+RUN mkdir -p /var/node/
+ADD src/ /var/node/
+WORKDIR /var/node
+RUN npm install
+
+FROM node:alpine
+ARG VERSION=V1.1
+LABEL org.label-schema.version=$VERSION
+ENV NODE_ENV="production"
+COPY --from=build /var/node /var/node
+WORKDIR /var/node
+EXPOSE 3000
+ENTRYPOINT ["./bin/www"]
+
+Git the weather-app code:
+git clone https://github.com/linuxacademy/content-weather-app.git src
+
+Use the Git commit hash as the image tag:
+cd src
+git log -1 --pretty=%H
+cd ../
+
+Build the image:
+docker image build -t <USERNAME>/weather-app:<HASH> --build-arg VERSION=1.5 .
+
+Tag the image before pushing it to Docker Hub:
+docker image tag linuxacademy/weather-app:<HASH> <USERNAME>/weather-app:<HASH>
+
+Push the image to Docker Hub:
+docker login
+docker image push <USERNAME>/weather-app:<HASH>
+
+Tag the latest image:
+docker image tag <USERNAME>/weather-app:<HASH> <USERNAME>/weather-app:latest
+
+Push the latest image to Docker Hub:
+docker login <USERNAME>
+docker image push <USERNAME>/weather-app:latest
+
+Hands-On Lab: Creating Images Using a Dockerfile
+In the /home/cloud_user/ directory, you will find the weather-app. Navigate to it. In that directory you will find the source code to the weather-app in src.
+
+Create the Dockerfile
+Create a Dockerfile that will use a multi-stage build. The first stage will use node as the base image, and will be called source.
+Create a directory for the source code: /node/weather-app.
+
+Add the code from src to /node/weather-app on the image.
+Set /node/weather-app as the working directory.
+Execute an npm install to install the dependencies.
+The second stage will use node:alpine as the base image.
+Create an argument called APP_VERSION that will set the version of the application.
+Set an environment variable called NODE_ENV and set it to development.
+Copy /node/weather-app from the source build stage to /var/weather-app.
+Set /var/weather-app as the working directory. Expose port 3000. Set ./bin/www as the entrypoint.
+
+FROM node AS source
+RUN mkdir -p /node/weather-app
+ADD src/ /node/weather-app
+WORKDIR /node/weather-app
+RUN npm install
+
+FROM node:alpine
+ARG APP_VERSION=V1.1
+LABEL org.label-schema.version=$APP_VERSION
+ENV NODE_ENV="production"
+COPY --from=source /node/weather-app /node/weather-app
+WORKDIR /node/weather-app
+EXPOSE 3000
+ENTRYPOINT ["./bin/www"]
+
+Build the weather-app image
+Name the image <USERNAME>/weather-app
+In the src directory, execute git log -1 --pretty=%H to get the commit hash.
+Use the commit hash as the tag when you execute the image build.
+Using the build argument, flag set APP_VERSION to v1.5.
+Make sure that all intermediate images are deleted when the build completes.
+
+Use Git commit hash as the image tag:
+cd src
+git log -1 --pretty=%H
+cd ../
+
+Build the image:
+sudo docker image build -t linuxacademy/weather-app:[HASH] --build-arg VERSION=1.5 .
+
+Deploy a test container using the image.
+Create a container called weather-app using the image you just built, and run it as a background process.
+Publish port 8080 to 3000 on the container.
+Set the NODE_ENV environment variable to production.
+Execute curl localhost:8080 to test the container.
+
+Create the weather-app container:
+sudo docker container run -d --name weather-app -p 8080:3000 linuxacademy/weather-app:<HASH>
+
+Hands-On Lab: Tagging and Pushing Images to Docker Hub
+At the command line, login into Docker Hub.
+Navigate to the src directory in weather-app.
+Execute git log -1 --pretty=%H to get the commit hash.
+Drop back down to the weather-app directory.
+Build the image and tag it with [USERNAME]/my-weather-app:[COMMIT_HASH]. You will need to set the VERSION build argument and set it to 1.5.
+Then tag it as latest. Push both images to Docker Hub.
+
+Log in to Docker Hub
+Login to Docker Hub:
+[cloud_user@host]$ docker login
+
+Get the Git Commit Hash
+Use Git commit hash as the image tag:
+cd weather-app
+cd src
+git log -1 --pretty=%H
+cd ../
+
+Build the `weather-app` Image
+Build the image:
+[cloud_user@host]$ docker image build -t [USERNAME]/weather-app:[HASH] --build-arg VERSION=1.5 .
+
+Tag the image to latest:
+[cloud_user@host]$ docker image tag [USERNAME]/weather-app:[HASH] [USERNAME]/weather-app:latest
+
+Push Both Images to Docker Hub
+Push both images to Docker Hub:
+docker image push [USERNAME]/weather-app:[HASH]
+docker image push [USERNAME]/weather-app:latest
+
+Image History
+In this lesson, see how to get more information about an image by looking at its history.
+
+Show the history of an image:
+docker image history <IMAGE>
+docker image history --no-trunc <IMAGE>
+docker image history --quiet <IMAGE>
+docker image history --quiet --no-trunc <IMAGE>
+
+Get the image history for Node:
+docker image history node:latest
+
+Get the image history for weather-app:
+docker image history rivethead42/weather-app:latest
+
+Get the image history weather-app:v1 with the no-truncm flag:
+docker image history --no-trunc linuxacademy/weather-app:v1
+
+Save the output using the no-truncm flag to a file:
+docker image history --no-trunc linuxacademy/weather-app:v1 > output.txt
+
+View the contents:
+vi output.txt
+
+Use the quiet flag to list the image IDs:
+docker image history --quiet linuxacademy/weather-app:v1
+
+Use the quiet flag to list the image IDs, then save the output to a file using the no-truncm flag:
+docker image history --quiet --no-trunc linuxacademy/weather-app:v1
+
+Saving and Loading Images
+In this lesson, we will learn how to save an image to a tar file, and see how to load it back in.
+
+Save one or more images to a tar file:
+docker image save <IMAGE> > <FILE>.tar
+docker image save <IMAGE> -o <FILE>.tar
+docker image save <IMAGE> --output <FILE>.tar
+
+Load an image from a tar file:
+docker image load < <FILE>.tar
+docker image load -i <FILE>.tar
+docker image load --input <FILE>.tar
+
+Setup:
+mkdir output
+cd output
+
+Archive the rivethead42/weather-app:latest image:
+docker image save rivethead42/weather-app:latest --output weather-app-latest.tar
+
+Inspect the tar file:
+tar tvf weather-app-latest.tar
+
+Compress the tar file:
+gzip weather-app-latest.tar
+
+Delete the image:
+docker image rm [USERNAME]/weather-app:latest
+
+Load the weather-app image from a tar file:
+docker image load --input weather-app-latest.tar.gz
+docker image ls | grep [USERNAME]/weather-app
+docker image rm rivethead42/weather-app:latest docker image ls | grep rivethead42/weather-app
+
+Beyond Docker Basics
+Container Management
+In this lesson, we'll take a look at a few ways we can examine the running processes in a container.
+
+Docker Top:
+docker container top <NAME>
+
+Docker Stats:
+docker container stats <NAME>
+
+Create a new CentOS container:
+docker container run -itd --name container_process centos /bin/bash
+
+Execute docker container top:
+docker container top container_process
+
+Attach to container_process:
+docker container exec -it container_process /bin/bash
+
+Attach to the container using attach:
+docker container attach container_process
+
+Restart the container:
+docker container start container_process
+
+Attach to the container_process container:
+docker container exec -it container_process /bin/bash
+
+Run top on the container:
+top
+exit
+
+Get stats on a container:
+docker container stats container_process
+
+Having Containers Start Automatically
+In this lesson, we will look at how to set restart policies for containers,
+and how that will effect their behavior when the docker service is restarted.
+
+To configure the restart policy for a container, use the --restart flag:
+no: Do not automatically restart the container. (the default)
+on-failure: Restart the container if it exits due to an error, which manifests as a non-zero exit code.
+always: Always restart the container if it stops.
+unless-stopped: Similar to always, except that when the container is stopped, it is not restarted even after the Docker daemon restarts.
+
+Automatically Restarting a container:
+docker container run -d --name <NAME> --restart <RESTART> <IMAGE>
+
+Make sure a container always restarts:
+docker container run -d --name always-restart --restart always rivethead42/weather-app:latest
+
+Make sure a container restarts unless it's stopped:
+docker container run -d --name unless-stopped --restart unless-stopped rivethead42/weather-app:latest
+
+Stop and restart your Docker service:
+sudo systemctl restart docker
+
+List your containers:
+docker container ls
+
+Stop the unless-stopped container:
+docker container stop unless-stopped
+
+Stop and restart your Docker service:
+sudo systemctl restart docker
+
+List your containers:
+docker container ls
+
+Stop the unless-stopped container:
+docker container stop always-restart
+
+Stop and restart your Docker service:
+sudo systemctl restart docker
+
+List your containers:
+docker container ls
+
+Docker Events
+In this lesson, we'll see how to listen for events using the events command.
+
+Get real-time events from the server:
+docker system events
+docker system events --since '<TIME_PERIOD>'
+
+Start a new CentOS container:
+docker container run -itd --name docker_events centos /bin/bash
+
+Listen for events:
+docker system events
+
+Generate Events:
+docker container exec docker_events /bin/bash
+docker container attach docker_events
+docker container start docker_events
+
+Filters Events:
+docker system events --filter <FILTER_NAME>=<FILTER>
+
+Filter for container events:
+docker system events --filter type=container --since '1h'
+
+Generate an event:
+docker container exec docker_events ls /
+
+Filter for container events:
+docker system events --filter type=container --filter event=start --since '1h'
+
+List / on docker_events:
+docker container exec docker_events ls /
+
+Filter for attach events:
+docker system events --filter type=container --filter event=attach
+
+Connect to docker_events using /bin/bash:
+docker container exec -it docker_events /bin/bash
+
+Attach to docker_events:
+docker container attach docker_events
+
+Connect to docker_events using /bin/bash:
+docker container exec -it docker_events /bin/bash
+
+Attach to docker_events:
+docker container attach docker_events
+
+Use multiple filters:
+docker system events --filter type=container --filter event=attach --filter event=die --filter event=stop
+
+Start docker_events:
+docker container start docker_events
+
+Attach to docker_events:
+docker container attach docker_events
+
+Documentation:
+docker events https://docs.docker.com/engine/reference/commandline/events/
+Engine API v1.24 https://docs.docker.com/engine/api/v1.24/
+
+Managing Stopped Container
+In this lesson, we will manage stopped containers by starting, deleting, or pruning them.
+
+Remove one or more containers:
+docker container rm <NAME>
+
+List the rm flags:
+docker container rm -h
+
+Start one or more stopped containers:
+docker container start <NAME>
+
+Remove all stopped containers:
+docker container prune
+
+List the IDs of all containers:
+docker container ls -a -q
+
+List all stopped containers:
+docker container ls -a -f status=exited
+
+List the IDs of stopped containers:
+docker container ls -a -q -f status=exited
+
+Get a count of all stopped containers:
+docker container ls -a -q -f status=exited | wc -l
+
+Get a listing of our containers:
+docker container ls -a -f status=exited | grep prometheus
+
+Start Prometheus:
+docker container start prometheus
+
+Find stopped weather-app containers with grep:
+docker container ls -a -f status=exited | grep weather-app
+
+Remove stopped weather-app containers:
+docker container rm [CONTAINER_IDS]
+
+Prune all stopped containers:
+docker container prune
+
+Managing Docker with Portainer
+In this lesson, we'll install Portainer and use it manage our Docker host.
+portainer.io
+
+Create a volume for Portainers data:
+docker volume create portainer_data
+
+Create the Portainers container:
+docker container run -d --name portainer -p 8080:9000 \
+--restart=always \
+-v /var/run/docker.sock:/var/run/docker.sock \
+-v portainer_data:/data portainer/portainer
+
+Go to public ip of docker container port 8080,
+set up account and select local.
+UI for doing docker stuff.
+
+docker container ls
+
+The ls should output:
+rivethead42/weather-app:latest
+NODE_ENV production
+
+Updating Containers with Watchtower
+In this lesson, we'll see how to use Watchtower to keep a container up-to-date when its image gets updated.
+
+Clone Express app:
+git clone https://github.com/linuxacademy/content-express-demo-app.git watchtower
+cd watchtower
+git checkout dockerfile
+
+Build the Docker image:
+docker login -u [USERNAME]
+docker image build -t rivethead42/my-express .
+docker image push rivethead42/my-express
+
+Create the container:
+docker container run -d --name watched-app -p 80:3000 --restart always rivethead42/my-express
+
+Create Watchtower:
+docker container run -d --name watchtower \
+--restart always \
+-v /var/run/docker.sock:/var/run/docker.sock \
+v2tec/watchtower -i 15
+
+Add a .dockerignore file:
+vi .dockerignore
+
+.dockerignore contents:
+Dockerfile
+.git
+.gitignore
+
+Edit app.js and add a comment:
+vi app.js
+
+app.js contents:
+//This is a comment
+//
+...
+
+Add the file newfile.js:
+touch newfile.js
+
+Rebuild the image:
+docker image build -t rivethead42/my-express --no-cache .
+docker image push rivethead42/my-express
+
+Check to see if the container was restarted with the new image:
+docker container ls
+
+Verify the changes by attaching to watched-app:
+docker container exec -it watched-app /bin/bash
+
+Hands-On Lab: Managing Docker with Portainer
+Additional Information and Resources
+
+Create the volume:
+Create a new volume called portainer_data.
+
+Create the Portainer Container:
+Next create a new container called portainer.
+Make sure that the container runs in the background.
+Map port 8080 to 9000 on the container.
+Make sure the restart policy is set to always.
+Create a bind mount that maps var/run/docker.sock to var/run/docker.sock on the container.
+Also map portainer_data to /data on the container.
+Use portainer/portainer as the image.
+
+Create a Container from Portainer
+Goto [LAB_IP]:8080. Create your account.
+Select Local and click Connect.
+Click on your local Docker host.
+Next click on Container and then Add container.
+Name the container lab_nginx.
+Map port 8081 to 80 on the container.
+
+Learning Objectives
+Create a Volume
+Create a volume for Portainers data:
+docker volume create portainer_data
+
+Create Portainer
+Create the Portainers container:
+docker container run -d --name portainer -p 8080:9000 \
+--restart=always \
+-v /var/run/docker.sock:/var/run/docker.sock \
+-v portainer_data:/data portainer/portainer
+
+Log into Portainer and Create a Container
+Login into <LAB_IP>:8080. Create your user account.
+Click on local.
+Click on containers.
+Click the Add container button.
+Enter lab_nginx as the container name.
+Use nginx:latest for the image.
+Click map additional ports and map port 8081 to 80 on the container.
+Click the Deploy container button.
+
+-----------
+
+Docker Compose
+Installing Docker Compose
+In this lesson, we will learn about installing Docker Compose and why we should use it.
+
+Download the latest version of Docker Compose:
+sudo curl -L "https://github.com/docker/compose/releases/download/1.23.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+
+Apply executable permissions:
+sudo chmod +x /usr/local/bin/docker-compose
+
+Test Docker Compose:
+docker-compose --version
+
+Compose Commands
+In this lesson, we will start using compose by creating a compose file.
+Then we will create and manage the services by using the most commonly used commands:
+
+build: Build or rebuild services
+bundle: Generate a Docker bundle from the Compose file
+config: Validate and view the Compose file
+create: Create services
+down: Stop and remove containers, networks, images, and volumes
+events: Receive real time events from containers
+exec: Execute a command in a running container
+help: Get help on a command
+images: List images
+kill: Kill containers
+logs: View output from containers
+pause: Pause services
+port: Print the public port for a port binding
+ps: List containers
+pull: Pull service images
+push: Push service images
+restart: Restart services
+rm: Remove stopped containers
+run: Run a one-off command
+scale: Set number of containers for a service
+start: Start services
+stop: Stop services
+top: Display the running processes
+unpause: Unpause services
+up: Create and start containers
+version: Show the Docker-Compose version information
+
+Setup your environment:
+mkdir -p compose/commands
+cd compose/commands
+
+Create a docker-compose file:
+vi docker-compose.yml
+
+docker-compose.yml contents:
+version: '3'
+services:
+  web:
+    image: nginx
+    ports:
+    - "8080:80"
+    volumes:
+    - nginx_html:/usr/share/nginx/html/
+    links:
+    - redis
+  redis:
+    image: redis
+volumes:
+  nginx_html: {}
+
+Create a compose service:
+docker-compose up -d
+
+List containers created by compose:
+docker-compose ps
+
+Stopping a compose service:
+docker-compose stop
+
+Starting a compose service:
+docker-compose start
+
+Restarting a compose service:
+docker-compose restart
+
+Delete a compose service:
+docker-compose down
+
+Creating a Compose File
+In this lesson we will look at the basics of creating a compose file.
+
+Setup your environment:
+cd compose
+git clone https://github.com/linuxacademy/content-weather-app.git weather-app
+cd weather-app
+git checkout compose
+
+Create a docker-compose.yml file:
+vi docker-compose.yml
+
+docker-compose.yml contents:
+version: '3'
+services:
+  weather-app:
+    build:
+      context: .
+      args:
+        - VERSION=v2.0
+    ports:
+      - "8081:3000"
+    environment:
+      - NODE_ENV=production
+
+Create the compose container:
+docker-compose up -d
+
+List compose services:
+docker-compose ps
+
+Verify the weather-app is working:
+curl http://localhost:8081
+
+Rebuild the image:
+docker-compose build
+
+Rebuild the image with no cache:
+docker-compose build --no-cache
+
+Using Volumes and Networking with Compose
+In this lesson, we will learn how to use volumes and networks in a docker compose file.
+
+Setup your environment:
+mkdir -p compose/ghost
+cd compose/ghost
+
+Create a docker-compose.yml file:
+vi docker-compose.yml
+
+docker-compose.yml:
+version: '3'
+services:
+  ghost:
+    container_name: ghost
+    image: ghost:latest
+    ports:
+      - "80:2368"
+    environment:
+      - database__client=mysql
+      - database__connection__host=mysql
+      - database__connection__user=root
+      - database__connection__password=P4SSw0rd0!
+      - database__connection__database=ghost
+    volumes:
+      - ghost-volume:/var/lib/ghost
+    networks:
+      - ghost_network
+      - mysql_network
+    depends_on:
+      - mysql
+
+  mysql:
+    container_name: mysql
+    image: mysql:5.7
+    environment:
+      - MYSQL_ROOT_PASSWORD=P4SSw0rd0!
+    volumes:
+      - mysql-volume:/var/lib/mysql
+    networks:
+      - mysql_network
+
+volumes:
+  ghost-volume:
+  mysql-volume:
+
+networks:
+  ghost_network:
+  mysql_network:
+
+Create the compose container:
+docker-compose up -d
+
+List compose services:
+docker-compose ps
+
+List the volumes:
+docker volumes ls
+
+List the volumes:
+docker network ls
+
+Docker Compose Documentation https://docs.docker.com/compose/compose-file/
 
 
