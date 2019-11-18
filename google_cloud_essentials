@@ -52,6 +52,188 @@ Use cases:
   Mobile Back end - React to storage, authentication or data events
   Internet of Things - Respond to Pub/Sub messages from devices
 
+Hands-On Lab: Deploying an App Engine Application
+You’ve been asked to deploy the latest version of your company’s new app, LA Music Gallery, on Google Cloud App Engine.
+The app allows a user to enter details about a music album, including the name of both the artist and the album,
+as well as the HTML and CSS to present the app. To accomplish this, the app, written in Python,
+stores data in Cloud Datastore using App Engine’s standard environment.
+
+You’ll need to accomplish the following steps to complete your task:
+
+Ensure required APIs are available.
+Clone a GitHub repo to acquire the files.
+Properly configure the application by modifying a YAML file.
+Deploy the app to App Engine in the proper region.
+Test the app.
+
+Enable APIs and clone GitHub repository.
+keyboard_arrow_up
+From the main navigation, visit the APIs & Services > Libraries page, and search for "Datastore".
+Select the Cloud Datastore API.
+If the API is not available, click Enable.
+Activate the Cloud Shell.
+When it spins up, create the necessary bucket (bucket name must be unique):
+ gsutil mb -c regional -l us-east1 gs://[BUCKET_NAME]
+ gsutil iam ch allUsers:objectViewer gs://[BUCKET_NAME]
+Clone the GitHub repository:
+ git clone https://github.com/linuxacademy/content-gc-essentials
+Change directory to the content-gc-essentials/app-engine-lab folder.
+
+Configure `config.py` file.
+keyboard_arrow_up
+From the Cloud Shell Editor, open config.py in the app-engine-lab folder.
+Change PROJECT_ID to the current project, as shown in the Cloud Shell.
+Change the "CLOUD_STORAGE_BUCKET" variable value to your unique bucket name.
+Save the file.
+check_circle
+Deploy the app.
+keyboard_arrow_up
+In the Cloud Shell, enter the following code:
+gcloud app deploy
+When prompted, choose the nearest region.
+check_circle
+Test the app.
+keyboard_arrow_up
+In the Cloud Shell, enter the following code:
+gcloud app browse
+If the browser window does not open, click the generated link.
+
+Hands-On Lab: Triggering a Cloud Function with Cloud Pub/Sub
+You’ve been asked to lay the groundwork for one aspect of the new app that
+relies on code being executed when a message is received from any number of outlets.
+To do this, you’ll need to establish a Cloud Pub/Sub topic and then create an example
+Cloud Function that uses the topic as a trigger. Naturally, you’ll need to confirm
+the Cloud Function has successfully executed.
+
+You’ll need to accomplish the following steps to complete your task:
+
+Enable APIs.
+Create Pub/Sub topic.
+Create Cloud Function.
+Publish message on topic.
+Confirm Cloud Function executed via logs.
+Trigger directly via the command line.
+Confirm Cloud Function executed via logs.
+Send message to topic from command line.
+Confirm Cloud Function executed via logs.
+
+Enable required APIs.
+keyboard_arrow_up
+Use the API Library to find and enable the Cloud Pub/Sub API.
+Use the API Library to find and enable the Cloud Functions API.
+check_circle
+Create Pub/Sub topic.
+keyboard_arrow_up
+From the main console navigation, go to Cloud Pub/Sub.
+Click Create a topic.
+In the dialog, enter a name greetings for the topic.
+Click Create.
+
+Create a Cloud Function.
+keyboard_arrow_up
+From the main console, go to Cloud Functions.
+Click Create function.
+Configure the function with the following values:
+Name: la-pubsub-function
+Trigger: Cloud Pub/Sub
+Topic: greetings
+Source code: Inline editor
+Runtime: Python 3.7
+In the main.py field, enter the following code:
+
+import base64
+
+def greetings_pubsub(data, context):
+
+    if 'data' in data:
+        name = base64.b64decode(data['data']).decode('utf-8')
+    else:
+        name = 'folks'
+    print('Greetings {} from Linux Academy!'.format(name))
+Set Function to Execute to greetings_pubsub.
+
+Click Create.
+
+Publish message to topic from console.
+keyboard_arrow_up
+Click the newly created Cloud Function name.
+Switch to Trigger.
+Click the topic link to go to the Cloud Pub/Sub topic.
+From the Topic page, click Publish Message.
+In the Message field, enter everyone around the world.
+Click Publish.
+check_circle
+Confirm Cloud Function execution.
+keyboard_arrow_up
+Return to the Cloud Functions dashboard.
+Click the Cloud Function's name.
+From the Cloud Function navigation, click View Logs.
+Locate the most recent log.
+Confirm function execution.
+check_circle
+Trigger Cloud Function directly from command line.
+keyboard_arrow_up
+Click Activate Cloud Shell from the top row of the console.
+In the Cloud Shell, enter the following code:
+
+DATA=$(printf 'my friends' | base64)
+gcloud functions call la-pubsub-function --data '{"data":"'$DATA'"}'
+After a moment, refresh the logs page and confirm the Cloud Function execution.
+
+Publish message to topic from command line.
+keyboard_arrow_up
+In the Cloud Shell, enter the following command:
+
+ gcloud pubsub topics publish greetings --message "y'all"
+After a moment, refresh the log page to confirm the function has executed.
+
+
+Hands-On Lab: Working with Compute Engine Windows Instances
+You’ve been tasked with getting a Windows web server up and running on a Compute Engine instance.
+To accomplish this, you’ll need to create the appropriate instance,
+use RDP to set up necessary software, and create a home page to test the server.
+
+You’ll need to accomplish the following steps to complete your task:
+Create a Compute Engine VM instance.
+keyboard_arrow_up
+From the main navigation, choose Compute Engine > VMs.
+In the VM Instances area, click Create.
+With New VM instance chosen from the options on the left, configure your instance:
+In the name field, provide a relevant name using hyphens, like la-windows-1.
+Keep the suggested Region and Zone.
+In the Boot Disk section, click Change and select Windows Server 2019 Datacenter, Server with Desktop Experience from the list; click Select.
+Under Firewall, choose the Allow HTTP traffic option.
+Click Create.
+check_circle
+Set Windows password.
+keyboard_arrow_up
+From the RDP options, click Set Windows password.
+In the dialog, confirm your username is correct and click Set.
+Copy the supplied password and click Close.
+check_circle
+Launch RDP window.
+keyboard_arrow_up
+Launch the RDP window by using one of the following methods:
+If you're on a Windows system, click RDP.
+If you're on a Mac using Chrome in a standard window, first install the Chrome RDP extension, and then click RDP.
+If you're on a Mac using another browser or Incognito window, from the App Store,
+download and install the latest version of the Microsoft Remote Desktop app.
+Then, choose Download the RDP file from the RDP options and open the file.
+
+Install IIS.
+keyboard_arrow_up
+From the Windows Start menu, right-click on Windows Powershell and choose Run as administrator.
+In the PowerShell window, enter the following commands:
+ import-module servermanager
+ add-windowsfeature web-server -includeallsubfeature
+ echo '<!doctype html><html><body><h1>Greetings from Linux Academy!</h1></body></html>' > C:\inetpub\wwwroot\index.html
+check_circle
+Test your page.
+keyboard_arrow_up
+From the Compute Engine VM page, click the External link for your Windows VM instance.
+Review the page in your browser.
+
+
 Cloud Identity Fundamentals
   Identity as a Service - IDaaS
   Originally G-Suite based with separate Google Admin
@@ -61,7 +243,7 @@ Cloud Identity Fundamentals
   Allow single sign-on
   Hierarchy- Organization->Folders->1 or more Projects->1 or more Resources per project
   Policy inheritance
- 
+
 Cloud IAM Fundamentals
   Unified resource access managemenet system
   For both users and services
@@ -190,6 +372,215 @@ Cloud MemoryStore Fundamentals
     Standard - for highly available Redis instance
   Use cases: caching layer in gaming and analytical pipelines, stream processing
 
+Hands-On Lab: Setting Cloud Storage Lifecycle Rules
+Your entire company is looking for ways to lower expenses, and you’ve been asked to set up a series of
+Cloud Storage lifecycle rules for a particular bucket that will move the objects within it from a
+Regional storage class to Nearline after six months, then to Coldline after a year, and finally to
+delete the objects after two years. You decide to use both the console and the command line to achieve these goals.
+
+You’ll need to accomplish the following steps to complete your task:
+
+Create a Cloud Storage bucket.
+Establish lifecycle rules in the console.
+After 180 days, set to Nearline.
+After 365 days, set to Coldline.
+From command line, get lifecycle rules.
+Set lifecycle rule from command line using JSON file.
+
+Create a Cloud Storage bucket.
+From the Google Cloud console main navigation, choose Cloud Storage.
+Click Create bucket.
+Name the bucket uniquely and click Continue
+In the Location Type section, select Region and click Continue.
+Click Create.
+
+Define first lifecycle rule.
+From the Cloud Storage browser page, click None in the Lifecycle column for the bucket just created.
+Click Add rule.
+Under Select object conditions, set the following:
+Age: 180
+Storage class: Regional, Standard
+Click Continue.
+Under Select action, choose Set to Nearline.
+Click Continue.
+Click Save.
+
+Define second lifecycle rule.
+From the Cloud Storage browser page, click Enabled in the Lifecycle column.
+Click Add rule.
+Under Select object conditions, set the following:
+Age: 365
+Storage class: Nearline
+Click Continue.
+Under Select action, choose Set to Coldline.
+Click Continue.
+Click Save.
+
+From command line, get lifecycle rules.
+Click Activate Cloud Shell.
+
+In the Cloud Shell, enter the following code:
+
+gsutil lifecycle get gs://[BUCKETNAME]
+Review output.
+
+Set lifecycle rule with JSON file.
+Clone a repo and change to the lab's directory:
+
+ git clone https://github.com/linuxacademy/content-gc-essentials
+ cd content-gc-essentials/cloud-storage-lifecycle-lab
+Review file in editor.
+
+In the Cloud Shell, enter the following code:
+
+ gsutil lifecycle set delete-after-two-years.json gs://[BUCKET_NAME]
+Confirm the lifecycle rule has been added in the console.
+----
+
+Hands-On Lab: Managing Google Cloud SQL Instances
+You’ve been asked to take control of the team's Cloud SQL initiative.
+To fully grasp how the platform works, you’ll need to understand basic Cloud SQL instance management tasks.
+You’ll need to know how to create instances, as well as clone, start, stop, restart, and delete them.
+
+You’ll need to accomplish the following steps to complete your task:
+Create instance.
+From the main navigation, click Cloud SQL.
+Click Create Instance.
+Choose your database engine.
+Enter an instance ID.
+Provide a password.
+Click Create.
+
+Create a database.
+Select the recently created Cloud SQL instance.
+Choose Create database.
+Name the database and leave the other fields at their default values.
+Click Create.
+
+Clone the instance.
+From the Instance details page, choose Create clone.
+Enter a new name for the clone if desired.
+Choose Clone latest state of instance.
+Click Create clone.
+
+Stop and start an instance.
+Select the first instance created.
+Click Stop.
+After the instance has stopped, click Start.
+
+Restart an instance.
+Select the cloned instance.
+Click Restart.
+
+Delete an instance.
+Select the cloned instance.
+Click Delete.
+Enter the name of the instance in the dialog to confirm the deletion.
+Click Delete.
+----
+
+Hands-On Lab: Exploring Cloud Firestore in Datastore Mode
+You’ve been charged with setting up a non-relational database for LA International to track flights,
+arrival times, and on-time status. You decide to use Cloud Firestore in Datastore mode because of its
+flexible NoSQL structure. After establishing the initial data, you need to run several queries in GQL
+to ensure all the necessary properties are searchable.
+
+You’ll need to accomplish the following steps to complete your task:
+Enable APIs.
+From the main navigation, click APIs and Libraries > Library.
+Search for Datastore.
+Click Enable.
+
+Create the database.
+From the main navigation, click Datastore.
+Choose Datastore Mode.
+Select your closest location.
+Click Create database.
+
+Define entities.
+For Kind, enter Flights.
+Click Create Entity.
+Click Add property for each of the following entries, of the specified type:
+Airline: String
+Flight Number: Integer
+Arrival: Data and Time
+OnTime: Boolean
+Click Save.
+Repeat steps 3 and 4 twice more with different values.
+For the final entry, add another property:
+Note: Text
+Click Save.
+
+Query the data.
+Switch to Query by GQL.
+In the Query field, enter the following:
+ SELECT * FROM Flights
+Click Run Query.
+In the Query field, enter the following:
+ SELECT * FROM Flights WHERE OnTime = false
+Click Run Query.
+Review results.
+----
+Hands-On Lab: Connecting to Cloud Bigtable with cbt
+In preparation for an Internet of Things project involving a great deal of streaming real-time data,
+you’ve been asked to get up to speed on Cloud Bigtable. You’ll need to learn how to create instances
+and then, using the command line cbt commands, define the initial table and its structure.
+
+You’ll need to accomplish the following steps to complete your task:
+Enable API.
+From the main navigation, choose APIs & Services > Library.
+In the search field, enter Bigtable.
+Select the Cloud Bigtable Admin API card.
+Click Enable.
+
+Create Bigtable instance.
+From the main navigation, choose Bigtable in the Storage section.
+Choose Create instance.
+Set the following fields:
+Instance Name: la-data-cbt
+Instance type: Development
+Storage type: HDD
+Cluster Region: us-east1
+Cluster Zone: us-east1-b
+Click Done and then Create.
+
+Install and configure `cbt`.
+Activate the Cloud Shell by clicking its icon in the top row.
+
+In the Cloud Shell, enter the following:
+
+gcloud components update
+gcloud components install cbt
+Configure cbt with the following commands:
+
+echo project = [PROJECT_ID] > ~/.cbtrc
+echo instance = la-data-cbt >> ~/.cbtrc
+
+Create data table.
+In the Cloud Shell, enter the following:
+
+ cbt createtable la-table
+ cbt ls
+
+Define table structure and add data.
+In the Cloud Shell, enter the following:
+
+cbt createfamily la-table offerings
+cbt set la-table r1 offerings:c1=labs
+cbt read la-table
+
+Review results.
+
+Enter the following:
+
+cbt set la-table r1 offerings:c2=courses
+cbt read la-table
+
+Delete Bigtable instance.
+From the console, select the Bigtable instance.
+Choose Delete instance.
+----
+
 Cloud BigQuery Fundamentals
   Fully managed data warehouse for big data
   Near real-time interactive analysis of massive datasets
@@ -216,7 +607,7 @@ Cloud Datafow Fundamentals
   Best option if no current implementation with Apache Hadoop or Spark
   Use cases: analytical dashboards, forecasting sales trends, ELT operations
 
-Cloud Datapro Fundamentals 
+Cloud Datapro Fundamentals
   Fully managed cluster data processing service
   Compatible with Apache Hadoop, Spark, and Hive
   Move existing projects or pipelines without redevelopment
@@ -243,7 +634,7 @@ Cloud Pub/Sub Fundamentals
   Allows secure and highly available messages between independent apps
   Works with both Google Cloud and external services
   Full range of communication:
-    One to many 
+    One to many
     Many to one
     Many to many
   Both push and pull options
@@ -274,7 +665,56 @@ Cloud Data Studio Fundamentals
     Connect to data source
     Visualize data in report
     Share report
+----
+Hands-On Lab: Handling Streaming Messages with Cloud Pub/Sub
+Your company has just been hired to track all the sensor data coming
+from traffic sensors in a major American city. You’ve been asked to
+verify that Cloud Pub/Sub is capable of handling on-going streaming data.
 
+You’ll need to complete the following steps to accomplish your task:
+Create a Topic
+From the main navigation menu, select Pub/Sub > Topics.
+Click Create a topic.
+Enter a name for the topic, such as "la-streaming-topic".
+Keep the Encryption option at its default setting.
+Click Create Topic.
+
+Create a Subscription
+Drill down into the topic we just created and choose Create Subscription from the bottom of the page in the Subscriptions section.
+Enter a name for the subscription, such as "la-streaming-subscription".
+Set Delivery Type to Pull.
+Under Retain acknowledged messages, click the Enable option.
+Leave all the other options as their defaults.
+Click Create.
+
+Retrieve the Files
+From the top navigation, click Activate Cloud Shell.
+In the Cloud Shell, enter the following command to clone the GitHub repository:
+git clone https://github.com/GoogleCloudPlatform/training-data-analyst
+Change to the training-data-analyst/courses/streaming/publish directory:
+cd training-data-analyst/courses/streaming/publish
+Copy the data file from a Cloud Storage bucket:
+gsutil cp gs://cloud-training-demos/sandiego/sensor_obs2008.csv.gz .
+Open the Cloud Shell code editor.
+Review the file send_sensor_data.py in the pubsub-streaming-lab folder.
+On line 25, change the TOPIC variable from sandiego to your topic name.
+Save the file.
+
+Stream Data and Confirm Operation
+Authenticate the shell with the following code:
+gcloud auth application-default login
+Click the generated link to confirm the authentication.
+Execute the following command to install the Google Cloud Pub/Sub library:
+sudo pip install -U google-cloud-pubsub
+Execute the following code to simulate streaming data:
+./send_sensor_data.py --speedFactor=60 --project=[PROJECT_ID]
+Create a new Cloud Shell instance by clicking the plus (+) icon.
+Change directory to the working folder:
+cd training-data-analyst/courses/streaming/publish
+Pull the messages from the subscription with the following command:
+gcloud beta pubsub subscriptions pull --auto-ack [SUBSCRIPTION_NAME] --limit=25
+
+----
 Cloud VPC(virtual private cloud) Fundamentals
   Private network within Google Cloud network infrastructure
   Adds network to Compute Engine, Kubernetes Engine, and App Engine(Flex)
@@ -344,6 +784,44 @@ Cloud Interconnect Fundamentals
   VPN tunnels or NAT devices not needed
   Not encrypted - use app level encryption or own VPN
 
+----
+Hands-On Lab: Build a Custom Network in Google Cloud Shell
+Your team has a new internal app they want to start working on and you’ve
+been asked to create the initial custom network with two subnets—one in
+the US and another in Europe. You’ll also need to establish firewall rules
+that allow SSH access and two Compute Engine instances, one of each of the
+subnets. Finally, you’ll need to test the connectivity of the network from
+the US to the European instances.
+
+You’ll need to complete the following steps to accomplish your task:
+Activate Cloud Shell
+Click the Activate Cloud Shell icon at the top of the console page.
+
+Create the Custom Network and Subnets
+In the Cloud Shell, run the following command to create the network:
+ gcloud compute networks create la-network --subnet-mode custom
+To create the subnets, run the following commands:
+ gcloud compute networks subnets create la-subnet-us-central --network la-network --region us-central1 --range 10.0.1.0/24
+ gcloud compute networks subnets create la-subnet-eu-west --network la-network --region europe-west1 --range 10.0.2.0/24
+List the created network by running the following command:
+ gcloud compute networks subnets list --network la-network
+
+Define the Firewall Rule
+Create the desired firewall rule by running the following command:
+ gcloud compute firewall-rules create la-allow-ssh --allow tcp:22,icmp --network la-network
+
+ Spin Up the VM Instances
+Create the Compute Engine instances by running the following commands:
+ gcloud compute instances create la-vm-us --subnet la-subnet-us-central --zone us-central1-a
+ gcloud compute instances create la-vm-eu --subnet la-subnet-eu-west --zone europe-west1-b
+
+Test Via SSH
+From the Compute Engine VM console page, click the SSH button for the la-vm-us instance to open its SSH terminal.
+In the SSH terminal, run the following command to ping the VM instance in Europe:
+ ping -c 3 [EUROPE_VM_EXTERNAL_IP]
+
+----
+
 Cloud AI Fundamentals
   Collection of services and APIs designed to facilitate machine learning
   Includes hardware accelerators: TPUs (Tensor Flow Processing Units)
@@ -366,14 +844,14 @@ Cloud IoT Core Fundamentals
   Works with both telemetry (event data) & device state data
   Receives data and sends to Cloud Pub/Sub topic
   Supports HTTP and MQTT protocols for communication
-  Highly secure: 
+  Highly secure:
     Each device uses JSON Web Tokens for public/private keys
     Supports RSA or Elliptic Curve algorithms to verify signatures
     Key rotation support
     Access to IoT core controlled by Cloud IAM roles and permissions
   Part of an IoT eco-system with Android Things and Google Beacon
 
-Cloud Data Transfer Fundamentals 
+Cloud Data Transfer Fundamentals
   Range of options available for transferring data to Google Cloud
   Online Transfer
     Tools available: console upload, JSON REST API, gsutil
@@ -384,4 +862,40 @@ Cloud Data Transfer Fundamentals
     Physical device loaded on-prem and shipped to Google data center
     Single device can hold petabyte of data
     Far faster than online transfer for large amounts of data
+
+Hands-On Lab: Working with BigQuery in Google Cloud Shell
+Your company is handling data analysis for a major metropolitan museum.
+You’ve been asked to set up the preliminary BigQuery dataset and table and
+load a large CSV file into the dataset. Naturally, you’ll need to run a
+few queries to verify that the data has been successfully imported.
+
+You’ll need to complete the following steps to accomplish your task:
+Activate Cloud Shell
+Click the Activate Cloud Shell icon at the top of the console page.
+
+Retrieve the Data Files
+In the Cloud Shell, run the following command:
+ gsutil cp gs://la-gcp-labs-resources/essentials/MetObjects_BQ_Lab.csv .
+
+Create a BigQuery Dataset
+Create a BigQuery dataset with the following command:
+ bq mk metobjects
+List the current datasets with the following command:
+ bq ls
+
+Load the Data
+
+Import the data into the dataset with the following command:
+ bq load --source_format=CSV --skip_leading_rows=1 metobjects.linkedObjects MetObjects_BQ_Lab.csv title:STRING,artist:STRING,year:INTEGER,link:STRING
+View the dataset with the following commands:
+ bq ls metobjects
+ bq show metobjects.linkedObjects
+
+Query the Dataset
+Execute a SQL query with the following command:
+bq query "SELECT year,title,artist FROM metobjects.linkedObjects WHERE year > 2000 ORDER BY year DESC LIMIT 15"
+Execute a second SQL query:
+bq query "SELECT title,link FROM metobjects.linkedObjects WHERE year > 2000 ORDER BY year DESC LIMIT 15"
+Test the available links.
+
 
