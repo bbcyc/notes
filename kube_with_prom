@@ -1,0 +1,2333 @@
+Monitoring Kubernetes with Prometheus
+
+Setting Up a Kubernetes Cluster
+
+Setting up the Kubernetes Master
+The following actions will be executed on the Kubernetes Master.
+
+Disable swap
+swapoff -a
+
+Edit: /etc/fstab
+vi /etc/fstab
+
+Comment out swap
+#/root/swap swap swap sw 0 0
+
+Add the Kubernetes repo
+cat << EOF > /etc/yum.repos.d/kubernetes.repo
+[kubernetes]
+name=Kubernetes
+baseurl=https://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
+enabled=1
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+exclude=kube*
+EOF
+
+Disable SELinux
+setenforce 0
+
+Permanently disable SELinux:
+vi /etc/selinux/config
+
+Change enforcing to disabled
+SELINUX=disabled
+
+Install Kubernetes 1.11.3
+yum install -y kubelet-1.11.3 kubeadm-1.11.3 kubectl-1.11.3 kubernetes-cni-0.6.0 --disableexcludes=kubernetes
+
+Start and enable the Kubernetes service
+systemctl start kubelet && systemctl enable kubelet
+
+Create the k8s.conf file:
+cat << EOF >  /etc/sysctl.d/k8s.conf
+net.bridge.bridge-nf-call-ip6tables = 1
+net.bridge.bridge-nf-call-iptables = 1
+EOF
+sysctl --system
+
+Create kube-config.yml:
+vi kube-config.yml
+
+Add the following to kube-config.yml:
+apiVersion: kubeadm.k8s.io/v1alpha1
+kind:
+kubernetesVersion: "v1.11.3"
+networking:
+  podSubnet: 10.244.0.0/16
+apiServerExtraArgs:
+  service-node-port-range: 8000-31274
+
+Initialize Kubernetes
+kubeadm init --config kube-config.yml
+
+Copy admin.conf to your home directory
+mkdir -p $HOME/.kube
+cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+chown $(id -u):$(id -g) $HOME/.kube/config
+
+Install flannel
+kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/v0.9.1/Documentation/kube-flannel.yml
+
+Patch flannel
+vi /etc/kubernetes/manifests/kube-controller-manager.yaml
+
+Add the following to kube-controller-manager.yaml:
+--allocate-node-cidrs=true
+--cluster-cidr=10.244.0.0/16
+
+Then reolad kubelete
+systemctl restart kubelet
+
+Setting up the Kubernetes Worker
+
+Now that the setup for the Kubernetes master is complete, we will begin the process of configuring the worker node. The following actions will be executed on the Kubernetes worker.
+
+Disable swap
+swapoff -a
+
+Edit: /etc/fstab
+vi /etc/fstab
+
+Comment out swap
+#/root/swap swap swap sw 0 0
+
+Add the Kubernetes repo
+cat << EOF > /etc/yum.repos.d/kubernetes.repo
+[kubernetes]
+name=Kubernetes
+baseurl=https://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
+enabled=1
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+exclude=kube*
+EOF
+
+Disable SELinux
+setenforce 0
+
+Permanently disable SELinux:
+vi /etc/selinux/config
+
+Change enforcing to disabled
+SELINUX=disabled
+
+Install Kubernetes 1.11.3
+yum install -y kubelet-1.11.3 kubeadm-1.11.3 kubectl-1.11.3 kubernetes-cni-0.6.0 --disableexcludes=kubernetes
+
+Start and enable the Kubernetes service
+systemctl start kubelet && systemctl enable kubelet
+
+Create the k8s.conf file:
+cat << EOF >  /etc/sysctl.d/k8s.conf
+net.bridge.bridge-nf-call-ip6tables = 1
+net.bridge.bridge-nf-call-iptables = 1
+EOF
+sysctl --system
+
+Use the join token to add the Worker Node to the cluster:
+kubeadm join < MASTER_IP >:6443 --token < TOKEN > --discovery-token-ca-cert-hash sha256:< HASH >
+
+On the master node, test to see if the cluster was created properly.
+
+Get a listing of the nodes:
+kubectl get nodes
+
+Prometheus Architecture
+Client Libraries
+You use client libraries and instrumentation to gather metrics for Prometheus to scrape.
+
+Prometheus scrapes your application's HTTP endpoint. Client libraries send the current state of all metrics tracked to the Prometheus server.
+
+You can develop your own client library if one doesn't exist.
+
+This is the code used to instrument the app using the NodeJS library prom-client:
+
+var Register = require('prom-client').register;
+var Counter = require('prom-client').Counter;
+var Histogram = require('prom-client').Histogram;
+var Summary = require('prom-client').Summary;
+var ResponseTime = require('response-time');
+
+
+module.exports.totalNumOfRequests = totalNumOfRequests = new Counter({
+    name: 'totalNumOfRequests',
+    help: 'Total number of requests made',
+    labelNames: ['method']
+});
+
+module.exports.pathsTaken = pathsTaken = new Counter({
+    name: 'pathsTaken',
+    help: 'Paths taken in the app',
+    labelNames: ['path']
+});
+
+module.exports.responses = responses = new Summary({
+    name: 'responses',
+    help: 'Response time in millis',
+    labelNames: ['method', 'path', 'status']
+});
+
+module.exports.startCollection = function () {
+    require('prom-client').collectDefaultMetrics();
+};
+
+module.exports.requestCounters = function (req, res, next) {
+    if (req.path != '/metrics') {
+        totalNumOfRequests.inc({ method: req.method });
+        pathsTaken.inc({ path: req.path });
+    }
+    next();
+}
+
+module.exports.responseCounters = ResponseTime(function (req, res, time) {
+    if(req.url != '/metrics') {
+        responses.labels(req.method, req.url, res.statusCode).observe(time);
+    }
+})
+
+module.exports.injectMetricsRoute = function (App) {
+    App.get('/metrics', (req, res) => {
+        res.set('Content-Type', Register.contentType);
+        res.end(Register.metrics());
+    });
+};
+Prometheus supported libraries:
+
+Go
+Java or Scala
+Python
+Ruby
+Third-party libraries:
+
+Bash
+C++
+Common Lisp
+Elixir
+Erlang
+Haskell
+Lua for Nginx
+Lua for Tarantool
+.NET / C#
+Node.js
+Perl
+PHP
+Rust
+
+Exporters are software that is deployed next to the application that
+you want to have metrics collected from. Instrumentation for exporters
+are known as custom collectors or ConstMetrics.
+
+How exporters work:
+
+Takes requests
+Gathers the data
+Formats the data
+Returns the data to Prometheus
+Databases:
+
+Consul exporter
+Memcached exporter
+MySQL server exporter
+Hardware:
+
+Node/system metrics exporter
+HTTP:
+
+HAProxy exporter
+Other monitoring systems:
+
+AWS CloudWatch exporter
+Collectd exporter
+Graphite exporter
+InfluxDB exporter
+JMX exporter
+SNMP exporter
+StatsD exporter
+Miscellaneous:
+
+Blackbox exporter
+
+Service Discovery
+Use Kubernetes API to discover services that Prom uses
+
+Run Prometheus on Kubernetes
+In this lesson, we will set up Prometheus on the Kubernetes cluster. We will be creating:
+
+A metrics namespace for our environment to live in
+A ClusterRole to give Prometheus access to targets using Service Discovery
+A ConfigMap map that will be used to generate the Prometheus config file
+A Prometheus Deployment and Service
+Kube State Metrics to get access to metrics on the Kubernetes API
+You can clone the YAML files form Github.
+
+On Kube Master:
+yum install -y git
+
+Create a file called namespaces.yml. This file will be used to create the monitoring namespace.
+namespaces.yml
+
+{
+  "kind": "Namespace",
+  "apiVersion": "v1",
+  "metadata": {
+    "name": "monitoring",
+    "labels": {
+      "name": "monitoring"
+    }
+  }
+}
+Apply the namespace:
+
+kubectl apply -f namespaces.yml
+Create a file called clusterRole.yml. This will be used to set up the cluster's roles.
+clusterRole.yml:
+
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRole
+metadata:
+  name: prometheus
+rules:
+- apiGroups: [""]
+  resources:
+  - nodes
+  - nodes/proxy
+  - services
+  - endpoints
+  - pods
+  verbs: ["get", "list", "watch"]
+- apiGroups:
+  - extensions
+  resources:
+  - ingresses
+  verbs: ["get", "list", "watch"]
+- nonResourceURLs: ["/metrics"]
+  verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRoleBinding
+metadata:
+  name: prometheus
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prometheus
+subjects:
+- kind: ServiceAccount
+  name: default
+  namespace: monitoring
+Apply the cluster roles to the Kubernetes cluster:
+
+kubectl apply -f clusterRole.yml
+Create config-map.yml. Kubernetes will use this file to manage the prometheus.yml configuration file.
+config-map.yml:
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-server-conf
+  labels:
+    name: prometheus-server-conf
+  namespace: monitoring
+data:
+  prometheus.yml: |-
+    global:
+      scrape_interval: 5s
+      evaluation_interval: 5s
+
+    scrape_configs:
+      - job_name: 'kubernetes-apiservers'
+
+        kubernetes_sd_configs:
+        - role: endpoints
+        scheme: https
+
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+
+        relabel_configs:
+        - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
+          action: keep
+          regex: default;kubernetes;https
+
+      - job_name: 'kubernetes-nodes'
+
+        scheme: https
+
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+
+        kubernetes_sd_configs:
+        - role: node
+
+        relabel_configs:
+        - action: labelmap
+          regex: __meta_kubernetes_node_label_(.+)
+        - target_label: __address__
+          replacement: kubernetes.default.svc:443
+        - source_labels: [__meta_kubernetes_node_name]
+          regex: (.+)
+          target_label: __metrics_path__
+          replacement: /api/v1/nodes/${1}/proxy/metrics
+
+
+      - job_name: 'kubernetes-pods'
+
+        kubernetes_sd_configs:
+        - role: pod
+
+        relabel_configs:
+        - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+          action: keep
+          regex: true
+        - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+          action: replace
+          target_label: __metrics_path__
+          regex: (.+)
+        - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+          action: replace
+          regex: ([^:]+)(?::\d+)?;(\d+)
+          replacement: $1:$2
+          target_label: __address__
+        - action: labelmap
+          regex: __meta_kubernetes_pod_label_(.+)
+        - source_labels: [__meta_kubernetes_namespace]
+          action: replace
+          target_label: kubernetes_namespace
+        - source_labels: [__meta_kubernetes_pod_name]
+          action: replace
+          target_label: kubernetes_pod_name
+
+      - job_name: 'kubernetes-cadvisor'
+
+        scheme: https
+
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+
+        kubernetes_sd_configs:
+        - role: node
+
+        relabel_configs:
+        - action: labelmap
+          regex: __meta_kubernetes_node_label_(.+)
+        - target_label: __address__
+          replacement: kubernetes.default.svc:443
+        - source_labels: [__meta_kubernetes_node_name]
+          regex: (.+)
+          target_label: __metrics_path__
+          replacement: /api/v1/nodes/${1}/proxy/metrics/cadvisor
+
+      - job_name: 'kubernetes-service-endpoints'
+
+        kubernetes_sd_configs:
+        - role: endpoints
+
+        relabel_configs:
+        - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape]
+          action: keep
+          regex: true
+        - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scheme]
+          action: replace
+          target_label: __scheme__
+          regex: (https?)
+        - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_path]
+          action: replace
+          target_label: __metrics_path__
+          regex: (.+)
+        - source_labels: [__address__, __meta_kubernetes_service_annotation_prometheus_io_port]
+          action: replace
+          target_label: __address__
+          regex: ([^:]+)(?::\d+)?;(\d+)
+          replacement: $1:$2
+        - action: labelmap
+          regex: __meta_kubernetes_service_label_(.+)
+        - source_labels: [__meta_kubernetes_namespace]
+          action: replace
+          target_label: kubernetes_namespace
+        - source_labels: [__meta_kubernetes_service_name]
+          action: replace
+          target_label: kubernetes_name
+Create the ConfigMap:
+
+kubectl apply -f config-map.yml
+Create prometheus-deployment.yml. This file will be used to create the Prometheus deployment; which will include the pods, replica sets and volumes.
+prometheus-deployment.yml
+
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: prometheus-deployment
+  namespace: monitoring
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: prometheus-server
+    spec:
+      containers:
+        - name: prometheus
+          image: prom/prometheus:v2.2.1
+          args:
+            - "--config.file=/etc/prometheus/prometheus.yml"
+            - "--storage.tsdb.path=/prometheus/"
+            - ""--web.enable-lifecycle"
+          ports:
+            - containerPort: 9090
+          volumeMounts:
+            - name: prometheus-config-volume
+              mountPath: /etc/prometheus/
+            - name: prometheus-storage-volume
+              mountPath: /prometheus/
+      volumes:
+        - name: prometheus-config-volume
+          configMap:
+            defaultMode: 420
+            name: prometheus-server-conf
+
+        - name: prometheus-storage-volume
+          emptyDir: {}
+Deploy the Prometheus environment:
+
+kubectl apply -f prometheus-deployment.yml
+Finally, we will finish off the Prometheus environment by creating a server to make publicly accessible. Create prometheus-service.yml.
+prometheus-service.yml:
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus-service
+  namespace: monitoring
+  annotations:
+      prometheus.io/scrape: 'true'
+      prometheus.io/port:   '9090'
+
+spec:
+  selector:
+    app: prometheus-server
+  type: NodePort
+  ports:
+    - port: 8080
+      targetPort: 9090
+      nodePort: 8080
+Create the service that will make Prometheus publicly accessible:
+
+kubectl apply -f prometheus-service.yml
+Create the clusterRole.yml file to set up access so Prometheus can access metrics using Service Discovery.
+clusterRole.yml:
+
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRole
+metadata:
+  name: prometheus
+rules:
+- apiGroups: [""]
+  resources:
+  - nodes
+  - nodes/proxy
+  - services
+  - endpoints
+  - pods
+  verbs: ["get", "list", "watch"]
+- apiGroups:
+  - extensions
+  resources:
+  - ingresses
+  verbs: ["get", "list", "watch"]
+- nonResourceURLs: ["/metrics"]
+  verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRoleBinding
+metadata:
+  name: prometheus
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prometheus
+subjects:
+- kind: ServiceAccount
+  name: default
+  namespace: monitoring
+
+Crate the Kube State Metrics pod to get access to metrics on the Kubernetes API:
+kube-state-metrics.yml:
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: kube-state-metrics
+  namespace: monitoring
+  labels:
+    app: kube-state-metrics
+  annotations:
+    prometheus.io/scrape: 'true'
+spec:
+  ports:
+  - name: metrics
+    port: 8080
+    targetPort: metrics
+    protocol: TCP
+  selector:
+    app: kube-state-metrics
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: kube-state-metrics
+  namespace: monitoring
+  labels:
+    app: kube-state-metrics
+spec:
+  replicas: 1
+  template:
+    metadata:
+      name: kube-state-metrics-main
+      labels:
+        app: kube-state-metrics
+    spec:
+      containers:
+        - name: kube-state-metrics
+          image: quay.io/coreos/kube-state-metrics:latest
+          ports:
+          - containerPort: 8080
+            name: metrics
+Access Prometheus by visiting https://<MASTER_IP>:8080
+
+
+Configuring Prometheus
+In this lesson you will learn about the Prometheus configuration file,
+how to configure static targets, as well as how to use service discovery
+to find Kubernetes endpoints. Below is the contents of prometheus.conf
+that was created by the Config Map.
+
+prometheus.conf:
+
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  - job_name: 'kubernetes-apiservers'
+
+    kubernetes_sd_configs:
+    - role: endpoints
+    scheme: https
+
+    tls_config:
+      ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+    bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+
+    relabel_configs:
+    - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
+      action: keep
+      regex: default;kubernetes;https
+
+  - job_name: 'kubernetes-nodes'
+
+    scheme: https
+
+    tls_config:
+      ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+    bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+
+    kubernetes_sd_configs:
+    - role: node
+
+    relabel_configs:
+    - action: labelmap
+      regex: __meta_kubernetes_node_label_(.+)
+    - target_label: __address__
+      replacement: kubernetes.default.svc:443
+    - source_labels: [__meta_kubernetes_node_name]
+      regex: (.+)
+      target_label: __metrics_path__
+      replacement: /api/v1/nodes/${1}/proxy/metrics
+
+
+  - job_name: 'kubernetes-pods'
+
+    kubernetes_sd_configs:
+    - role: pod
+
+    relabel_configs:
+    - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+      action: keep
+      regex: true
+    - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+      action: replace
+      target_label: __metrics_path__
+      regex: (.+)
+    - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+      action: replace
+      regex: ([^:]+)(?::\d+)?;(\d+)
+      replacement: $1:$2
+      target_label: __address__
+    - action: labelmap
+      regex: __meta_kubernetes_pod_label_(.+)
+    - source_labels: [__meta_kubernetes_namespace]
+      action: replace
+      target_label: kubernetes_namespace
+    - source_labels: [__meta_kubernetes_pod_name]
+      action: replace
+      target_label: kubernetes_pod_name
+
+  - job_name: 'kubernetes-cadvisor'
+
+    scheme: https
+
+    tls_config:
+      ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+    bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+
+    kubernetes_sd_configs:
+    - role: node
+
+    relabel_configs:
+    - action: labelmap
+      regex: __meta_kubernetes_node_label_(.+)
+    - target_label: __address__
+      replacement: kubernetes.default.svc:443
+    - source_labels: [__meta_kubernetes_node_name]
+      regex: (.+)
+      target_label: __metrics_path__
+      replacement: /api/v1/nodes/${1}/proxy/metrics/cadvisor
+
+  - job_name: 'kubernetes-service-endpoints'
+
+    kubernetes_sd_configs:
+    - role: endpoints
+
+    relabel_configs:
+    - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape]
+      action: keep
+      regex: true
+    - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scheme]
+      action: replace
+      target_label: __scheme__
+      regex: (https?)
+    - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_path]
+      action: replace
+      target_label: __metrics_path__
+      regex: (.+)
+    - source_labels: [__address__, __meta_kubernetes_service_annotation_prometheus_io_port]
+      action: replace
+      target_label: __address__
+      regex: ([^:]+)(?::\d+)?;(\d+)
+      replacement: $1:$2
+    - action: labelmap
+      regex: __meta_kubernetes_service_label_(.+)
+    - source_labels: [__meta_kubernetes_namespace]
+      action: replace
+      target_label: kubernetes_namespace
+    - source_labels: [__meta_kubernetes_service_name]
+      action: replace
+      target_label: kubernetes_name
+Prometheus Configuration Documentation https://prometheus.io/docs/prometheus/latest/configuration/configuration/
+
+Setting Up Grafana
+In this lesson, you will learn how to deploy a Grafana pod and service to Kubernetes.
+
+Create grafana-deployment.yml. This file will be used to create the Grafana deployment. Be sure to change the password.
+
+grafana-deployment.yml:
+
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: monitoring
+  labels:
+    app: grafana
+    component: core
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: grafana
+        component: core
+    spec:
+      containers:
+        - image: grafana/grafana:3.1.1
+          name: grafana
+          env:
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              value: password
+          ports:
+            - containerPort: 3000
+          volumeMounts:
+          - name: grafana-persistent-storage
+            mountPath: /var
+      volumes:
+      - name: grafana-persistent-storage
+        emptyDir: {}
+Deploy Grafana:
+
+kubectl apply -f grafana-deployment.yml
+Crate grafana-service.yml. This file will be used to make the pod publicly accessible.
+
+grafana-service.yml:
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana-service
+  namespace: monitoring
+
+spec:
+  selector:
+    app: grafana
+  type: NodePort
+  ports:
+    - port: 3000
+      targetPort: 3000
+      nodePort: 8000
+Create the Grafana service:
+
+kubectl apply -f grafana-service.yml
+
+NodeExporter
+Repeat these steps on both your master and worker nodes.
+
+Create the Prometheus user:
+
+adduser prometheus
+Download Node Exporter:
+
+cd /home/prometheus
+curl -LO "https://github.com/prometheus/node_exporter/releases/download/v0.16.0/node_exporter-0.16.0.linux-amd64.tar.gz"
+tar -xvzf node_exporter-0.16.0.linux-amd64.tar.gz
+mv node_exporter-0.16.0.linux-amd64 node_exporter
+cd node_exporter
+chown prometheus:prometheus node_exporter
+vi /etc/systemd/system/node_exporter.service
+/etc/systemd/system/node_exporter.service:
+
+[Unit]
+Description=Node Exporter
+
+[Service]
+User=prometheus
+ExecStart=/home/prometheus/node_exporter/node_exporter
+
+[Install]
+WantedBy=default.target
+Reload systemd:
+
+systemctl daemon-reload
+Enable the node_exporter service:
+
+systemctl enable node_exporter.service
+Start the node_exporter service:
+
+systemctl start node_exporter.service
+
+Expression Browser
+In this lesson, you will learn how to use the Expression browser to execute queries, view your Prometheus configuration, and Prometheus targets.
+
+Container CPU load average:
+
+container_cpu_load_average_10s
+Memory usage query:
+
+((sum(node_memory_MemTotal_bytes) - sum(node_memory_MemFree_bytes) - sum(node_memory_Buffers_bytes) - sum(node_memory_Cached_bytes)) / sum(node_memory_MemTotal_bytes)) * 100
+
+Adding a Grafana Dashboard
+In this lesson, you will import a Grafana Dashboard that will be used to visualize metrics imported from the NodeExporter. Below are the links to the dashboard.
+
+Content Kubernetes Prometheus Env Repository https://github.com/linuxacademy/content-kubernetes-prometheus-env
+
+Kubernetes Nodes Dashboard https://github.com/linuxacademy/content-kubernetes-prometheus-env/blob/master/grafana/dashboard/Kubernetes%20All%20Nodes.json
+
+----
+Hands-On Lab: Configuring Prometheus to Use Service Discovery
+Elevate your permissions to root. Execute ./bootstrap.sh to complete the setup of the environment.
+Edit prometheus-config-map.yml to create two service discovery targets.
+Create a job called kubernetes-apiservers.
+The role should be set to endpoint and the scheme should be set to https.
+Configure tls_config to use /var/run/secrets/kubernetes.io/serviceaccount/ca.crt as the CA file, and /var/run/secrets/kubernetes.io/serviceaccount/token on the bearer token file.
+Relabel __meta_kubernetes_namespace, __meta_kubernetes_service_name, and __meta_kubernetes_endpoint_port_name.
+Make sure these source labels are kept, and set default, kubernetes, and https for the RegEx.
+Create a second job called kubernetes-cadvisor.
+Set the scheme to https.
+Configure tls_config to use /var/run/secrets/kubernetes.io/serviceaccount/ca.crt as the CA file and /var/run/secrets/kubernetes.io/serviceaccount/token on the bearer token file.
+Set the role to node.
+Configure three relabel settings:
+Create a labelmap that will remove __meta_kubernetes_node_label_ from the label name.
+Create a target label that will replace the address with kubernetes.default.svc:443.
+Finally, create a target label that will replace the metrics path with /api/v1/nodes/${1}/proxy/metrics/cadvisor and set the __meta_kubernetes_node_name source label as the value of ${1}.
+Reload the Prometheus pod by deleting it.
+Verify that two service discovery endpoints are appearing as targets.
+
+Configure the Service Discovery Targets
+keyboard_arrow_up
+Edit prometheus-config-map.yml and add in the two service discovery targets:
+
+vi prometheus-config-map.yml
+When we're done, the whole file should look like this:
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-server-conf
+  labels:
+    name: prometheus-server-conf
+  namespace: monitoring
+data:
+  prometheus.yml: |-
+    global:
+      scrape_interval: 5s
+      evaluation_interval: 5s
+
+    scrape_configs:
+      - job_name: 'kubernetes-apiservers'
+
+        kubernetes_sd_configs:
+        - role: endpoints
+        scheme: https
+
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+
+        relabel_configs:
+        - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
+          action: keep
+          regex: default;kubernetes;https
+
+      - job_name: 'kubernetes-cadvisor'
+
+        scheme: https
+
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+
+        kubernetes_sd_configs:
+        - role: node
+
+        relabel_configs:
+        - action: labelmap
+          regex: __meta_kubernetes_node_label_(.+)
+        - target_label: __address__
+          replacement: kubernetes.default.svc:443
+        - source_labels: [__meta_kubernetes_node_name]
+          regex: (.+)
+          target_label: __metrics_path__
+          replacement: /api/v1/nodes/${1}/proxy/metrics/cadvisor
+
+Apply the Changes to the Prometheus Configuration Map
+keyboard_arrow_up
+Now, apply the changes that were made to prometheus-config-map.yml:
+
+kubectl apply -f prometheus-config-map.yml
+check_circle
+Delete the Prometheus Pod
+keyboard_arrow_up
+List the pods to find the name of the Prometheus pod:
+
+kubectl get pods -n monitoring
+Delete the Prometheus pod:
+
+kubectl delete pods <POD_NAME> -n monitoring
+Open up a new web browser tab, and navigate to the Expression browser. This will be at the public IP of the lab server, on port 8080:
+
+http://<IP>:8080
+Click on Status, and select Target from the dropdown. We should see two targets in there.
+----
+
+Instrumenting Applications
+This lesson discusses how to instrument an application by using a Prometheus client library. Though we will be talking about a NodeJS application, there are client libraries available for a wide variety of programming languages.
+
+You can clone the Comic Box App here. https://github.com/linuxacademy/content-kubernetes-prometheus-app
+
+Collecting Metrics from Applications
+In this lesson, you will deploy a NodeJS application to Kubernets that will be monitored by Prometheus.
+
+Github Link: https://github.com/linuxacademy/content-kubernetes-prometheus-app
+
+Build a Docker image:
+
+docker build -t rivethead42/comicbox .
+Login to Docker Hub:
+
+docker login
+Push the image to Docker Hub:
+
+docker push < USERNAME >/comicbox
+Create a deployment using the image above:
+
+kubectl apply -f deployment.yml
+
+PromQL
+PromQL Basics
+In this lesson, you will learn the basics of Prometheus' query language—PromQL.
+This includes queries using the metric name and then filtering it using labels.
+
+Return all time series with the metric node_cpu_seconds_total:
+
+node_cpu_seconds_total
+Return all time series with the metric node_cpu_seconds_total and the given job and mode labels:
+
+node_cpu_seconds_total{job="node-exporter", mode="idle"}
+Return a whole range of time (in this case 5 minutes) for the same vector, making it a range vector:
+
+node_cpu_seconds_total{job="node-exporter", mode="idle"}[5m]
+Query job that end with -exporter:
+
+node_cpu_seconds_total{job=~".*-exporter"}
+Query job that begins with kube:
+
+container_cpu_load_average_10s{job=~"^kube.*"}
+
+PromQL Operations and Functions
+In this lesson, you will learn how to add operations and functions to your PromQL expressions.
+
+Arithmetic binary operators:
+
+\+ (addition)
+\- (subtraction)
+\* (multiplication)
+/ (division)
+% (modulo)
+^ (power/exponentiation)
+Comparison binary operators:
+
+== (equal)
+!= (not-equal)
+\> (greater-than)
+< (less-than)
+\>= (greater-or-equal)
+<= (less-or-equal)
+Logical/set binary operators:
+
+and (intersection)
+or (union)
+unless (complement)
+Aggregation operators:
+
+sum (calculate sum over dimensions)
+min (select minimum over dimensions)
+max (select maximum over dimensions)
+avg (calculate the average over dimensions)
+stddev (calculate population standard deviation over dimensions)
+stdvar (calculate population standard variance over dimensions)
+count (count number of elements in the vector)
+count_values (count number of elements with the same value)
+bottomk (smallest k elements by sample value)
+topk (largest k elements by sample value)
+quantile (calculate ?-quantile (0 ? ? ? 1) over dimensions)
+Get the total memory in bytes:
+
+node_memory_MemTotal_bytes
+Get a sum of the total memory in bytes:
+
+sum(node_memory_MemTotal_bytes)
+Get a percentage of total memory used:
+
+((sum(node_memory_MemTotal_bytes) - sum(node_memory_MemFree_bytes) - sum(node_memory_Buffers_bytes) - sum(node_memory_Cached_bytes)) / sum(node_memory_MemTotal_bytes)) * 100
+Using a function with your query:
+
+irate(node_cpu_seconds_total{job="node-exporter", mode="idle"}[5m])
+Using an operation and a function with your query:
+
+avg(irate(node_cpu_seconds_total{job="node-exporter", mode="idle"}[5m]))
+Grouping your queries:
+
+avg(irate(node_cpu_seconds_total{job="node-exporter", mode="idle"}[5m])) by (instance)
+
+Recording Rules
+Create prometheus-read-rules-map.yml. This file will be used to create a recording rule for Prometheus.
+prometheus-read-rules-map.yml:
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+name: prometheus-read-rules-conf
+labels:
+ name: prometheus-read-rules-conf
+namespace: monitoring
+data:
+node_rules.yml: |-
+ groups:
+ - name: node_rules
+   interval: 10s
+   rules:
+     - record: instance:node_cpu:avg_rate5m
+       expr: 100 - avg(irate(node_cpu_seconds_total{job="node-exporter", mode="idle"}[5m])) by (instance) * 100
+     - record: instance:node_memory_usage:percentage
+       expr: ((sum(node_memory_MemTotal_bytes) - sum(node_memory_MemFree_bytes) - sum(node_memory_Buffers_bytes) - sum(node_memory_Cached_bytes)) / sum(node_memory_MemTotal_bytes)) * 100
+     - record: instance:root:node_filesystem_usage:percentage
+       expr: (node_filesystem_size_bytes{mountpoint="/rootfs"} - node_filesystem_free_bytes{mountpoint="/rootfs"}) /node_filesystem_size_bytes{mountpoint="/rootfs"} * 100
+Apply the recording rule:
+
+kubectl apply -f prometheus-read-rules-map.yml
+Update the prometheus-config-map.yml with record rules.
+prometheus-config-map.yml:
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+name: prometheus-server-conf
+labels:
+ name: prometheus-server-conf
+namespace: monitoring
+data:
+prometheus.yml: |-
+ global:
+   scrape_interval: 5s
+   evaluation_interval: 5s
+
+ rule_files:
+ - rules/*_rules.yml
+
+ scrape_configs:
+   - job_name: 'node-exporter'
+     static_configs:
+     - targets: ['<KUBERNETES_IP>:9100', '<KUBERNETES_IP>:9100']
+
+   - job_name: 'kubernetes-apiservers'
+
+     kubernetes_sd_configs:
+     - role: endpoints
+     scheme: https
+
+     tls_config:
+       ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+     bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+
+     relabel_configs:
+     - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
+       action: keep
+       regex: default;kubernetes;https
+
+   - job_name: 'kubernetes-nodes'
+
+     scheme: https
+
+     tls_config:
+       ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+     bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+
+     kubernetes_sd_configs:
+     - role: node
+
+     relabel_configs:
+     - action: labelmap
+       regex: __meta_kubernetes_node_label_(.+)
+     - target_label: __address__
+       replacement: kubernetes.default.svc:443
+     - source_labels: [__meta_kubernetes_node_name]
+       regex: (.+)
+       target_label: __metrics_path__
+       replacement: /api/v1/nodes/${1}/proxy/metrics
+
+   - job_name: 'kubernetes-pods'
+
+     kubernetes_sd_configs:
+     - role: pod
+
+     relabel_configs:
+     - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+       action: keep
+       regex: true
+     - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+       action: replace
+       target_label: __metrics_path__
+       regex: (.+)
+     - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+       action: replace
+       regex: ([^:]+)(?::\d+)?;(\d+)
+       replacement: $1:$2
+       target_label: __address__
+     - action: labelmap
+       regex: __meta_kubernetes_pod_label_(.+)
+     - source_labels: [__meta_kubernetes_namespace]
+       action: replace
+       target_label: kubernetes_namespace
+     - source_labels: [__meta_kubernetes_pod_name]
+       action: replace
+       target_label: kubernetes_pod_name
+
+   - job_name: 'kubernetes-cadvisor'
+
+     scheme: https
+
+     tls_config:
+       ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+     bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+
+     kubernetes_sd_configs:
+     - role: node
+
+     relabel_configs:
+     - action: labelmap
+       regex: __meta_kubernetes_node_label_(.+)
+     - target_label: __address__
+       replacement: kubernetes.default.svc:443
+     - source_labels: [__meta_kubernetes_node_name]
+       regex: (.+)
+       target_label: __metrics_path__
+       replacement: /api/v1/nodes/${1}/proxy/metrics/cadvisor
+
+   - job_name: 'kubernetes-service-endpoints'
+
+     kubernetes_sd_configs:
+     - role: endpoints
+
+     relabel_configs:
+     - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape]
+       action: keep
+       regex: true
+     - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scheme]
+       action: replace
+       target_label: __scheme__
+       regex: (https?)
+     - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_path]
+       action: replace
+       target_label: __metrics_path__
+       regex: (.+)
+     - source_labels: [__address__, __meta_kubernetes_service_annotation_prometheus_io_port]
+       action: replace
+       target_label: __address__
+       regex: ([^:]+)(?::\d+)?;(\d+)
+       replacement: $1:$2
+     - action: labelmap
+       regex: __meta_kubernetes_service_label_(.+)
+     - source_labels: [__meta_kubernetes_namespace]
+       action: replace
+       target_label: kubernetes_namespace
+     - source_labels: [__meta_kubernetes_service_name]
+       action: replace
+       target_label: kubernetes_name
+Apply the update configuration file:
+
+kubectl apply -f prometheus-config-map.yml
+Add a new volume for the recording rules:
+
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+name: prometheus-deployment
+namespace: monitoring
+spec:
+replicas: 1
+template:
+ metadata:
+   labels:
+     app: prometheus-server
+ spec:
+   containers:
+     - name: prometheus
+       image: prom/prometheus:v2.2.1
+       args:
+         - "--config.file=/etc/prometheus/prometheus.yml"
+         - "--storage.tsdb.path=/prometheus/"
+         - "--web.enable-lifecycle"
+       ports:
+         - containerPort: 9090
+       volumeMounts:
+         - name: prometheus-config-volume
+           mountPath: /etc/prometheus/
+         - name: prometheus-storage-volume
+           mountPath: /prometheus/
+         - name: prometheus-read-rules-volume
+           mountPath: /etc/prometheus/rules
+     - name: watch
+       image: weaveworks/watch:master-5b2a6e5
+       imagePullPolicy: IfNotPresent
+       args: ["-v", "-t", "-p=/etc/prometheus", "-p=/var/prometheus", "curl", "-X", "POST", "--fail", "-o", "-", "-sS", "http://localhost:9090/-/reload"]
+       volumeMounts:
+         - name: prometheus-config-volume
+           mountPath: /etc/prometheus
+   volumes:
+     - name: prometheus-config-volume
+       configMap:
+         defaultMode: 420
+         name: prometheus-server-conf
+
+     - name: prometheus-read-rules-volume
+       configMap:
+         defaultMode: 420
+         name: prometheus-read-rules-conf
+
+     - name: prometheus-storage-volume
+       emptyDir: {}
+Apply the updates to the Prometheus deployment:
+
+kubectl apply -f prometheus-deployment.yml
+
+Hands-On Lab: Creating a Recording Rule
+Execute ./bootstrap.sh to complete the setup of the environment.
+
+Edit the Configuration Map prometheus-rules-config-map.yml, which is located in /root/prometheus.
+
+Create a new file called process_rules.yml that will be managed by the configuration map.
+Create a group called process_rules.
+Create a rule called job:process_cpu_seconds:rate5m.
+Use the rate function as the expression to calculate the process_cpu_seconds_total metric's per-second average rate of increase over a span of 5 minutes.
+Apply the changes to process_rules.yml.
+
+Now edit the ConfigMap prometheus-config-map.yml to include the rule files. The rules files section should include all rule files located in /var/prometheus/rules/ that end with _rules.yml without having to hard code the file.
+
+Apply the changes to prometheus-config-map.yml.
+
+Last of all, edit prometheus-deployment.yml. For your Prometheus container, add a new volume called prometheus-rules-volume that mounts /var/prometheus/rules.
+
+In the volumes section, add a new volume called prometheus-rules-volume that maps to the prometheus-rules-conf Config Map.
+Apply the changes to prometheus-deployment.yml.
+
+Create the Recording Rule
+keyboard_arrow_up
+Add the job:prcoess_cpu_seconds:rate5m recording rule to prometheus-rules-config-map.yml. The file should look like this when we're done editing it:
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  creationTimestamp: null
+  name: prometheus-rules-conf
+  namespace: monitoring
+data:
+  process_rules.yml: |
+    groups:
+    - name: process_rules
+      rules:
+      - record: job:process_cpu_seconds:rate5m
+        expr: (rate(process_cpu_seconds_total[5m]))
+Apply the changes with this command:
+kubectl apply -f prometheus-rules-config-map.yml
+
+Update the Prometheus Configuration
+keyboard_arrow_up
+Edit prometheus-config-map.yml
+
+vi prometheus-config-map.yml
+Add the rule files to prometheus-config-map.yml:
+
+rule_files:
+ - /var/prometheus/rules/*_rules.yml
+It should look like this when we're done:
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+name: prometheus-server-conf
+labels:
+ name: prometheus-server-conf
+namespace: monitoring
+data:
+prometheus.yml: |-
+ global:
+   scrape_interval: 5s
+   evaluation_interval: 5s
+
+  rule_files:
+ - /var/prometheus/rules/*_rules.yml
+
+ scrape_configs:
+   - job_name: 'kubernetes-apiservers'
+
+     kubernetes_sd_configs:
+     - role: endpoints
+     scheme: https
+
+     tls_config:
+       ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+     bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+
+     relabel_configs:
+     - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
+       action: keep
+       regex: default;kubernetes;https
+
+   - job_name: 'kubernetes-nodes'
+
+     scheme: https
+
+     tls_config:
+       ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+     bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+
+     kubernetes_sd_configs:
+     - role: node
+
+     relabel_configs:
+     - action: labelmap
+       regex: __meta_kubernetes_node_label_(.+)
+     - target_label: __address__
+       replacement: kubernetes.default.svc:443
+     - source_labels: [__meta_kubernetes_node_name]
+       regex: (.+)
+       target_label: __metrics_path__
+       replacement: /api/v1/nodes/${1}/proxy/metrics
+
+   - job_name: 'kubernetes-pods'
+
+     kubernetes_sd_configs:
+     - role: pod
+
+     relabel_configs:
+     - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+       action: keep
+       regex: true
+     - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+       action: replace
+       target_label: __metrics_path__
+       regex: (.+)
+     - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+       action: replace
+       regex: ([^:]+)(?::\d+)?;(\d+)
+       replacement: $1:$2
+       target_label: __address__
+     - action: labelmap
+       regex: __meta_kubernetes_pod_label_(.+)
+     - source_labels: [__meta_kubernetes_namespace]
+       action: replace
+       target_label: kubernetes_namespace
+     - source_labels: [__meta_kubernetes_pod_name]
+       action: replace
+       target_label: kubernetes_pod_name
+
+   - job_name: 'kubernetes-cadvisor'
+
+     scheme: https
+
+     tls_config:
+       ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+     bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+
+     kubernetes_sd_configs:
+     - role: node
+
+     relabel_configs:
+     - action: labelmap
+       regex: __meta_kubernetes_node_label_(.+)
+     - target_label: __address__
+       replacement: kubernetes.default.svc:443
+     - source_labels: [__meta_kubernetes_node_name]
+       regex: (.+)
+       target_label: __metrics_path__
+       replacement: /api/v1/nodes/${1}/proxy/metrics/cadvisor
+
+   - job_name: 'kubernetes-service-endpoints'
+
+     kubernetes_sd_configs:
+     - role: endpoints
+
+     relabel_configs:
+     - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape]
+       action: keep
+       regex: true
+     - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scheme]
+       action: replace
+       target_label: __scheme__
+       regex: (https?)
+     - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_path]
+       action: replace
+       target_label: __metrics_path__
+       regex: (.+)
+     - source_labels: [__address__, __meta_kubernetes_service_annotation_prometheus_io_port]
+       action: replace
+       target_label: __address__
+       regex: ([^:]+)(?::\d+)?;(\d+)
+       replacement: $1:$2
+     - action: labelmap
+       regex: __meta_kubernetes_service_label_(.+)
+     - source_labels: [__meta_kubernetes_namespace]
+       action: replace
+       target_label: kubernetes_namespace
+     - source_labels: [__meta_kubernetes_service_name]
+       action: replace
+       target_label: kubernetes_name
+
+Apply the changes with this command:
+
+kubectl apply -f prometheus-config-map.yml
+
+Add `prometheus-rules-conf` to the Prometheus Deployment
+keyboard_arrow_up
+Edit prometheus-deployment.yml and add the prometheus-rules-volume volume to it. When we're finished, it should look like this:
+
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: prometheus-deployment
+  namespace: monitoring
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: prometheus-server
+    spec:
+      containers:
+        - name: prometheus
+          image: prom/prometheus:v2.2.1
+          args:
+            - "--config.file=/etc/prometheus/prometheus.yml"
+            - "--storage.tsdb.path=/prometheus/"
+            - "--web.enable-lifecycle"
+          ports:
+            - containerPort: 9090
+          volumeMounts:
+            - name: prometheus-config-volume
+              mountPath: /etc/prometheus/
+            - name: prometheus-storage-volume
+              mountPath: /prometheus/
+            - name: prometheus-rules-volume
+              mountPath: /var/prometheus/rules
+      volumes:
+        - name: prometheus-config-volume
+          configMap:
+            defaultMode: 420
+            name: prometheus-server-conf
+
+        - name: prometheus-rules-volume
+          configMap:
+            name: prometheus-rules-conf
+
+        - name: prometheus-storage-volume
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus-service
+  namespace: monitoring
+  annotations:
+      prometheus.io/scrape: 'true'
+      prometheus.io/port:   '9090'
+
+spec:
+  selector:
+    app: prometheus-server
+  type: NodePort
+  ports:
+    - port: 8080
+      targetPort: 9090
+      nodePort: 8080
+
+Apply the changes with this command:
+
+kubectl apply -f prometheus-deployment.yml
+------
+
+Alertmanager
+In this lesson, you will learn how to set up Alertmanager to work with Prometheus. Below are the files that will be used to complete this task:
+
+Create a Config Map that will be used to set up the Alertmanager config file.
+alertmanager-configmap.yml:
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+name: alertmanager-conf
+labels:
+ name: alertmanager-conf
+namespace: monitoring
+data:
+alertmanager.yml: |
+ global:
+   smtp_smarthost: 'localhost:25'
+   smtp_from: 'alertmanager@linuxacademy.org'
+   smtp_require_tls: false
+ route:
+   receiver: slack_receiver
+ receivers:
+ - name: slack_receiver
+   slack_configs:
+   - send_resolved: true
+     username: '<SLACK_USER>'
+     api_url: '<APP_URL>'
+     channel: '#<CHANNEL>'
+Create a deployment file that will be used to stand up the Alertmanager deployment.
+alertmanager-depoloyment.yml:
+
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+name: alertmanager
+namespace: monitoring
+spec:
+replicas: 1
+template:
+ metadata:
+   labels:
+     app: alertmanager
+ spec:
+   containers:
+   - name: prometheus-alertmanager
+     image: prom/alertmanager:v0.14.0
+     args:
+       - --config.file=/etc/config/alertmanager.yml
+       - --storage.path=/data
+       - --web.external-url=/
+     ports:
+       - containerPort: 9093
+     volumeMounts:
+       - mountPath: /etc/config
+         name: config-volume
+       - mountPath: /data
+         name: storage-volume
+   - name: prometheus-alertmanager-configmap-reload
+     image: jimmidyson/configmap-reload:v0.1
+     args:
+       - --volume-dir=/etc/config
+       - --webhook-url=http://localhost:9093/-/reload
+     volumeMounts:
+       - mountPath: /etc/config
+         name: config-volume
+         readOnly: true
+   volumes:
+     - configMap:
+         defaultMode: 420
+         name: alertmanager-conf
+       name: config-volume
+     - emptyDir: {}
+       name: storage-volume
+alertmanager-service.yml:
+
+apiVersion: v1
+kind: Service
+metadata:
+name: alertmanager
+namespace: monitoring
+labels:
+ app: alertmanager
+annotations:
+   prometheus.io/scrape: 'true'
+   prometheus.io/port:   '9093'
+spec:
+selector:
+ app: alertmanager
+type: NodePort
+ports:
+- port: 9093
+ targetPort: 9093
+ nodePort: 8081
+Update the Prometheus config to include changes to rules and add the Alertmanager.
+prometheus-config-map.yml:
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+name: prometheus-server-conf
+labels:
+ name: prometheus-server-conf
+namespace: monitoring
+data:
+prometheus.yml: |-
+ global:
+   scrape_interval: 5s
+   evaluation_interval: 5s
+
+ alerting:
+   alertmanagers:
+   - kubernetes_sd_configs:
+     - role: endpoints
+     relabel_configs:
+     - source_labels: [__meta_kubernetes_service_name]
+       regex: alertmanager
+       action: keep
+     - source_labels: [__meta_kubernetes_namespace]
+       regex: monitoring
+       action: keep
+     - source_labels: [__meta_kubernetes_pod_container_port_number]
+       action: keep
+       regex: 9093
+
+ rule_files:
+   - "/var/prometheus/rules/*_rules.yml"
+   - "/var/prometheus/rules/*_alerts.yml"
+
+ scrape_configs:
+   - job_name: 'node-exporter'
+     static_configs:
+     - targets: ['<KUBERNETES_IP>:9100', '<KUBERNETES_IP>:9100']
+
+   - job_name: 'kubernetes-apiservers'
+
+     kubernetes_sd_configs:
+     - role: endpoints
+     scheme: https
+
+     tls_config:
+       ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+     bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+
+     relabel_configs:
+     - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
+       action: keep
+       regex: default;kubernetes;https
+
+   - job_name: 'kubernetes-nodes'
+
+     scheme: https
+
+     tls_config:
+       ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+     bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+
+     kubernetes_sd_configs:
+     - role: node
+
+     relabel_configs:
+     - action: labelmap
+       regex: __meta_kubernetes_node_label_(.+)
+     - target_label: __address__
+       replacement: kubernetes.default.svc:443
+     - source_labels: [__meta_kubernetes_node_name]
+       regex: (.+)
+       target_label: __metrics_path__
+       replacement: /api/v1/nodes/${1}/proxy/metrics
+
+   - job_name: 'kubernetes-pods'
+
+     kubernetes_sd_configs:
+     - role: pod
+
+     relabel_configs:
+     - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+       action: keep
+       regex: true
+     - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+       action: replace
+       target_label: __metrics_path__
+       regex: (.+)
+     - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+       action: replace
+       regex: ([^:]+)(?::\d+)?;(\d+)
+       replacement: $1:$2
+       target_label: __address__
+     - action: labelmap
+       regex: __meta_kubernetes_pod_label_(.+)
+     - source_labels: [__meta_kubernetes_namespace]
+       action: replace
+       target_label: kubernetes_namespace
+     - source_labels: [__meta_kubernetes_pod_name]
+       action: replace
+       target_label: kubernetes_pod_name
+
+   - job_name: 'kubernetes-cadvisor'
+
+     scheme: https
+
+     tls_config:
+       ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+     bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+
+     kubernetes_sd_configs:
+     - role: node
+
+     relabel_configs:
+     - action: labelmap
+       regex: __meta_kubernetes_node_label_(.+)
+     - target_label: __address__
+       replacement: kubernetes.default.svc:443
+     - source_labels: [__meta_kubernetes_node_name]
+       regex: (.+)
+       target_label: __metrics_path__
+       replacement: /api/v1/nodes/${1}/proxy/metrics/cadvisor
+
+   - job_name: 'kubernetes-service-endpoints'
+
+     kubernetes_sd_configs:
+     - role: endpoints
+
+     relabel_configs:
+     - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape]
+       action: keep
+       regex: true
+     - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scheme]
+       action: replace
+       target_label: __scheme__
+       regex: (https?)
+     - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_path]
+       action: replace
+       target_label: __metrics_path__
+       regex: (.+)
+     - source_labels: [__address__, __meta_kubernetes_service_annotation_prometheus_io_port]
+       action: replace
+       target_label: __address__
+       regex: ([^:]+)(?::\d+)?;(\d+)
+       replacement: $1:$2
+     - action: labelmap
+       regex: __meta_kubernetes_service_label_(.+)
+     - source_labels: [__meta_kubernetes_namespace]
+       action: replace
+       target_label: kubernetes_namespace
+     - source_labels: [__meta_kubernetes_service_name]
+       action: replace
+       target_label: kubernetes_name
+Create a Config Map that will be used to manage the recording and alerting rules.
+prometheus-rules-config-map.yml:
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+creationTimestamp: null
+name: prometheus-rules-conf
+namespace: monitoring
+data:
+kubernetes_alerts.yml: |
+ groups:
+   - name: kubernetes_alerts
+     rules:
+     - alert: DeploymentGenerationOff
+       expr: kube_deployment_status_observed_generation != kube_deployment_metadata_generation
+       for: 5m
+       labels:
+         severity: warning
+       annotations:
+         description: Deployment generation does not match expected generation {{ $labels.namespace }}/{{ $labels.deployment }}
+         summary: Deployment is outdated
+     - alert: DeploymentReplicasNotUpdated
+       expr: ((kube_deployment_status_replicas_updated != kube_deployment_spec_replicas)
+         or (kube_deployment_status_replicas_available != kube_deployment_spec_replicas))
+         unless (kube_deployment_spec_paused == 1)
+       for: 5m
+       labels:
+         severity: warning
+       annotations:
+         description: Replicas are not updated and available for deployment {{ $labels.namespace }}/{{ $labels.deployment }}
+         summary: Deployment replicas are outdated
+     - alert: PodzFrequentlyRestarting
+       expr: increase(kube_pod_container_status_restarts_total[1h]) > 5
+       for: 10m
+       labels:
+         severity: warning
+       annotations:
+         description: Pod {{ $labels.namespace }}/{{ $labels.pod }} was restarted {{ $value }} times within the last hour
+         summary: Pod is restarting frequently
+     - alert: KubeNodeNotReady
+       expr: kube_node_status_condition{condition="Ready",status="true"} == 0
+       for: 1h
+       labels:
+         severity: warning
+       annotations:
+         description: The Kubelet on {{ $labels.node }} has not checked in with the API,
+           or has set itself to NotReady, for more than an hour
+         summary: Node status is NotReady
+     - alert: KubeManyNodezNotReady
+       expr: count(kube_node_status_condition{condition="Ready",status="true"} == 0)
+         > 1 and (count(kube_node_status_condition{condition="Ready",status="true"} ==
+         0) / count(kube_node_status_condition{condition="Ready",status="true"})) > 0.2
+       for: 1m
+       labels:
+         severity: critical
+       annotations:
+         description: '{{ $value }}% of Kubernetes nodes are not ready'
+     - alert: APIHighLatency
+       expr: apiserver_latency_seconds:quantile{quantile="0.99",subresource!="log",verb!~"^(?:WATCH|WATCHLIST|PROXY|CONNECT)$"} > 4
+       for: 10m
+       labels:
+         severity: critical
+       annotations:
+         description: the API server has a 99th percentile latency of {{ $value }} seconds for {{ $labels.verb }} {{ $labels.resource }}
+     - alert: APIServerErrorsHigh
+       expr: rate(apiserver_request_count{code=~"^(?:5..)$"}[5m]) / rate(apiserver_request_count[5m]) * 100 > 5
+       for: 10m
+       labels:
+         severity: critical
+       annotations:
+         description: API server returns errors for {{ $value }}% of requests
+     - alert: KubernetesAPIServerDown
+       expr: up{job="kubernetes-apiservers"} == 0
+       for: 10m
+       labels:
+         severity: critical
+       annotations:
+         summary: Apiserver {{ $labels.instance }} is down!
+     - alert: KubernetesAPIServersGone
+       expr:  absent(up{job="kubernetes-apiservers"})
+       for: 10m
+       labels:
+         severity: critical
+       annotations:
+         summary: No Kubernetes apiservers are reporting!
+         description: Werner Heisenberg says - OMG Where are my apiserverz?
+prometheus_alerts.yml: |
+ groups:
+ - name: prometheus_alerts
+   rules:
+   - alert: PrometheusConfigReloadFailed
+     expr: prometheus_config_last_reload_successful == 0
+     for: 10m
+     labels:
+       severity: warning
+     annotations:
+       description: Reloading Prometheus configuration has failed on {{$labels.instance}}.
+   - alert: PrometheusNotConnectedToAlertmanagers
+     expr: prometheus_notifications_alertmanagers_discovered < 1
+     for: 1m
+     labels:
+       severity: warning
+     annotations:
+       description: Prometheus {{ $labels.instance}} is not connected to any Alertmanagers
+node_alerts.yml: |
+ groups:
+ - name: node_alerts
+   rules:
+   - alert: HighNodeCPU
+     expr: instance:node_cpu:avg_rate5m > 80
+     for: 10s
+     labels:
+       severity: warning
+     annotations:
+       summary: High Node CPU of {{ humanize $value}}% for 1 hour
+   - alert: DiskWillFillIn4Hours
+     expr: predict_linear(node_filesystem_free_bytes{mountpoint="/"}[1h], 4*3600) < 0
+     for: 5m
+     labels:
+       severity: critical
+     annotations:
+       summary: Disk on {{ $labels.instance }} will fill in approximately 4 hours.
+   - alert: KubernetesServiceDown
+     expr: up{job="kubernetes-service-endpoints"} == 0
+     for: 10m
+     labels:
+       severity: critical
+     annotations:
+       summary: Pod {{ $labels.instance }} is down!
+   - alert: KubernetesServicesGone
+     expr:  absent(up{job="kubernetes-service-endpoints"})
+     for: 10m
+     labels:
+       severity: critical
+     annotations:
+       summary: No Kubernetes services are reporting!
+       description: Werner Heisenberg says - OMG Where are my servicez?
+   - alert: CriticalServiceDown
+     expr: node_systemd_unit_state{state="active"} != 1
+     for: 2m
+     labels:
+       severity: critical
+     annotations:
+       summary: Service {{ $labels.name }} failed to start.
+       description: Service {{ $labels.instance }} failed to (re)start service {{ $labels.name }}.
+redis_alerts.yml: |
+ groups:
+ - name: redis_alerts
+   rules:
+   - alert: RedisCacheMissesHigh
+     expr: redis_keyspace_hits_total / (redis_keyspace_hits_total + redis_keyspace_misses_total) > 0.8
+     for: 10m
+     labels:
+       severity: warning
+     annotations:
+       summary: Redis Server {{ $labels.instance }} Cache Misses are high.
+   - alert: RedisRejectedConnectionsHigh
+     expr: redis_connected_clients{} > 100
+     for: 10m
+     labels:
+       severity: warning
+     annotations:
+       summary: "Redis instance {{ $labels.addr }} may be hitting maxclient limit."
+       description: "The Redis instance at {{ $labels.addr }} had {{ $value }} rejected connections during the last 10m and may be hitting the maxclient limit."
+   - alert: RedisServerDown
+     expr: redis_up{app="media-redis"} == 0
+     for: 10m
+     labels:
+       severity: critical
+     annotations:
+       summary: Redis Server {{ $labels.instance }} is down!
+   - alert: RedisServerGone
+     expr:  absent(redis_up{app="media-redis"})
+     for: 1m
+     labels:
+       severity: critical
+     annotations:
+       summary: No Redis servers are reporting!
+       description: Werner Heisenberg says - there is no uncertainty about the Redis server being gone.
+kubernetes_rules.yml: |
+ groups:
+   - name: kubernetes_rules
+     rules:
+     - record: apiserver_latency_seconds:quantile
+       expr: histogram_quantile(0.99, rate(apiserver_request_latencies_bucket[5m])) / 1e+06
+       labels:
+         quantile: "0.99"
+     - record: apiserver_latency_seconds:quantile
+       expr: histogram_quantile(0.9, rate(apiserver_request_latencies_bucket[5m])) / 1e+06
+       labels:
+         quantile: "0.9"
+     - record: apiserver_latency_seconds:quantile
+       expr: histogram_quantile(0.5, rate(apiserver_request_latencies_bucket[5m])) / 1e+06
+       labels:
+         quantile: "0.5"
+node_rules.yml: |
+ groups:
+ - name: node_rules
+   rules:
+     - record: instance:node_cpu:avg_rate5m
+       expr: 100 - avg(irate(node_cpu_seconds_total{job="node-exporter", mode="idle"}[5m])) by (instance) * 100
+     - record: instance:node_memory_usage:percentage
+       expr: ((sum(node_memory_MemTotal_bytes) - sum(node_memory_MemFree_bytes) - sum(node_memory_Buffers_bytes) - sum(node_memory_Cached_bytes)) / sum(node_memory_MemTotal_bytes)) * 100
+     - record: instance:root:node_filesystem_usage:percentage
+       expr: (node_filesystem_size_bytes{mountpoint="/rootfs"} - node_filesystem_free_bytes{mountpoint="/rootfs"}) /node_filesystem_size_bytes{mountpoint="/rootfs"} * 100
+redis_rules.yml: |
+ groups:
+ - name: redis_rules
+   rules:
+   - record: redis:command_call_duration_seconds_count:rate2m
+     expr: sum(irate(redis_command_call_duration_seconds_count[2m])) by (cmd, environment)
+   - record: redis:total_requests:rate2m
+     expr: rate(redis_commands_processed_total[2m])
+Update the volumes by the Prometheus deployment.
+prometheus-deployment.yml:
+
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+name: prometheus-deployment
+namespace: monitoring
+spec:
+replicas: 1
+template:
+ metadata:
+   labels:
+     app: prometheus-server
+ spec:
+   containers:
+     - name: prometheus
+       image: prom/prometheus:v2.2.1
+       args:
+         - "--config.file=/etc/prometheus/prometheus.yml"
+         - "--storage.tsdb.path=/prometheus/"
+         - "--web.enable-lifecycle"
+       ports:
+         - containerPort: 9090
+       volumeMounts:
+         - name: prometheus-config-volume
+           mountPath: /etc/prometheus/
+         - name: prometheus-rules-volume
+           mountPath: /var/prometheus/rules
+         - name: prometheus-storage-volume
+           mountPath: /prometheus/
+     - name: watch
+       image: weaveworks/watch:master-5b2a6e5
+       imagePullPolicy: IfNotPresent
+       args: ["-v", "-t", "-p=/etc/prometheus", "-p=/var/prometheus", "curl", "-X", "POST", "--fail", "-o", "-", "-sS", "http://localhost:9090/-/reload"]
+       volumeMounts:
+         - name: prometheus-config-volume
+           mountPath: /etc/prometheus
+         - name: prometheus-rules-volume
+           mountPath: /var/prometheus/rules
+   volumes:
+     - name: prometheus-config-volume
+       configMap:
+         defaultMode: 420
+         name: prometheus-server-conf
+     - name: prometheus-rules-volume
+       configMap:
+         name: prometheus-rules-conf
+     - name: prometheus-storage-volume
+       emptyDir: {}
+
+Alerting Rules
+In this lesson, you will learn how to create alerting rules that will be used to send alerts to Alertmanager.
+
+Below are the rules that were created in the previous lesson:
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  creationTimestamp: null
+  name: prometheus-rules-conf
+  namespace: monitoring
+data:
+  kubernetes_alerts.yml: |
+    groups:
+      - name: kubernetes_alerts
+        rules:
+        - alert: DeploymentGenerationOff
+          expr: kube_deployment_status_observed_generation != kube_deployment_metadata_generation
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            description: Deployment generation does not match expected generation {{ $labels.namespace }}/{{ $labels.deployment }}
+            summary: Deployment is outdated
+        - alert: DeploymentReplicasNotUpdated
+          expr: ((kube_deployment_status_replicas_updated != kube_deployment_spec_replicas)
+            or (kube_deployment_status_replicas_available != kube_deployment_spec_replicas))
+            unless (kube_deployment_spec_paused == 1)
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            description: Replicas are not updated and available for deployment {{ $labels.namespace }}/{{ $labels.deployment }}
+            summary: Deployment replicas are outdated
+        - alert: PodzFrequentlyRestarting
+          expr: increase(kube_pod_container_status_restarts_total[1h]) > 5
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            description: Pod {{ $labels.namespace }}/{{ $labels.pod }} was restarted {{ $value }} times within the last hour
+            summary: Pod is restarting frequently
+        - alert: KubeNodeNotReady
+          expr: kube_node_status_condition{condition="Ready",status="true"} == 0
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            description: The Kubelet on {{ $labels.node }} has not checked in with the API,
+              or has set itself to NotReady, for more than an hour
+            summary: Node status is NotReady
+        - alert: KubeManyNodezNotReady
+          expr: count(kube_node_status_condition{condition="Ready",status="true"} == 0)
+            > 1 and (count(kube_node_status_condition{condition="Ready",status="true"} ==
+            0) / count(kube_node_status_condition{condition="Ready",status="true"})) > 0.2
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            description: '{{ $value }}% of Kubernetes nodes are not ready'
+        - alert: APIHighLatency
+          expr: apiserver_latency_seconds:quantile{quantile="0.99",subresource!="log",verb!~"^(?:WATCH|WATCHLIST|PROXY|CONNECT)$"} > 4
+          for: 10m
+          labels:
+            severity: critical
+          annotations:
+            description: the API server has a 99th percentile latency of {{ $value }} seconds for {{ $labels.verb }} {{ $labels.resource }}
+        - alert: APIServerErrorsHigh
+          expr: rate(apiserver_request_count{code=~"^(?:5..)$"}[5m]) / rate(apiserver_request_count[5m]) * 100 > 5
+          for: 10m
+          labels:
+            severity: critical
+          annotations:
+            description: API server returns errors for {{ $value }}% of requests
+        - alert: KubernetesAPIServerDown
+          expr: up{job="kubernetes-apiservers"} == 0
+          for: 10m
+          labels:
+            severity: critical
+          annotations:
+            summary: Apiserver {{ $labels.instance }} is down!
+        - alert: KubernetesAPIServersGone
+          expr:  absent(up{job="kubernetes-apiservers"})
+          for: 10m
+          labels:
+            severity: critical
+          annotations:
+            summary: No Kubernetes apiservers are reporting!
+            description: Werner Heisenberg says - OMG Where are my apiserverz?
+  prometheus_alerts.yml: |
+    groups:
+    - name: prometheus_alerts
+      rules:
+      - alert: PrometheusConfigReloadFailed
+        expr: prometheus_config_last_reload_successful == 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          description: Reloading Prometheus configuration has failed on {{$labels.instance}}.
+      - alert: PrometheusNotConnectedToAlertmanagers
+        expr: prometheus_notifications_alertmanagers_discovered < 1
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          description: Prometheus {{ $labels.instance}} is not connected to any Alertmanagers
+  node_alerts.yml: |
+    groups:
+    - name: node_alerts
+      rules:
+      - alert: HighNodeCPU
+        expr: instance:node_cpu:avg_rate5m > 80
+        for: 10s
+        labels:
+          severity: warning
+        annotations:
+          summary: High Node CPU of {{ humanize $value}}% for 1 hour
+      - alert: DiskWillFillIn4Hours
+        expr: predict_linear(node_filesystem_free_bytes{mountpoint="/"}[1h], 4*3600) < 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: Disk on {{ $labels.instance }} will fill in approximately 4 hours.
+      - alert: KubernetesServiceDown
+        expr: up{job="kubernetes-service-endpoints"} == 0
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: Pod {{ $labels.instance }} is down!
+      - alert: KubernetesServicesGone
+        expr:  absent(up{job="kubernetes-service-endpoints"})
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: No Kubernetes services are reporting!
+          description: Werner Heisenberg says - OMG Where are my servicez?
+      - alert: CriticalServiceDown
+        expr: node_systemd_unit_state{state="active"} != 1
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: Service {{ $labels.name }} failed to start.
+          description: Service {{ $labels.instance }} failed to (re)start service {{ $labels.name }}.
+  redis_alerts.yml: |
+    groups:
+    - name: redis_alerts
+      rules:
+      - alert: RedisCacheMissesHigh
+        expr: redis_keyspace_hits_total / (redis_keyspace_hits_total + redis_keyspace_misses_total) > 0.8
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Redis Server {{ $labels.instance }} Cache Misses are high.
+      - alert: RedisRejectedConnectionsHigh
+        expr: redis_connected_clients{} > 100
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Redis instance {{ $labels.addr }} may be hitting maxclient limit."
+          description: "The Redis instance at {{ $labels.addr }} had {{ $value }} rejected connections during the last 10m and may be hitting the maxclient limit."
+      - alert: RedisServerDown
+        expr: redis_up{app="media-redis"} == 0
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: Redis Server {{ $labels.instance }} is down!
+      - alert: RedisServerGone
+        expr:  absent(redis_up{app="media-redis"})
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: No Redis servers are reporting!
+          description: Werner Heisenberg says - there is no uncertainty about the Redis server being gone.
+  kubernetes_rules.yml: |
+    groups:
+      - name: kubernetes_rules
+        rules:
+        - record: apiserver_latency_seconds:quantile
+          expr: histogram_quantile(0.99, rate(apiserver_request_latencies_bucket[5m])) / 1e+06
+          labels:
+            quantile: "0.99"
+        - record: apiserver_latency_seconds:quantile
+          expr: histogram_quantile(0.9, rate(apiserver_request_latencies_bucket[5m])) / 1e+06
+          labels:
+            quantile: "0.9"
+        - record: apiserver_latency_seconds:quantile
+          expr: histogram_quantile(0.5, rate(apiserver_request_latencies_bucket[5m])) / 1e+06
+          labels:
+            quantile: "0.5"
+  node_rules.yml: |
+    groups:
+    - name: node_rules
+      rules:
+        - record: instance:node_cpu:avg_rate5m
+          expr: 100 - avg(irate(node_cpu_seconds_total{job="node-exporter", mode="idle"}[5m])) by (instance) * 100
+        - record: instance:node_memory_usage:percentage
+          expr: ((sum(node_memory_MemTotal_bytes) - sum(node_memory_MemFree_bytes) - sum(node_memory_Buffers_bytes) - sum(node_memory_Cached_bytes)) / sum(node_memory_MemTotal_bytes)) * 100
+        - record: instance:root:node_filesystem_usage:percentage
+          expr: (node_filesystem_size_bytes{mountpoint="/rootfs"} - node_filesystem_free_bytes{mountpoint="/rootfs"}) /node_filesystem_size_bytes{mountpoint="/rootfs"} * 100
+  redis_rules.yml: |
+    groups:
+    - name: redis_rules
+      rules:
+      - record: redis:command_call_duration_seconds_count:rate2m
+        expr: sum(irate(redis_command_call_duration_seconds_count[2m])) by (cmd, environment)
+      - record: redis:total_requests:rate2m
+        expr: rate(redis_commands_processed_total[2m])
+
+----
+Hands-On Lab: Creating Alerting Rules
+Use prometheus-rules-config-map.yml to create a configuration map for the Redis alerting rules:
+
+The file is located in /root/prometheus.
+Under the data section, add a new file called redis-alerts.yml.
+Create an alerting group called redis_alerts.
+This group will contain two rules: RedisServerGone and RedisServerDown.
+The RedisServerDown alert:
+
+The expression uses the redis_up metric and is filtered using the label app with media-redis as the value. The condition will equal 0.
+The alert will fire if the condition remains true for 10 minutes.
+The alert has a severity of critical.
+Add a summary in annotations that says “Redis Server ; is down!”
+Replace ; with the templating syntax that displays the instance label.
+The RedisServerGone alert:
+
+For the expression, use the absent function to evaluate the redis_up metric. Filter using the app label with a value of media-redis.
+The alert will fire if the condition remains true for 1 minute.
+The alert has a severity of critical.
+Add a summary in annotations that says “No Redis servers are reporting!”
+Apply the changes made in prometheus-rules-config-map.yml.
+
+Make sure the rules propagate into Prometheus.
+Delete the Prometheus pod to make the rules propagate.
+Verify the rules are showing up by clicking on Alerts.
+
+Create a ConfigMap That Will Be Used to Manage the Alerting Rules
+keyboard_arrow_up
+Edit prometheus-rules-config-map.yml and add the Redis alerting rules. It should look like this when we're done:
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  creationTimestamp: null
+  name: prometheus-rules-conf
+  namespace: monitoring
+data:
+  redis_rules.yml: |
+    groups:
+    - name: redis_rules
+      rules:
+      - record: redis:command_call_duration_seconds_count:rate2m
+        expr: sum(irate(redis_command_call_duration_seconds_count[2m])) by (cmd, environment)
+      - record: redis:total_requests:rate2m
+        expr: rate(redis_commands_processed_total[2m])
+  redis_alerts.yml: |
+    groups:
+    - name: redis_alerts
+      rules:
+      - alert: RedisServerDown
+        expr: redis_up{app="media-redis"} == 0
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: Redis Server {{ $labels.instance }} is down!
+      - alert: RedisServerGone
+        expr:  absent(redis_up{app="media-redis"})
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: No Redis servers are reporting!
+
+Apply the Changes Made to `prometheus-rules-config-map.yml`
+keyboard_arrow_up
+Now, apply the changes that were made to prometheus-rules-config-map.yml:
+
+kubectl apply -f prometheus-rules-config-map.yml
+check_circle
+Delete the Prometheus Pod
+keyboard_arrow_up
+List the pods to find the name of the Prometheus pod:
+
+kubectl get pods -n monitoring
+Delete the Prometheus pod:
+
+kubectl delete pods <POD_NAME> -n monitoring
+In a new browser tab, navigate to the Expression browser:
+
+http://<IP>:8080
+Click on the Alerts link to verify that the two Redis alerts are showing as green.
