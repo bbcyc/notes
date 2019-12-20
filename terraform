@@ -1,0 +1,754 @@
+Using Terraform to Manage Applications and Infrastructure
+
+Terraform Basics
+
+Terraform Commands
+In this lesson, we begin working with Terraform commands. We will start by creating a very simple Terraform file that will pull down the an image from Docker Hub.
+
+List the Terraform commands:
+
+terraform
+Common commands:
+apply: Builds or changes infrastructure
+console: Interactive console for Terraform interpolations
+destroy: Destroys Terraform-managed infrastructure
+fmt: Rewrites configuration files to canonical format
+get: Downloads and installs modules for the configuration
+graph: Creates a visual graph of Terraform resources
+import: Imports existing infrastructure into Terraform
+init: Initializes a new or existing Terraform configuration
+output: Reads an output from a state file
+plan: Generates and shows an execution plan
+providers: Prints a tree of the providers used in the configuration
+push: Uploads this Terraform module to Terraform Enterprise to run
+refresh: Updates local state file against real resources
+show: Inspects Terraform state or plan
+taint: Manually marks a resource for recreation
+untaint: Manually unmarks a resource as tainted
+validate: Validates the Terraform files
+version: Prints the Terraform version
+workspace: Workspace management
+
+Set up the environment:
+
+mkdir -p terraform/basics
+cd terraform/basics
+Create a Terraform script:
+
+vi main.tf
+main.tf contents:
+
+# Download the latest Ghost image
+resource "docker_image" "image_id" {
+  name = "ghost:latest"
+}
+Initialize Terraform:
+
+terraform init
+Validate the Terraform file:
+
+terraform validate
+List providers in the folder:
+
+ls .terraform/plugins/linux_amd64/
+List providers used in the configuration:
+
+terraform providers
+Terraform Plan:
+
+terraform plan
+Useful flags for plan:
+-out=path: Writes a plan file to the given path. This can be used as input to the "apply" command.
+-var 'foo=bar': Set a variable in the Terraform configuration. This flag can be set multiple times.
+
+Terraform Apply:
+
+terraform apply
+Useful flags for apply:
+-auto-approve: This skips interactive approval of plan before applying.
+-var 'foo=bar': This sets a variable in the Terraform configuration. It can be set multiple times.
+
+Confirm your apply by typing yes. The apply will take a bit to complete.
+
+List the Docker images:
+
+docker image ls
+Terraform Show:
+
+terraform show
+Terraform Destroy:
+
+terraform destroy
+Confirm your destroy by typing yes.
+
+Useful flags for destroys:
+-auto-approve: Skip interactive approval of plan before applying.
+
+Re-list the Docker images:
+
+docker image ls
+Using a plan:
+
+terraform plan -out=tfplan
+Applying a plan:
+
+terraform apply tfplan
+Show the Docker Image resource:
+
+terraform show
+Destroy the resource once again:
+
+terraform destroy
+More Reading
+Terraform Commands https://www.terraform.io/docs/commands/index.html
+
+HashiCorp Configuration Language
+In this lesson, we will cover the basics of the Terraform configuration language, as well as explore providers and resources. Continuing what we started in Terraform Commands, we will modify main.tf so we can deploy a Ghost container to Docker.
+
+The syntax of Terraform configurations is called HashiCorp Configuration Language (HCL). It is meant to strike a balance between being human-readable and editable, and being machine-friendly. For machine-friendliness, Terraform can also read JSON configurations. For general Terraform configurations, however, we recommend using the HCL Terraform syntax.
+
+Terraform code files
+The Terraform language uses configuration files that are named with the .tf file extension. There is also a JSON-based variant of the language that is named with the .tf.json file extension.
+
+Terraform Syntax
+Here is an example of Terraform's HCL syntax:
+
+resource "aws_instance" "example" {
+  ami = "abc123"
+
+  network_interface {
+    # ...
+  }
+}
+Syntax reference:
+Single line comments start with #.
+Multi-line comments are wrapped with /* and */.
+Values are assigned with the syntax of key = value.
+Strings are in double-quotes.
+Strings can interpolate other values using syntax wrapped in ${}, for example ${var.foo}.
+Numbers are assumed to be base 10.
+Boolean values: true, false
+Lists of primitive types can be made with square brackets ([]), for example ["foo", "bar", "baz"].
+Maps can be made with braces ({}) and colons (:), for example { "foo": "bar", "bar": "baz" }.
+Style Conventions:
+Indent two spaces for each nesting level.
+With multiple arguments, align their equals signs.
+Setup the environment:
+
+cd terraform/basics
+Deploying a container using Terraform
+Redeploy the Ghost image:
+
+terraform apply
+Confirm the apply by typing yes. The apply will take a bit to complete.
+
+Open main.tf:
+
+vi main.tf
+main.tf contents:
+
+# Download the latest Ghost image
+resource "docker_image" "image_id" {
+  name = "ghost:latest"
+}
+
+# Start the Container
+resource "docker_container" "container_id" {
+  name  = "ghost_blog"
+  image = "${docker_image.image_id.latest}"
+  ports {
+    internal = "2368"
+    external = "80"
+  }
+}
+Validate main.tf:
+
+terraform validate
+Terraform Plan:
+
+terraform plan
+Apply the changes to main.tf:
+
+terraform apply
+Confirm the apply by typing yes.
+
+List the Docker containers:
+
+docker container ls
+Access the Ghost blog by opening a browser and go to:
+
+http:://[SWAM_MANAGER_IP]
+Cleaning up the environment
+Reset the environment:
+
+terraform destroy
+Confirm the destroy by typing yes.
+
+More Reading
+Terraform Configuration Language https://www.terraform.io/docs/configuration-0-11/syntax.html
+Configuration Syntax https://www.terraform.io/docs/configuration-0-11/interpolation.html
+Docker Container Resource https://www.terraform.io/docs/providers/docker/r/container.html
+
+
+Tainting and Updating Resources
+Terraform commands:
+taint: Manually mark a resource for recreation untaint: Manually unmark a resource as tainted
+
+Tainting a resource:
+
+terraform taint [NAME]
+Untainting a resource:
+
+terraform untaint [NAME]
+Set up the environment:
+
+cd terraform/basics
+Redeploy the Ghost image:
+
+terraform apply
+Taint the Ghost blog resource:
+
+terraform taint docker_container.container_id
+See what will be changed:
+
+terraform plan
+Remove the taint on the Ghost blog resource:
+
+terraform untaint docker_container.container_id
+Verity that the Ghost blog resource is untainted:
+
+terraform plan
+Updating Resources
+Let's edit main.tf and change the image to ghost:alpine.
+
+Open main.tf:
+
+vi main.tf
+main.tf contents:
+
+# Download the latest Ghost image
+resource "docker_image" "image_id" {
+  name = "ghost:alpine"
+}
+
+# Start the Container
+resource "docker_container" "container_id" {
+  name  = "ghost_blog"
+  image = "${docker_image.image_id.latest}"
+  ports {
+    internal = "2368"
+    external = "80"
+  }
+}
+Validate changes made to main.tf:
+
+terraform validate
+See what changes will be applied:
+
+terraform plan
+Apply image changes:
+
+terraform apply
+List the Docker containers:
+
+docker container ls
+See what image Ghost is using:
+
+docker image ls | grep [IMAGE]
+Check again to see what changes will be applied:
+
+terraform plan
+Apply container changes:
+
+terraform apply
+See what image Ghost is now using:
+
+docker image ls | grep [IMAGE]
+Cleaning up the environment
+Reset the environment:
+
+terraform destroy
+Confirm the destroy by typing yes.
+
+List the Docker images:
+
+docker image ls
+Remove the Ghost blog image:
+
+docker image rm ghost:latest
+Reset main.tf:
+
+vi main.tf
+main.tf contents:
+
+# Download the latest Ghost image
+resource "docker_image" "image_id" {
+  name = "ghost:latest"
+}
+
+# Start the Container
+resource "docker_container" "container_id" {
+  name  = "ghost_blog"
+  image = "${docker_image.image_id.latest}"
+  ports {
+    internal = "2368"
+    external = "80"
+  }
+}
+More Reading
+Taint https://www.terraform.io/docs/commands/taint.html
+Untaint https://www.terraform.io/docs/commands/untaint.html
+
+
+Terraform Console and Output
+In this lesson, we will use the Terraform Console to view various outputs that we can use for our scripts. The Terraform Console is extremely useful for troubleshooting and planning deployments.
+
+Terraform commands:
+console: Interactive console for Terraform interpolations
+
+Set up the environment:
+
+cd terraform/basics
+Working with the Terraform console
+Redeploy the Ghost image and container:
+
+terraform apply
+Show the Terraform resources:
+
+terraform show
+Start the Terraform console:
+
+terraform console
+Type the following in the console to get the container's name:
+
+docker_container.container_id.name
+Type the following in the console to get the container's IP:
+
+docker_container.container_id.ip_address
+Break out of the Terraform console by using Ctrl+C.
+
+Destroy the environment:
+
+terraform destroy
+Output the name and IP of the Ghost blog container
+Edit main.tf:
+
+vi main.tf
+main.tf contents:
+
+# Download the latest Ghost Image
+resource "docker_image" "image_id" {
+  name = "ghost:latest"
+}
+
+# Start the Container
+resource "docker_container" "container_id" {
+  name  = "blog"
+  image = "${docker_image.image_id.latest}"
+  ports {
+    internal = "2368"
+    external = "80"
+  }
+}
+
+#Output the IP Address of the Container
+output "ip_address" {
+  value       = "${docker_container.container_id.ip_address}"
+  description = "The IP for the container."
+}
+
+#Output the Name of the Container
+output "container_name" {
+  value       = "${docker_container.container_id.name}"
+  description = "The name of the container."
+}
+Validate changes:
+
+terraform validate
+Apply changes to get output:
+
+terraform apply
+Cleaning up the environment
+Reset the environment:
+
+terraform destroy
+Read more
+Console https://www.terraform.io/docs/commands/console.html
+Outputs https://www.terraform.io/docs/configuration-0-11/outputs.html
+
+
+Input Variables
+Input variables serve as parameters for a Terraform file. A variable block configures a single input variable for a Terraform module. Each block declares a single variable.
+
+Syntax:
+
+variable [NAME] {
+  [OPTION] = "[VALUE]"
+}
+Arguments
+Within the block body (between { }) is configuration for the variable, which accepts the following arguments:
+
+type (Optional): If set, this defines the type of the variable. Valid values are string, list, and map.
+default (Optional): This sets a default value for the variable. If no default is provided, Terraform will raise an error if a value is not provided by the caller.
+description (Optional): A human-friendly description for the variable.
+Using variables during an apply:
+
+terraform apply -var 'foo=bar'
+Set up the environment:
+
+cd terraform/basics
+Edit main.tf:
+
+vi main.tf
+main.tf contents:
+
+#Define variables
+variable "image_name" {
+  description = "Image for container."
+  default     = "ghost:latest"
+}
+
+variable "container_name" {
+  description = "Name of the container."
+  default     = "blog"
+}
+
+variable "int_port" {
+  description = "Internal port for container."
+  default     = "2368"
+}
+
+variable "ext_port" {
+  description = "External port for container."
+  default     = "80"
+}
+
+# Download the latest Ghost Image
+resource "docker_image" "image_id" {
+  name = "${var.image_name}"
+}
+
+# Start the Container
+resource "docker_container" "container_id" {
+  name  = "${var.container_name}"
+  image = "${docker_image.image_id.latest}"
+  ports {
+    internal = "${var.int_port}"
+    external = "${var.ext_port}"
+  }
+}
+
+#Output the IP Address of the Container
+output "ip_address" {
+  value       = "${docker_container.container_id.ip_address}"
+  description = "The IP for the container."
+}
+
+output "container_name" {
+  value       = "${docker_container.container_id.name}"
+  description = "The name of the container."
+}
+Validate the changes:
+
+terraform validate
+Plan the changes:
+
+terraform plan
+Apply the changes using a variable:
+
+terraform apply -var 'ext_port=8080'
+Change the container name:
+
+terraform apply -var 'container_name=ghost_blog' -var 'ext_port=8080'
+Reset the environment:
+
+terraform destroy -var 'ext_port=8080'
+Read more
+Variables https://www.terraform.io/docs/configuration-0-11/variables.html
+
+
+Breaking Out Our Variables and Outputs
+Setup your environment:
+
+cd terraform/basics
+Edit variables.tf:
+
+vi variables.tf
+variables.tf contents:
+
+#Define variables
+variable "container_name" {
+  description = "Name of the container."
+  default     = "blog"
+}
+variable "image_name" {
+  description = "Image for container."
+  default     = "ghost:latest"
+}
+variable "int_port" {
+  description = "Internal port for container."
+  default     = "2368"
+}
+variable "ext_port" {
+  description = "External port for container."
+  default     = "80"
+}
+Edit main.tf:
+
+vi main.tf
+main.tf contents:
+
+# Download the latest Ghost Image
+resource "docker_image" "image_id" {
+  name = "${var.image_name}"
+}
+
+# Start the Container
+resource "docker_container" "container_id" {
+  name  = "${var.container_name}"
+  image = "${docker_image.image_id.latest}"
+  ports {
+    internal = "${var.int_port}"
+    external = "${var.ext_port}"
+  }
+}
+Edit outputs.tf:
+
+vi outputs.tf
+outputs.tf contents:
+
+#Output the IP Address of the Container
+output "ip_address" {
+  value       = "${docker_container.container_id.ip_address}"
+  description = "The IP for the container."
+}
+
+output "container_name" {
+  value       = "${docker_container.container_id.name}"
+  description = "The name of the container."
+}
+Validate the changes:
+
+terraform validate
+Plan the changes:
+
+terraform plan -out=tfplan -var container_name=ghost_blog
+Apply the changes:
+
+terraform apply tfplan
+Destroy deployment:
+
+terraform destroy -auto-approve -var container_name=ghost_blog
+
+
+Maps and Lookups
+In this lesson, we will create a map to specify different environment variables based on conditions. This will allow us to dynamically deploy infrastructure configurations based on information we pass to the deployment.
+
+Set up the environment:
+
+cd terraform/basics
+Edit variables.tf:
+
+vi variables.tf
+variables.tf contents:
+
+#Define variables
+variable "env" {
+  description = "env: dev or prod"
+}
+variable "image_name" {
+  type        = "map"
+  description = "Image for container."
+  default     = {
+    dev  = "ghost:latest"
+    prod = "ghost:alpine"
+  }
+}
+
+variable "container_name" {
+  type        = "map"
+  description = "Name of the container."
+  default     = {
+    dev  = "blog_dev"
+    prod = "blog_prod"
+  }
+}
+
+variable "int_port" {
+  description = "Internal port for container."
+  default     = "2368"
+}
+variable "ext_port" {
+  type        = "map"
+  description = "External port for container."
+  default     = {
+    dev  = "8081"
+    prod = "80"
+  }
+}
+Validate the change:
+
+terraform validate
+Edit main.tf:
+
+vi main.tf
+main.tf contents:
+
+# Download the latest Ghost Image
+resource "docker_image" "image_id" {
+  name = "${lookup(var.image_name, var.env)}"
+}
+
+# Start the Container
+resource "docker_container" "container_id" {
+  name  = "${lookup(var.container_name, var.env)}"
+  image = "${docker_image.image_id.latest}"
+  ports {
+    internal = "${var.int_port}"
+    external = "${lookup(var.ext_port, var.env)}"
+  }
+}
+Plan the dev deploy:
+
+terraform plan -out=tfdev_plan -var env=dev
+Apply the dev plan:
+
+terraform apply tfdev_plan
+Plan the prod deploy:
+
+terraform plan -out=tfprod_plan -var env=prod
+Apply the prod plan:
+
+terraform apply tfprod_plan
+Destroy prod deployment:
+
+terraform destroy -var env=prod -auto-approve
+Use environment variables:
+
+export TF_VAR_env=prod
+Open the Terraform console:
+
+terraform console
+Execute a lookup:
+
+lookup(var.ext_port, var.env)
+Exit the console:
+
+unset TF_VAR_env
+
+
+Terraform Workspaces
+In this lesson, we will see how workspaces can help us deploy multiple environments. By using workspaces, we can deploy multiple environments simultaneously without the state files colliding.
+
+Creating a workspace
+Terraform commands:
+
+workspace: New, list, select and delete Terraform workspaces
+
+
+
+Workspace subcommands:
+
+delete: Delete a workspace list: List Workspaces new: Create a new workspace select: Select a workspace show: Show the name of the current workspace
+
+
+Setup the environment:
+
+cd terraform/basics
+Create a dev workspace:
+
+terraform workspace new dev
+Plan the dev deployment:
+
+terraform plan -out=tfdev_plan -var env=dev
+Apply the dev deployment:
+
+terraform apply tfdev_plan
+Change workspaces:
+
+terraform workspace new prod
+Plan the prod deployment:
+
+terraform plan -out=tfprod_plan -var env=prod
+Apply the prod deployment:
+
+terraform apply tfprod_plan
+Select the default workspace:
+
+terraform workspace select default
+Find what workspace we are using:
+
+terraform workspace show
+Select the dev workspace:
+
+terraform workspace select dev
+Destroy the dev deployment:
+
+terraform destroy -var env=dev
+Select the prod workspace:
+
+terraform workspace select prod
+Destroy the prod deployment:
+
+terraform destroy -var env=prod
+
+Null Resources and Local-exec
+In this lesson, we will utilize a Null Resource in order to perform local commands on our machine without having to deploy extra resources.
+
+
+Setup the environment:
+
+cd terraform/basics
+main.tf contents:
+
+# Download the latest Ghost Image
+resource "docker_image" "image_id" {
+  name = "${lookup(var.image_name, var.env)}"
+}
+
+# Start the Container
+resource "docker_container" "container_id" {
+  name  = "${lookup(var.container_name, var.env)}"
+  image = "${docker_image.image_id.latest}"
+  ports {
+    internal = "${var.int_port}"
+    external = "${lookup(var.ext_port, var.env)}"
+  }
+}
+
+resource "null_resource" "null_id" {
+  provisioner "local-exec" {
+    command = "echo ${docker_container.container_id.name}:${docker_container.container_id.ip_address} >> container.txt"
+  }
+}
+Reinitialize Terraform:
+
+terraform init
+Validate the changes:
+
+terraform validate
+Plan the changes:
+
+terraform plan -out=tfplan -var env=dev
+Apply the changes:
+
+terraform apply tfplan
+View the contents of container.txt:
+
+cat container.txt
+Destroy the deployment:
+
+terraform destroy -auto-approve -var env=dev
+
+
+Hands-On Lab: Deploying Docker Images Using Terraform
+Create a file called main.tf.
+Create a docker image resource and call it nginx_image.
+Set the name of the image to nginx:latest.
+Save and exit the file.
+
+Initialize Terraform.
+Plan the deploy and output a terraform plan called tf_image_plan.
+Apply the plan using tf_image_plan.
+
+

@@ -1,0 +1,360 @@
+Google Cloud Stackdriver Deep Dive
+https://interactive.linuxacademy.com/diagrams/StackdriverDeepDive.html
+https://linuxacademy.com/cp/guides/download/refsheets/guides/refsheets/401-Google%20Cloud%20Stackdriver%20Deep%20Dive-PDF_1572060149.pdf
+
+Hands-On Lab: Setting Up a Stackdriver Workspace for a VM
+The company you work for has given you the task of spinning up an Apache web server
+and setting up monitoring on this server. Your boss has asked you to create a dashboard
+where you can check all your GCP metrics within your web server as well.
+
+To complete this task, you must:
+
+Create a compute engine instance.
+Use Stackdriver to monitor the instance.
+Verify the metrics from the instance.
+
+Create an HTTP Firewall Rule
+keyboard_arrow_up
+From the main console navigation, go to VPC network > Firewall rules.
+Choose Create Firewall Rule.
+We are going to name the rule http-allow.
+In the Direction of traffic section, select the Ingress option.
+In the Action on match section, select Allow.
+For Target tags, type in http-server.
+For Source IP ranges, type in 0.0.0.0/0.
+For Protocols and ports, select TCP and type in 80.
+Click Create.
+check_circle
+Create a Compute Engine Instance
+keyboard_arrow_up
+Navigate to Compute Engine > VM instances.
+Click Create.
+We are going to name the instance Apache.
+For the Management, security, disks, networking, sole tenancy option, choose Networking.
+Under Network tags, type http-server.
+Choose Management, and under Startup script, paste:
+
+sudo apt-get update
+sudo apt-get install apache2 -y
+Click Create.
+
+Set Up a Stackdriver Workspace
+keyboard_arrow_up
+Navigate to Stackdriver > Monitoring.
+Hover over Resources, and click on Instances.
+check_circle
+Verify Metrics from the Instance
+keyboard_arrow_up
+Click our listed Apache instance. It will take a few minutes for metrics to populate on the dashboard.
+
+----
+
+Hands-On Lab: Using Stackdriver to Monitor Instance Groups
+Your company wants to offer a webserver up to the public.
+They have trusted you to be able to build, monitor, and automate the infrastructure.
+They have given you a blueprint of having one instance up and running at all times
+with a max budget to scale to three instances if traffic gets heavy. First, you would
+like to test this environment to see if your plan will work.
+
+You’ll need to complete the following steps to accomplish your task:
+
+Create a workspace to monitor your infrastructure.
+Make sure that you are allowing the correct traffic to the instance.
+Create an instance group that can scale out to three instances if needed.
+Create a load balancer to distribute traffic to the group.
+Use Apache Benchmark stress testing to promote autoscaling within the instance group.
+
+Create a Stackdriver Workspace for the Project
+keyboard_arrow_up
+From the main console navigation, head over to Stackdriver.
+Click on Monitoring.
+Click on Add to add this project to a new workspace within Stackdriver.
+check_circle
+Create a Firewall Rule
+keyboard_arrow_up
+From the main console navigation, go to VPC Network > Firewall Rules.
+Choose Create Firewall Rule. We are going to name the rule http-allow.
+In the Direction of Traffic section, select the ingress option.
+In the Action on Match section, select Allow.
+For Target tags type in http-server.
+For Source IP range type in 0.0.0.0/0.
+For Protocols and ports we will select TCP and type in 80.
+Click Create.
+
+Create an Instance Template
+keyboard_arrow_up
+From the main console navigation, head over to Compute Engine.
+Click on Instance Template.
+Click on Create Instance Template.
+Name your template.
+We are going to click on Management > Security > Disks > Networking > Sole tenancy.
+On the Management tab, head down to Startup Script.
+You will paste this script into the Startup script section:
+
+#!/bin/bash
+apt-get install apache2 -y
+apt-get install git -y
+mkdir /stackd
+git clone https://github.com/BPalmerLA/StackdriverInstanceGroups.git /stackd
+cd /stackd
+bash -x ./stackd.sh
+Click on the Networking tab, head down to Network tags and enter in the tag http-server.
+
+Click on Create.
+
+Create an Instance Group
+keyboard_arrow_up
+While in the Compute Engine dashboard, head to Instance groups.
+Choose Create Instance Group.
+Name the Instance Group.
+Choose the instance template that you previously named.
+Turn Autoscaling off.
+Click Create.
+After the Instance Group has created, you will click on Edit Instance Group.
+Turn Autoscaling on.
+For Autoscaling Policy, we will choose Stackdriver Monitoring Metric.
+For Metric export scope, choose Time Series per instance.
+For Metric identifier, you will enter Apache and choose Request_count** associated with *Apache metric.
+For Utilization Target, choose 50.
+Min Instance should be 1* and *Max should be **3.
+Click Save.
+
+Create the Load Balancer
+keyboard_arrow_up
+From the main console navigation, head over to Network Service > Load Balancing.
+Click Create Load Balancer and choose Start Configuration on HTTP(S) Load Balancing.
+Choose from Internet to my VMs
+Name the Load Balancer.
+Choose Backend Configuration > Create Backend Services > Backend Service > Create a Backend Service.
+On Instance Group, select the Instance group that was created.
+On Balancing Mode choose Rate > Maximum RPS, and type 50.
+Select Done.
+Select Create a Health Check > name the health check and choose TCP port 80 for Protocol.
+Click Save and continue.
+Click Create.
+For Frontend Config, name your config and leave everything as default then click Done.
+Click Create.
+Now you will have to configure the health check for the Instance Group with the health check:
+
+From the main console navigation head over to Compute Engine > Instance Groups.
+Click on the instance group to access it.
+Click Edit Instance Group.
+At the bottom at Autohealing, choose the health check that was created for the load balancer.
+Click Save.
+
+Set up Alerting Policy for Stackdriver Monitoring
+keyboard_arrow_up
+From the main console navigation, head over to Compute Engine > VM Instances.
+Click SSH for the instance.
+Once logged in to the instance, we are going to use gcloud config set project $PROJECT_ID, the $PROJECT_ID will be your Project ID for your project.
+Then, we will stress the Apache server by using ab -n 1000000 -c 1000 http://InstanceIPAddress/Path.
+Your instance group should scale to three instances.
+
+----
+
+Hands-On Lab: Inspecting Stackdriver Admin Activity Audit Logs
+Your organization is about to move their primary app to Google Cloud,
+]and you’ve been chosen to analyze the robustness of the Stackdriver admin activity logs.
+You need to set up a test that allows you to review generated logs when resources are created or deleted.
+
+You’ll need to complete the following steps to accomplish your task:
+
+Verify the pre-deployed resources are in place.
+Review the logs for networks, firewall rules, and VM instances.
+Delete an existing firewall rule.
+Review the logs for activity.
+
+Explore the Created Services
+keyboard_arrow_up
+In the console, navigate to the Compute Engine > VM instances page.
+Review the existing VMs.
+From the main navigation menu, choose VPC Network > VPC network.
+Review the newly created networks.
+From the side navigation menu, choose Firewall rules.
+Review the non-default firewall rules.
+check_circle
+Review the Stackdriver Logs
+keyboard_arrow_up
+From the main navigation, choose Stackdriver > Logging > Log viewer.
+Note the Audited Resource.
+From the options list, choose GCE Networks and review the log output.
+From the options list, choose GCE Instances and review the log output.
+From the options list, choose GCE Firewall Rules and review the log output.
+check_circle
+Delete a Resource and Review the Logs
+keyboard_arrow_up
+From the main navigation menu, select VPC Network > Firewall rules.
+Select the ssh-la-peer-2 rule and click Delete.
+From the main navigation menu, select Stackdriver > Logging > Log viewer.
+From the options list, select GCE Firewall Rules and review the log output.
+
+----
+
+Hands-On Lab: Create an SMS Alerting Policy with Stackdriver
+Your team is building a new app and wants to deploy a server for testing.
+They have asked you to set up monitoring on the server and configure notifications to be sent when there are issues.
+
+You’ll need to complete the following steps to accomplish your task:
+
+Enable the Stackdriver Monitoring and Stackdriver Logging APIs.
+Create a VM in the us-central1 region.
+Install Apache and PHP on the server.
+Install the Stackdriver Monitoring agent and the Stackdriver Logging agent.
+Add an uptime check and alerting policy in Stackdriver Monitoring.
+Simulate instance failure to test the alerting policy.
+Helpful Links:
+Monitoring Agent Installation Package URL: https://dl.google.com/cloudagents/install-monitoring-agent.sh)
+
+Logging Agent Installation Package URL: https://dl.google.com/cloudagents/install-logging-agent.sh
+
+Enable the Stackdriver Monitoring and Stackdriver Logging APIs
+keyboard_arrow_up
+In the main navigation menu, navigate to APIs & Services > Dashboard.
+Click the + Enable APIs and Services tab.
+Search for "stackdriver".
+Select the Stackdriver Monitoring API.
+Click Enable API.
+Select the Stackdriver Logging API.
+Click Enable API.
+check_circle
+Create a VM
+keyboard_arrow_up
+In the main navigation menu, select Compute Engine > VM instances.
+Click Create.
+Configure the following settings for the instance:
+Name: instance-1
+Region: us-central1 (Iowa)
+Zone: us-central1-a
+Machine type: n1-standard-1 (1 vCPU, 3.75 GB memory)
+Firewall: Allow HTTP traffic
+Click Create.
+
+Install Apache and PHP
+keyboard_arrow_up
+Under the Connect header of the instance, click SSH.
+In the Cloud Shell, run the following commands to update the packages and install Apache and PHP:
+sudo apt-get update
+
+sudo apt-get install apache2 php -y
+check_circle
+Install the Stackdriver Monitoring and Logging Agents
+keyboard_arrow_up
+Install the Stackdriver Monitoring agent.
+curl -sSO https://dl.google.com/cloudagents/install-monitoring-agent.sh
+sudo bash install-monitoring-agent.sh
+Install the Stackdriver Logging agent.
+curl -sSO https://dl.google.com/cloudagents/install-logging-agent.sh
+`bash sudo bash install-logging-agent.sh`
+
+Add an Uptime Check and Create an Alerting Policy
+keyboard_arrow_up
+In the main navigation menu, under the Stackdriver header, select Monitoring.
+In the Stackdriver Monitoring dashboard, click your profile name at the top right of the page.
+In the dropdown, select Profile.
+Under the Phone Numbers header, click Workspace Settings.
+Click Add Phone Number.
+Enter your phone number (make sure to set the correct country code), and click Send Verification Code.
+Enter the 6-digit verification code you received, and click Verify.
+In the left navigation panel, click Monitoring Overview.
+Under Create uptime checks, click CREATE CHECK.
+In the New Uptime Check menu, configure the following settings:
+Title: my-uptime-check
+Check Type: HTTP
+Resource Type: Instance
+Applies To: Single | instance-1
+Check every: 1 minute
+Click Test, then Save.
+Click Create Alert Policy, and name the policy "myuptimecheck-alert".
+Click the Metric tab.
+Leave the settings as their defaults, and click Save.
+Click Notification Channel Type, and select SMS from the dropdown.
+Click Notification Channel, and select your phone number from the dropdown.
+Click Add Notification Channel, and name the policy "uptimecheck-policy".
+Click Save.
+
+Test the Alerting Policy
+keyboard_arrow_up
+In the GCP console, select the VM instance.
+Click the "More options" menu (⋮), and select Stop from the dropdown.
+Click STOP.
+Go back to the Stackdriver Monitoring page.
+In the left navigation panel, select Uptime Checks.
+Refresh the page to see the "All locations failed" alert.
+
+----
+
+Hands-On Lab: Triggering Cloud Functions and Stackdriver Log Sinks
+In order to enhance security, your team is working on taking more
+direct action when a firewall rule is modified. To monitor this situation,
+you’ve been asked to create a Cloud function that is triggered when such an
+event takes place. You decide to devise a system that sends log sink data to
+a Cloud Pub/Sub topic, which then executes a Cloud function.
+
+You’ll need to complete the following steps to accomplish your task:
+
+Enable the necessary APIs.
+Create a Cloud Pub/Sub topic.
+Set up a Stackdriver workspace.
+Establish a Stackdriver log sink.
+Create a Cloud function.
+Test the configuration by modifying a firewall rule.
+
+Create a Pub/Sub Topic
+keyboard_arrow_up
+From the main console navigation, go to Pub/Sub > Topics.
+Click Create a topic.
+In the dialog, type "la-sink-export" for the topic name.
+Click CREATE.
+check_circle
+Establish a Stackdriver Log Sink
+keyboard_arrow_up
+From the main console navigation, go to Logging > Exports.
+Click CREATE EXPORT.
+From the filter list, which by default is set to Audited Resource, select GCE Firewall Rule.
+In the Edit Export panel, configure the following settings:
+Name: la-firewall-sink
+Sink Service: Cloud Pub/Sub
+Sink Destination: la-sink-export
+Click Create Sink.
+
+Retrieve the Necessary Files
+keyboard_arrow_up
+Click the Cloud Shell icon.
+Clone the GitHub repository.
+ git clone https://github.com/linuxacademy/content-gcpro-security-engineer
+Click the pencil icon to launch the Cloud Shell code editor.
+Expand the stackdriver-cf-lab folder.
+Open main.py and requirements.txt and review their contents.
+check_circle
+Create a Cloud Function
+keyboard_arrow_up
+Navigate to the Cloud Functions dashboard.
+Click Create function.
+Apply the following settings:
+Name: la-sink-trigger
+Trigger: Cloud Pub/Sub
+Topic: (Your topic for exported logs)
+Source code: Inline editor
+Runtime: Python 3.7
+From the Cloud Shell code editor, select all of the main.py code, and copy it to your clipboard.
+In the main.py field of the function, paste the copied code.
+From the Cloud Shell code editor, open requirements.txt, and copy the contents to your clipboard.
+In the requirements.txt field of the function, paste the copied code.
+In the Function to execute field, type "respond_log_entry".
+Click Create.
+
+Alter a Firewall Rule
+keyboard_arrow_up
+In the console, navigate to VPC network > Firewall rules.
+Review the non-default firewall rules.
+Select ssh-network-2, and click EDIT.
+Scroll down the page, and expand Disable rule.
+Under Enforcement, select the Disabled option.
+Click Save.
+From the main navigation menu, select Cloud Functions.
+Select the la-sink-trigger function.
+Click VIEW LOGS.
+Review the logs for returned data.
+
+----
+
