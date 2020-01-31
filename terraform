@@ -751,4 +751,4063 @@ Initialize Terraform.
 Plan the deploy and output a terraform plan called tf_image_plan.
 Apply the plan using tf_image_plan.
 
+----
+Hands-On Lab: Working with Terraform Variables
+Create a new Terraform file called main.tf.
+Create three variables.
+The first variable, called image_name, needs to be set to ghost:latest.
+The second variable is called container_name with a default of ghost_blog.
+The final variable is called ext_port and set the default to port 80.
+
+Create a Docker image resource called ghost_image that uses the image_name variable.
+
+Create a Docker container resource called ghost_container.
+The name will use the container_name variable.
+The image will use the ghost_image resource.
+The internal port will be set to 2368.
+The external port will use ext_port variable.
+
+Initialize Terraform.
+
+Create a Terraform plan that uses the following variables:
+
+container_name = ghost_blog1
+image_name = ghost:alpine
+ext_port = 8080
+Output the plan to a file called tfplan.
+
+Then apply the plan using tfplan and make sure that the apply doesn’t prompt for input.
+
+Create `main.tf`
+keyboard_arrow_up
+Create main.tf:
+
+vi main.tf
+main.tf:
+
+variable "image_name" {
+  description = "Image for container."
+  default     = "ghost:latest"
+}
+
+variable "container_name" {
+  description = "Name of the container."
+  default     = "ghost_blog"
+}
+
+variable "ext_port" {
+  description = "External port for container."
+  default     = "80"
+}
+
+# Download the latest Ghost Image
+resource "docker_image" "ghost_image" {
+  name = "${var.image_name}"
+}
+
+resource "docker_container" "ghost_container" {
+  name  = "${var.container_name}"
+  image = "${docker_image.ghost_image.latest}"
+  ports {
+    internal = "2368"
+    external = "${var.ext_port}"
+  }
+}
+Now we can initialize Terraform:
+
+terraform init
+
+Generate a Terraform Plan File
+keyboard_arrow_up
+Execute terraform plan:
+
+terraform plan -out=tfplan \
+-var 'container_name=ghost_blog1' \
+-var 'image_name=ghost:alpine' \
+-var 'ext_port=8080'
+check_circle
+Deploy the Infrastructure Using the Terraform Plan
+keyboard_arrow_up
+Apply the plan:
+
+terraform apply tfplan
+
+----
+
+Hands-On Lab: Using Terraform Maps and Workspaces to Deploy Multiple Environments
+Adding Maps and Lookups in your Terraform files
+The lab directory can be found in /home/cloud_user.
+In the lab directory you will find main.tf, outputs.tf, and variables.tf.
+And a new variable called env. Set a description to “env: dev or prod”.
+Convert the type from image_name to map.
+
+Change the default to use key/value pairs. Set dev to ghost:latest and prod to ghost:alpine.
+
+Convert container_name to a map. Change the default to use key/value pairs. Set dev to blog_dev and prod to blog_prod.
+
+Convert ext_port to a map. Change the default to use key/value pairs. Set dev to 8080 and prod to 80.
+
+Now initialize Terraform.
+
+Setup the Development environment
+Create a workspace called dev.
+Generate a Terraform plan. Output the plan and call it tfdev_plan. Pass in a variable called env and set it to dev.
+Apply tfdev_plan.
+
+Setup the Production environment
+Create a workspace called prod.
+Generate a Terraform plan. Output the plan and call it tfprod_plan. Pass in a variable called env and set it to prod.
+Apply tfprod_plan.
+
+Verify both environments work
+Open a browser and navigate to the public IP. This should pull up the production environment.
+Open a browser tab and navigate to the public IP on port 8080. This should pull up the development environment.
+
+Complete the Terraform Files
+keyboard_arrow_up
+Edit variables.tf and add the env variable and convert image_name, container_name and ext_port to maps:
+
+vi variables.tf
+variables.tf:
+
+#Define variables
+variable "env" {
+  description = "env: dev or prod"
+}
+
+variable "image_name" {
+  type         = "map"
+  description = "Image for container."
+  default     = {
+    dev  = "ghost:latest"
+    prod = "ghost:alpine"
+  }
+}
+
+variable "container_name" {
+  type        = "map"
+  description = "Name of the container."
+  default     = {
+    dev  = "blog_dev"
+    prod = "blog_prod"
+  }
+}
+
+variable "ext_port" {
+  type        = "map"
+  description = "External port for container."
+  default     = {
+    dev  = "8080"
+    prod = "80"
+  }
+}
+Edit main.tf:
+
+vi main.tf
+main.tf:
+
+# Download the latest Ghost Image
+resource "docker_image" "image_id" {
+  name = "${lookup(var.image_name, var.env)}"
+}
+
+# Start the Container
+resource "docker_container" "container_id" {
+  name  = "${lookup(var.container_name, var.env)}"
+  image = "${docker_image.image_id.latest}"
+  ports {
+    internal = "2368"
+    external = "${lookup(var.ext_port, var.env)}"
+  }
+}
+Initialize terraform:
+
+terraform init
+
+Set up the `dev` Workspace and Deploy the Environment
+keyboard_arrow_up
+Create a dev workspace:
+
+terraform workspace new dev
+Create a plan for the development deploy:
+
+terraform plan -out=tfdev_plan -var 'env=dev'
+Apply the development plan:
+
+terraform apply tfdev_plan
+check_circle
+Set up the `prod` Workspace and Deploy the Environment
+keyboard_arrow_up
+Create a prod workspace:
+
+terraform workspace new prod
+Create a plan for the production deploy:
+
+terraform plan -out=tfprod_plan -var 'env=prod'
+Apply the production plan:
+
+terraform apply tfprod_plan
+
+----
+
+Terraform Modules
+Introduction to Modules
+In this video we will start talking about how to use modules in Terraform.
+
+Set up the environment:
+
+mkdir -p modules/image
+mkdir -p modules/container
+Create files for the image:
+
+cd ~/terraform/basics/modules/image
+touch main.tf variables.tf outputs.tf
+Create files for container:
+
+cd ~/terraform/basics/modules/container
+touch main.tf variables.tf outputs.tf
+
+Every project has at least one module, the root module with main.tf, variables.tf, and outputs.tf
+
+The Image Module
+In this lesson we will create our first Terraform module.
+
+Go to the image directory:
+
+cd ~/terraform/basics/modules/image
+Edit main.tf:
+
+vi main.tf
+main.tf contents:
+
+# Download the Image
+resource "docker_image" "image_id" {
+  name = "${var.image_name}"
+}
+Edit variables.tf:
+
+vi variables.tf
+variables.tf contents:
+
+variable "image_name" {
+  description = "Name of the image"
+}
+Edit outputs.tf:
+
+vi outputs.tf
+outputs.tf: contents:
+
+output "image_out" {
+  value       = "${docker_image.image_id.latest}"
+}
+Initialize Terraform:
+
+terraform init
+Create the image plan:
+
+terraform plan -out=tfplan -var 'image_name=ghost:alpine'
+Deploy the image using the plan:
+
+terraform apply -auto-approve tfplan
+Destroy the image:
+
+terraform destroy -auto-approve -var 'image_name=ghost:alpine'
+
+The Container Module
+In this lesson we will continue working with Terraform modules by breaking out the container code into it's own module.
+
+Go to the container directory:
+
+cd ~/terraform/basics/modules/container
+Edit main.tf:
+
+vi main.tf
+main.tf contents:
+
+# Start the Container
+resource "docker_container" "container_id" {
+  name  = "${var.container_name}"
+  image = "${var.image}"
+  ports {
+    internal = "${var.int_port}"
+    external = "${var.ext_port}"
+  }
+}
+Edit variables.tf:
+
+vi variables.tf
+variables.tf contents:
+
+#Define variables
+variable "container_name" {}
+variable "image" {}
+variable "int_port" {}
+variable "ext_port" {}
+Edit outputs.tf:
+
+vi outputs.tf
+outputs.tf contents:
+
+#Output the IP Address of the Container
+output "ip" {
+  value = "${docker_container.container_id.ip_address}"
+}
+
+output "container_name" {
+  value = "${docker_container.container_id.name}"
+}
+Initialize:
+
+terraform init
+Create the image plan:
+
+terraform plan -out=tfplan -var 'container_name=blog' -var 'image=ghost:alpine' -var 'int_port=2368' -var 'ext_port=80'
+Deploy container using the plan:
+
+terraform apply tfplan
+
+The Root Module
+In this lesson we will refactor the root module to use the image and container modules we created in the previous two lessons.
+
+Go to the module directory:
+
+cd ~/terraform/basics/modules/
+touch {main.tf,variables.tf,outputs.tf}
+Edit main.tf:
+
+vi main.tf
+main.tf contents:
+
+# Download the image
+module "image" {
+  source = "./image"
+  image_name  = "${var.image_name}"
+}
+
+# Start the container
+module "container" {
+  source             = "./container"
+  image              = "${module.image.image_out}"
+  container_name     = "${var.container_name}"
+  int_port           = "${var.int_port}"
+  ext_port           = "${var.ext_port}"
+}
+Edit variables.tf:
+
+vi variables.tf
+variables.tf contents:
+
+#Define variables
+variable "container_name" {
+  description = "Name of the container."
+  default     = "blog"
+}
+variable "image_name" {
+  description = "Image for container."
+  default     = "ghost:latest"
+}
+variable "int_port" {
+  description = "Internal port for container."
+  default     = "2368"
+}
+variable "ext_port" {
+  description = "External port for container."
+  default     = "80"
+}
+Edit outputs.tf:
+
+vi outputs.tf
+outputs.tf contents:
+
+#Output the IP Address of the Container
+output "ip" {
+  value = "${module.container.ip}"
+}
+
+output "container_name" {
+  value = "${module.container.container_name}"
+}
+Initialize Terraform:
+
+terraform init
+Create the image plan:
+
+terraform plan -out=tfplan
+Deploy the container using the plan:
+
+terraform apply tfplan
+Destroy the deployment:
+
+terraform destroy -auto-approve
+
+----
+Hands-On Lab: Creating a Ghost Blog Terraform Module
+Create Ghost module
+Create a directory called ghost.
+Your modules will be made up of three files: main.tf, variables.tf and outputs.tf.
+
+main.tf
+In main.tf you will deploy out two resources docker_image and docker_container. The docker_image resource name will be ghost_image.
+The name will use th image_name variable.
+The docker_container resource name will be ghost_container.
+The name will be set using a varialbe called container_name. The image will be set usingdocker_image.ghost_image.latest. Set the external port to use the ext_port variable.
+
+variables.tf
+In variables.tf create three varialbes: image_name, container_name and ext_port.
+
+outputs.tf
+In outputs.tf create two outputs: ip and container_name. The ip output the ghost_container's ip_address attribute.
+The container_name output the ghost_container's name attribute.
+
+Create root module
+main.tf
+In cloud_user directory create main.tf, variables.tf and outputs.tf. In main.tf will use the ghost module.
+Set image_name using a variable called image_name.
+Set container_name using a variable called container_name.
+Set ext_port using a variable called ext_port.
+In variables.tf create three image_name, container_name and ext_port.
+
+variables.tf
+The image_name will have a default value of ghost:latest with a description of Image for container.
+The container_name will have a default value of blogwith a description ofName of the container.
+Theext_portwill have adefaultvalue of 80 with a description of External port for container.
+
+outputs.tf
+In outputs.tf create two outputs: ip and container_name. The ip output the ghost_container's ip_address attribute.
+The container_name output the ghost_container's name attribute.
+
+Deploy the infrastructure
+Initialize Terraform.
+Generate a Terraform plan and output a plan file.
+Deploy the infrastructure using the plan file.
+
+Create the ghost module
+keyboard_arrow_up
+Create the ghost directory:
+
+mkdir ghost
+cd ghost
+Create main.tf:
+
+vi main.tf
+main.tf:
+
+resource "docker_image" "ghost_image" {
+  name = "${var.image_name}"
+}
+
+# Start the Ghost Container
+resource "docker_container" "ghost_container" {
+  name  = "${var.container_name}"
+  image = "${docker_image.ghost_image.latest}"
+  ports {
+    internal = "2368"
+    external = "${var.ext_port}"
+  }
+}
+Create variables.tf:
+
+vi variables.tf
+variables.tf:
+
+#Define variables
+variable "image_name" {}
+variable "container_name" {}
+variable "ext_port" {}
+Create outputs.tf:
+
+vi outputs.tf
+outputs.tf:
+
+#Output the IP Address of the Container
+output "ip" {
+  value = "${docker_container.ghost_container.ip_address}"
+}
+
+output "container_name" {
+  value = "${docker_container.ghost_container.name}"
+}
+
+Create the root module
+keyboard_arrow_up
+Create main.tf: Change back to the cloud_user directory.
+
+cd ~/
+vi main.tf
+main.tf:
+
+module "ghost" {
+  source             = "./ghost"
+  image_name         = "${var.image_name}"
+  container_name     = "${var.container_name}"
+  ext_port           = "${var.ext_port}"
+}
+Create variables.tf:
+
+vi variables.tf
+variables.tf:
+
+#Define variables
+variable "image_name" {
+  description = "Image for container."
+  default     = "ghost:latest"
+}
+
+variable "container_name" {
+  description = "Name of the container."
+  default     = "blog"
+}
+
+variable "ext_port" {
+  description = "External port for container."
+  default     = "80"
+}
+Create outputs.tf:
+
+vi outputs.tf
+outputs.tf:
+
+#Output the IP Address of the Container
+output "ip" {
+  value = "${module.ghost.ip}"
+}
+
+output "container_name" {
+  value = "${module.ghost.container_name}"
+}
+
+Deploy the infrastructure
+keyboard_arrow_up
+Initialize Terraform
+
+terraform init
+Generate a Terraform plan:
+
+terraform plan -out=tfplan -var image_name=ghost:alpine -var ext_port=8080
+terraform apply tfplan
+
+----
+
+Terraform and Docker
+Managing Docker Networks
+In this lesson we will build on our knowledge of Terraform and Docker by learning about the docker_network resource.
+
+Set up the environment:
+
+mkdir -p ~/terraform/docker/networks
+cd terraform/docker/networks
+Create the files:
+
+touch {variables.tf,image.tf,network.tf,main.tf}
+Edit variables.tf:
+
+vi variables.tf
+variables.tf contents:
+
+variable "mysql_root_password" {
+  description = "The MySQL root password."
+  default     = "P4sSw0rd0!"
+}
+
+variable "ghost_db_username" {
+  description = "Ghost blog database username."
+  default     = "root"
+}
+
+variable "ghost_db_name" {
+  description = "Ghost blog database name."
+  default     = "ghost"
+}
+
+variable "mysql_network_alias" {
+  description = "The network alias for MySQL."
+  default     = "db"
+}
+
+variable "ghost_network_alias" {
+  description = "The network alias for Ghost"
+  default     = "ghost"
+}
+
+variable "ext_port" {
+  description = "Public port for Ghost"
+  default     = "8080"
+}
+Edit image.tf:
+
+vi image.tf
+image.tf contents:
+
+resource "docker_image" "ghost_image" {
+  name = "ghost:alpine"
+}
+
+resource "docker_image" "mysql_image" {
+  name = "mysql:5.7"
+}
+Edit network.tf:
+
+vi network.tf
+network.tf contents:
+
+resource "docker_network" "public_bridge_network" {
+  name   = "public_ghost_network"
+  driver = "bridge"
+}
+
+resource "docker_network" "private_bridge_network" {
+  name     = "ghost_mysql_internal"
+  driver   = "bridge"
+  internal = true
+}
+Edit main.tf:
+
+vi main.tf
+main.tf contents:
+
+resource "docker_container" "blog_container" {
+  name  = "ghost_blog"
+  image = "${docker_image.ghost_image.name}"
+  env   = [
+    "database__client=mysql",
+    "database__connection__host=${var.mysql_network_alias}",
+    "database__connection__user=${var.ghost_db_username}",
+    "database__connection__password=${var.mysql_root_password}",
+    "database__connection__database=${var.ghost_db_name}"
+  ]
+  ports {
+    internal = "2368"
+    external = "${var.ext_port}"
+  }
+  networks_advanced {
+    name    = "${docker_network.public_bridge_network.name}"
+    aliases = ["${var.ghost_network_alias}"]
+  }
+  networks_advanced {
+    name    = "${docker_network.private_bridge_network.name}"
+    aliases = ["${var.ghost_network_alias}"]
+  }
+}
+
+resource "docker_container" "mysql_container" {
+  name  = "ghost_database"
+  image = "${docker_image.mysql_image.name}"
+  env   = [
+    "MYSQL_ROOT_PASSWORD=${var.mysql_root_password}"
+  ]
+  networks_advanced {
+    name    = "${docker_network.private_bridge_network.name}"
+    aliases = ["${var.mysql_network_alias}"]
+  }
+}
+Initialize Terraform:
+
+terraform init
+Validate the files:
+
+terraform validate
+Build a plan:
+
+terraform plan -out=tfplan -var 'ext_port=8082'
+Apply the plan:
+
+terraform apply tfplan
+Destroy the environment:
+
+terraform destroy -auto-approve -var 'ext_port=8082'
+Fixing main.tf
+main.tf contents:
+
+resource "docker_container" "mysql_container" {
+  name  = "ghost_database"
+  image = "${docker_image.mysql_image.name}"
+  env   = [
+    "MYSQL_ROOT_PASSWORD=${var.mysql_root_password}"
+  ]
+  networks_advanced {
+    name    = "${docker_network.private_bridge_network.name}"
+    aliases = ["${var.mysql_network_alias}"]
+  }
+}
+
+resource "null_resource" "sleep" {
+  depends_on = ["docker_container.mysql_container"]
+  provisioner "local-exec" {
+    command = "sleep 15s"
+  }
+}
+
+resource "docker_container" "blog_container" {
+  name  = "ghost_blog"
+  image = "${docker_image.ghost_image.name}"
+  depends_on = ["null_resource.sleep", "docker_container.mysql_container"]
+  env   = [
+    "database__client=mysql",
+    "database__connection__host=${var.mysql_network_alias}",
+    "database__connection__user=${var.ghost_db_username}",
+    "database__connection__password=${var.mysql_root_password}",
+    "database__connection__database=${var.ghost_db_name}"
+  ]
+  ports {
+    internal = "2368"
+    external = "${var.ext_port}"
+  }
+  networks_advanced {
+    name    = "${docker_network.public_bridge_network.name}"
+    aliases = ["${var.ghost_network_alias}"]
+  }
+  networks_advanced {
+    name    = "${docker_network.private_bridge_network.name}"
+    aliases = ["${var.ghost_network_alias}"]
+  }
+}
+Build a plan:
+
+terraform plan -out=tfplan -var 'ext_port=8082'
+Apply the plan:
+
+terraform apply tfplan
+----
+Managing Docker Volumes
+In this lesson, we will add a volume to our Ghost Blog/MySQL setup.
+
+Destroy the existing environment:
+
+terraform destroy -auto-approve -var 'ext_port=8082'
+Setup an environment:
+
+cp -r ~/terraform/docker/networks ~/terraform/docker/volumes
+cd ../volumes/
+Create volumes.tf:
+
+vi volumes.tf
+volumes.tf contents:
+
+resource "docker_volume" "mysql_data_volume" {
+  name = "mysql_data"
+}
+Edit main.tf:
+
+vi main.tf
+main.tf contents:
+
+resource "docker_container" "mysql_container" {
+  name  = "ghost_database"
+  image = "${docker_image.mysql_image.name}"
+  env   = [
+    "MYSQL_ROOT_PASSWORD=${var.mysql_root_password}"
+  ]
+  volumes {
+    volume_name    = "${docker_volume.mysql_data_volume.name}"
+    container_path = "/var/lib/mysql"
+  }
+  networks_advanced {
+    name    = "${docker_network.private_bridge_network.name}"
+    aliases = ["${var.mysql_network_alias}"]
+  }
+}
+
+resource "null_resource" "sleep" {
+  depends_on = ["docker_container.mysql_container"]
+  provisioner "local-exec" {
+    command = "sleep 15s"
+  }
+}
+
+resource "docker_container" "blog_container" {
+  name  = "ghost_blog"
+  image = "${docker_image.ghost_image.name}"
+  depends_on = ["null_resource.sleep", "docker_container.mysql_container"]
+  env   = [
+    "database__client=mysql",
+    "database__connection__host=${var.mysql_network_alias}",
+    "database__connection__user=${var.ghost_db_username}",
+    "database__connection__password=${var.mysql_root_password}",
+    "database__connection__database=${var.ghost_db_name}"
+  ]
+  ports {
+    internal = "2368"
+    external = "${var.ext_port}"
+  }
+  networks_advanced {
+    name    = "${docker_network.public_bridge_network.name}"
+    aliases = ["${var.ghost_network_alias}"]
+  }
+  networks_advanced {
+    name    = "${docker_network.private_bridge_network.name}"
+    aliases = ["${var.ghost_network_alias}"]
+  }
+}
+Initialize Terraform:
+
+terraform init
+Validate the files:
+
+terraform validate
+Build a plan:
+
+terraform plan -out=tfplan -var 'ext_port=8082'
+Apply the plan:
+
+terraform apply tfplan
+List Docker volumes:
+
+docker volume inspect mysql_data
+List the data in mysql_data:
+
+sudo ls /var/lib/docker/volumes/mysql_data/_data
+Destroy the environment:
+
+terraform destroy -auto-approve -var 'ext_port=8082'
+----
+Creating Swarm Services
+In this lesson, we will convert our Ghost and MySQL containers over to using Swarm services. Swarm services are a more production-ready way of running containers.
+
+Setup the environment:
+
+cp -r volumes/ services
+cd services
+variables.tf contents:
+
+variable "mysql_root_password" {
+  description = "The MySQL root password."
+  default     = "P4sSw0rd0!"
+}
+
+variable "ghost_db_username" {
+  description = "Ghost blog database username."
+  default     = "root"
+}
+
+variable "ghost_db_name" {
+  description = "Ghost blog database name."
+  default     = "ghost"
+}
+
+variable "mysql_network_alias" {
+  description = "The network alias for MySQL."
+  default     = "db"
+}
+
+variable "ghost_network_alias" {
+  description = "The network alias for Ghost"
+  default     = "ghost"
+}
+
+variable "ext_port" {
+  description = "The public port for Ghost"
+}
+images.tf contents:
+
+resource "docker_image" "ghost_image" {
+  name = "ghost:alpine"
+}
+
+resource "docker_image" "mysql_image" {
+  name = "mysql:5.7"
+}
+networks.tf contents:
+
+resource "docker_network" "public_bridge_network" {
+  name   = "public_network"
+  driver = "overlay"
+}
+
+resource "docker_network" "private_bridge_network" {
+  name     = "mysql_internal"
+  driver   = "overlay"
+  internal = true
+}
+volumes.tf contents:
+
+resource "docker_volume" "mysql_data_volume" {
+  name = "mysql_data"
+}
+main.tf contents:
+
+resource "docker_service" "ghost-service" {
+  name = "ghost"
+
+  task_spec {
+    container_spec {
+      image = "${docker_image.ghost_image.name}"
+
+      env {
+         database__client               = "mysql"
+         database__connection__host     = "${var.mysql_network_alias}"
+         database__connection__user     = "${var.ghost_db_username}"
+         database__connection__password = "${var.mysql_root_password}"
+         database__connection__database = "${var.ghost_db_name}"
+      }
+    }
+    networks = [
+      "${docker_network.public_bridge_network.name}",
+      "${docker_network.private_bridge_network.name}"
+    ]
+  }
+
+  endpoint_spec {
+    ports {
+      target_port    = "2368"
+      published_port = "${var.ext_port}"
+    }
+  }
+}
+
+resource "docker_service" "mysql-service" {
+  name = "${var.mysql_network_alias}"
+
+  task_spec {
+    container_spec {
+      image = "${docker_image.mysql_image.name}"
+
+      env {
+        MYSQL_ROOT_PASSWORD = "${var.mysql_root_password}"
+      }
+
+      mounts = [
+        {
+          target = "/var/lib/mysql"
+          source = "${docker_volume.mysql_data_volume.name}"
+          type   = "volume"
+        }
+      ]
+    }
+    networks = ["${docker_network.private_bridge_network.name}"]
+  }
+}
+Initialize Terraform:
+
+terraform init
+Validate the files:
+
+terraform validate
+Build a plan:
+
+terraform plan -out=tfplan -var 'ext_port=8082'
+Apply the plan:
+
+terraform apply tfplan
+docker service ls
+docker container ls
+Destroy the environment:
+
+terraform destroy -auto-approve -var 'ext_port=8082'
+----
+Using Secrets
+In this lesson, we'll explore using Terraform to store sensitive data, by using Docker Secrets.
+
+Setup the environment:
+
+mkdir secrets
+cd secrets
+Encode the password with Base64:
+
+echo 'p4sSWoRd0!' | base64
+Create variables.tf:
+
+vi variables.tf
+variables.tf contents:
+
+variable "mysql_root_password" {
+  default     = "cDRzU1dvUmQwIQo="
+}
+
+variable "mysql_db_password" {
+  default     = "cDRzU1dvUmQwIQo="
+}
+Create image.tf:
+
+vi image.tf
+image.tf contents:
+
+resource "docker_image" "mysql_image" {
+  name = "mysql:5.7"
+}
+Create secrets.tf:
+
+vi secrets.tf
+secrets.tf contents:
+
+resource "docker_secret" "mysql_root_password" {
+  name = "root_password"
+  data = "${var.mysql_root_password}"
+}
+
+resource "docker_secret" "mysql_db_password" {
+  name = "db_password"
+  data = "${var.mysql_db_password}"
+}
+Create networks.tf:
+
+vi networks.tf
+networks.tf contents:
+
+resource "docker_network" "private_overlay_network" {
+  name     = "mysql_internal"
+  driver   = "overlay"
+  internal = true
+}
+Create volumes.tf:
+
+vi volumes.tf
+volumes.tf contents:
+
+resource "docker_volume" "mysql_data_volume" {
+  name = "mysql_data"
+}
+Create main.tf:
+
+vi main.tf
+main.tf contents:
+
+resource "docker_service" "mysql-service" {
+  name = "mysql_db"
+
+  task_spec {
+    container_spec {
+      image = "${docker_image.mysql_image.name}"
+
+      secrets = [
+        {
+          secret_id   = "${docker_secret.mysql_root_password.id}"
+          secret_name = "${docker_secret.mysql_root_password.name}"
+          file_name   = "/run/secrets/${docker_secret.mysql_root_password.name}"
+        },
+        {
+          secret_id   = "${docker_secret.mysql_db_password.id}"
+          secret_name = "${docker_secret.mysql_db_password.name}"
+          file_name   = "/run/secrets/${docker_secret.mysql_db_password.name}"
+        }
+      ]
+
+      env {
+        MYSQL_ROOT_PASSWORD_FILE = "/run/secrets/${docker_secret.mysql_root_password.name}"
+        MYSQL_DATABASE           = "mydb"
+        MYSQL_PASSWORD_FILE      = "/run/secrets/${docker_secret.mysql_db_password.name}"
+      }
+
+      mounts = [
+        {
+          target = "/var/lib/mysql"
+          source = "${docker_volume.mysql_data_volume.name}"
+          type   = "volume"
+        }
+      ]
+    }
+    networks = [
+      "${docker_network.private_overlay_network.name}"
+    ]
+  }
+}
+Initialize Terraform:
+
+terraform init
+Validate the files:
+
+terraform validate
+Build a plan:
+
+terraform plan -out=tfplan
+Apply the plan:
+
+terraform apply tfplan
+Find the MySQL container:
+
+docker container ls
+Use the exec command to log into the MySQL container:
+
+docker container exec -it [CONTAINER_ID] /bin/bash
+Access MySQL:
+
+mysql -u root -p
+Destroy the environment:
+
+terraform destroy -auto-approve
+----
+Hands-On Lab: Using Terraform to Create a Docker Volume and Network
+Additional Information and Resources
+Create the variables file
+Create variables.tf and add four variables with these default values:
+container_name: mysql.
+mysql_root_password: P4sSw0rd0!.
+mysql_network_name: mysql_internal_network.
+mysql_volume_name: mysql_data.
+Create the images file
+Create images.tf.
+Add the docker_image resource and call it mysql_image.
+Set the name to mysql:5.7.
+Create the networks file
+Create networks.tf.
+Add the docker_network resource and call it private_bridge_network.
+Set the name to use the mysql_network_name variable.
+Set the driver to bridge.
+Set internal to true.
+Create the volumes file
+In volumes.tf add the docker_volume resource and call it mysql_data_volume.
+Set the name to use the mysql_volume_name variable.
+Create the main file
+In main.tf add the docker_container resource and call it mysql_container.
+Set the name to use the container_name variable.
+Set the image to use the name of the image coming from docker_image.
+Create an environment variable for MYSQL_ROOT_PASSWORD and set it to the mysql_root_password variable.
+Configure the container volume to use the volume created by docker_volume, and make sure the container_path is set to /var/lib/mysql.
+The container needs to use the network created by docker_network.
+Deploy the infrastructure
+Initialize Terraform.
+Validate the files.
+Generate a Terraform plan.
+Deploy the infrastructure using the plan file.
+
+Create the Variables File
+keyboard_arrow_up
+Create variables.tf:
+
+vi variables.tf
+with these contents:
+
+variable "container_name" {
+  description = "The MySQL container name."
+  default     = "mysql"
+}
+
+variable "mysql_root_password" {
+  description = "The MySQL root password."
+  default     = "P4sSw0rd0!"
+}
+
+variable "mysql_network_name" {
+  description = "The MySQL's network'."
+  default     = "mysql_internal_network"
+}
+
+variable "mysql_volume_name" {
+  description = "The MySQL's Volume'."
+  default     = "mysql_data"
+}
+
+Create the Image File
+keyboard_arrow_up
+Create image.tf:
+
+vi image.tf
+Add the docker_image resource and call it mysql_image, then set the name to mysql:5.7:
+
+resource "docker_image" "mysql_image" {
+name = "mysql:5.7"
+}
+
+Create the Network File
+keyboard_arrow_up
+Create networks.tf:
+
+vi networks.tf
+networks.tf contents:
+
+resource "docker_network" "private_bridge_network" {
+  name     = "${var.mysql_network_name}"
+  driver   = "bridge"
+  internal = true
+}
+
+Create the Volume File
+keyboard_arrow_up
+Create volumes.tf:
+
+vi volumes.tf
+with these contents:
+
+resource "docker_volume" "mysql_data_volume" {
+  name = "${var.mysql_volume_name}"
+}
+
+Create the Main File
+keyboard_arrow_up
+Create main.tf:
+
+vi main.tf
+with these contents:
+
+resource "docker_container" "mysql_container" {
+  name  = "${var.container_name}"
+  image = "${docker_image.mysql_image.name}"
+  env   = [
+    "MYSQL_ROOT_PASSWORD=${var.mysql_root_password}"
+  ]
+  volumes {
+    volume_name    = "${docker_volume.mysql_data_volume.name}"
+    container_path = "/var/lib/mysql"
+  }
+  networks_advanced {
+    name    = "${docker_network.private_bridge_network.name}"
+  }
+}
+
+Deploy the Infrastructure
+keyboard_arrow_up
+Initialize Terraform:
+
+terraform init
+Validate the files:
+
+terraform validate
+Generate a Terraform plan:
+
+terraform plan -out=tfplan
+Deploy the infrastructure using the plan file:
+
+terraform apply tfplan
+----
+Hands-On Lab: Deploying a Swarm Using Terraform
+Finish Docker Swarm
+Complete the setup of the Docker swarm by getting the worker token:
+
+docker swarm join-token worker
+Create the Terraform files on the Swarm Manager
+Create the following files: variables.tf, images.tf, network.tf, volumes.tf and main.tf.
+
+variables.tf
+In variables.tf create the following variables:
+
+mysql_root_password
+Give it a default value of P4sSw0rd0! with a description of The MySQL root password.
+ghost_db_username
+Give it a default value of root with a description of Ghost blog database username.
+ghost_db_name
+This will have a default value of ghost with a description of Ghost blog database name.
+mysql_network_alias
+Set this with a default value of db and a description of The network alias for MySQL.
+ghost_network_alias
+Give this a default value of ghost with a description of The network alias for Ghost.
+ext_port
+Set this default value to 80, and give it a description of The public port for Ghost.
+images.tf
+In images.tf create two docker image resources. The first resources will be called ghost_image and the name will be set to ghost:alpine.
+The second resource will be called mysql_image and the name will be set to mysql:5.7.
+
+networks.tf
+In networks.tf, create two overlay docker networks resources:
+
+public_overlay_network will be name of public_network.
+private_overlay_network will be name of mysql_internal.
+volumes.tf
+In volumes.tf create a single docker volume resources called mysql_data_volume. The volume will be named mysql_data.
+
+main.tf
+In main.tf create two docker service resource called ghost-service and mysql-service.
+
+ghost-service resource
+The service will be called ghost.
+Create a task_spec that will contain a container_spec and a endpoint_spec.
+
+The container_spec will be responsible for creating a container. The image will use the ghost image coming from ghost_image resource using the name attribute. Create the following environment variables:
+database__client set to mysql
+database__connection__host set to the mysql_network_alias variable
+database__connection__user set to the ghost_db_username variable
+database__connection__password set to the mysql_root_password variable
+database__connection__database set to the ghost_db_name variable
+The container will be connected to bothpublic_network and mysql_internal
+The endpoint_spec will have a target_port of 2368, and set published_port to use the ext_port variable.
+mysql-service resource
+The service name will use the mysql_network_alias variable.
+Create a task_spec that will contain a container_spec.
+The container_spec will be responsible for creating a container. The image will use the ghost image, which will be coming from the mysql_image resource using the name attribute.
+
+Create the environment variable MYSQL_ROOT_PASSWORD and set to be the mysql_root_password variable.
+Create a mount that will be the volume type.
+The target on the container will be set to /var/lib/mysql. Use mysql_data for the source.
+The container will be attached to the mysql_internal network.
+
+Deploy the infrastructure
+Initialize Terraform.
+Generate a Terraform plan and output a plan file.
+Deploy the infrastructure using the plan file.
+
+Complete the Setup of Docker Swarm
+keyboard_arrow_up
+On the manager node get the join token:
+
+docker swarm join-token worker
+On the worker node run the join command:
+
+docker swarm join --token [JOIN_TOKEN] [IP]:2377
+
+Create the `variables.tf` File
+keyboard_arrow_up
+Create variables.tf:
+
+vi variables.tf
+variables.tf contents:
+
+variable "mysql_root_password" {
+  description = "The MySQL root password."
+  default     = "P4sSw0rd0!"
+}
+
+variable "ghost_db_username" {
+  description = "Ghost blog database username."
+  default     = "root"
+}
+
+variable "ghost_db_name" {
+  description = "Ghost blog database name."
+  default     = "ghost"
+}
+
+variable "mysql_network_alias" {
+  description = "The network alias for MySQL."
+  default     = "db"
+}
+
+variable "ghost_network_alias" {
+  description = "The network alias for Ghost"
+  default     = "ghost"
+}
+
+variable "ext_port" {
+  description = "The public port for Ghost"
+  default     = "80"
+}
+
+Create the `images.tf` File
+keyboard_arrow_up
+Create images.tf:
+
+vi images.tf
+images.tf contents:
+
+resource "docker_image" "ghost_image" {
+  name = "ghost:alpine"
+}
+
+resource "docker_image" "mysql_image" {
+  name = "mysql:5.7"
+}
+
+Create the `networks.tf` File
+keyboard_arrow_up
+Create networks.tf:
+
+vi networks.tf
+networks.tf contents:
+
+resource "docker_network" "public_overlay_network" {
+  name   = "public_network"
+  driver = "overlay"
+}
+
+resource "docker_network" "private_overlay_network" {
+  name     = "mysql_internal"
+  driver   = "overlay"
+  internal = true
+}
+
+Create the `volumes.tf` File
+keyboard_arrow_up
+Create volumes.tf:
+
+vi volumes.tf
+volumes.tf contents:
+
+resource "docker_volume" "mysql_data_volume" {
+  name = "mysql_data"
+}
+
+Create the `main.tf` File
+keyboard_arrow_up
+Create main.tf:
+
+vi main.tf
+main.tf contents:
+
+resource "docker_service" "ghost-service" {
+  name = "ghost"
+
+  task_spec {
+    container_spec {
+      image = "${docker_image.ghost_image.name}"
+
+      env {
+         database__client               = "mysql"
+         database__connection__host     = "${var.mysql_network_alias}"
+         database__connection__user     = "${var.ghost_db_username}"
+         database__connection__password = "${var.mysql_root_password}"
+         database__connection__database = "${var.ghost_db_name}"
+      }
+    }
+    networks = ["${docker_network.public_overlay_network.name}", "${docker_network.private_overlay_network.name}"]
+  }
+
+  endpoint_spec {
+    ports {
+      target_port    = "2368"
+      published_port = "${var.ext_port}"
+    }
+  }
+}
+
+resource "docker_service" "mysql-service" {
+  name = "${var.mysql_network_alias}"
+
+  task_spec {
+    container_spec {
+      image = "${docker_image.mysql_image.name}"
+
+      env {
+        MYSQL_ROOT_PASSWORD = "${var.mysql_root_password}"
+      }
+
+      mounts = [
+        {
+          target = "/var/lib/mysql"
+          source = "${docker_volume.mysql_data_volume.name}"
+          type   = "volume"
+        }
+      ]
+    }
+    networks = ["${docker_network.private_overlay_network.name}"]
+  }
+}
+
+Deploy the Infrastructure
+keyboard_arrow_up
+Initialize Terraform:
+
+terraform init
+Validate the files:
+
+terraform validate
+Build a plan:
+
+terraform plan -out=tfplan -var 'ext_port=8080'
+Apply the plan:
+
+terraform apply tfplan
+----
+Using Terraform in a CI/CD Environment
+Building a Custom Jenkins Image
+In this lesson, we will learn how to build a Jenkins Docker image that has Docker and Terraform baked in. We will be using this image throughout the remainder of this section.
+
+Setup the environment:
+
+mkdir -p jenkins
+Create Dockerfile:
+
+vi Dockerfile
+Dockerfile contents:
+
+FROM jenkins/jenkins:lts
+USER root
+RUN apt-get update -y && apt-get -y install apt-transport-https ca-certificates curl gnupg-agent software-properties-common
+RUN curl -fsSL https://download.docker.com/linux/$(. /etc/os-release; echo "$ID")/gpg > /tmp/dkey; apt-key add /tmp/dkey
+RUN add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/$(. /etc/os-release; echo "$ID") $(lsb_release -cs) stable"
+RUN apt-get update -y
+RUN apt-get install -y docker-ce docker-ce-cli containerd.io
+RUN curl -O https://releases.hashicorp.com/terraform/0.11.13/terraform_0.11.13_linux_amd64.zip && unzip terraform_0.11.13_linux_amd64.zip -d /usr/local/bin/
+USER ${user}
+Build the Image:
+
+docker build -t jenkins:terraform .
+List the Docker images:
+
+docker image ls
+Jenkins Dockerfile https://github.com/jenkinsci/docker/blob/master/Dockerfile
+---
+Setting up Jenkins
+In this lesson, we will take the Jenkins image we built in the previous lesson, and deploy a Docker container using Terraform.
+
+Edit main.tf:
+
+vi main.tf
+main.tf contents:
+
+# Jenkins Volume
+resource "docker_volume" "jenkins_volume" {
+  name = "jenkins_data"
+}
+
+# Start the Jenkins Container
+resource "docker_container" "jenkins_container" {
+  name  = "jenkins"
+  image = "jenkins:terraform"
+  ports {
+    internal = "8080"
+    external = "8080"
+  }
+
+  volumes {
+    volume_name    = "${docker_volume.jenkins_volume.name}"
+    container_path = "/var/jenkins_home"
+  }
+
+  volumes {
+    host_path      = "/var/run/docker.sock"
+    container_path = "/var/run/docker.sock"
+  }
+}
+Initialize Terraform:
+
+terraform init
+Plan the deployment:
+
+terraform plan -out=tfplan
+Deploy Jenkins:
+
+terraform apply tfplan
+Get the Admin password:
+
+docker exec jenkins cat /var/jenkins_home/secrets/initialAdminPassword
+---
+Creating a Jenkins Job
+In this lesson, we will start working with Jenkins by
+creating a simple build job. This job will deploy a
+Docker container using Terraform, list the container,
+and then destroy it.
+
+In the Jenkins dashboard, Click New Item.
+Select Freestyle Project, and enter an item name of DeployGhost. Click Ok.
+
+Under Source Code Management, select Git. Enter a Repository
+URL of https://github.com/linuxacademy/content-terraform-docker.git
+
+In the Build section, click Add build step and select Execute shell from the dropdown.
+
+Add the following in the Command area:
+
+terraform init
+terraform plan -out=tfplan
+terraform apply tfplan
+docker container ls
+terraform destroy -auto-approve
+Click Save.
+
+Now, if we click Build Now in the left-hand menu,
+our project will start building. Clicking the little
+dropdown arrow next to #1 will give us a menu. Select
+Console Output to watch things build. Once we get a
+Finished: SUCCESS message, we're done.
+----
+
+Building a Jenkins Pipeline Part 1
+In this lesson, we will create the first Jenkins Pipeline that will deploy out a Ghost blog.
+
+In the Jenkins dashboard, click New Item Enter an item name of PipelinePart1, and select Pipeline. Click Ok.
+
+Check the box for This project is parameterized. Click Add Parameter and select Choice Parameter. Give it a Name of action. For Choices, enter Deploy and Destroy, and make sure they are on separate lines. Enter The action that will be executed as the Description.
+
+Click Add Parameter and select Choice Parameter again. This time, name it image_name. Enter ghost:latest and ghost:alpine in the Choices box, making sure they are on separate lines. Enter The image Ghost Blog will deploy as a Description.
+
+Click Add Parameter a third time, and select String Parameter. Give it a Name of ext_port. Set the Default Value to 80. Enter The Public Port as the Description.
+
+Down in the Pipeline section, give a Definition of Pipeline script, and add the following to the Script:
+
+node {
+  git 'https://github.com/linuxacademy/content-terraform-docker.git'
+  if(action == 'Deploy') {
+    stage('init') {
+        sh """
+            terraform init
+        """
+    }
+    stage('plan') {
+      sh label: 'terraform plan', script: "terraform plan -out=tfplan -input=false -var image_name=${image_name} -var ext_port=${ext_port}"
+      script {
+          timeout(time: 10, unit: 'MINUTES') {
+              input(id: "Deploy Gate", message: "Deploy environment?", ok: 'Deploy')
+          }
+      }
+    }
+    stage('apply') {
+        sh label: 'terraform apply', script: "terraform apply -lock=false -input=false tfplan"
+    }
+  }
+
+  if(action == 'Destroy') {
+    stage('plan_destroy') {
+      sh label: 'terraform plan destroy', script: "terraform plan -destroy -out=tfdestroyplan -input=false -var image_name=${image_name} -var ext_port=${ext_port}"
+    }
+    stage('destroy') {
+      script {
+          timeout(time: 10, unit: 'MINUTES') {
+              input(id: "Destroy Gate", message: "Destroy environment?", ok: 'Destroy')
+          }
+      }
+      sh label: 'Destroy environment', script: "terraform apply -lock=false -input=false tfdestroyplan"
+    }
+  }
+}
+Click Save
+----
+Building a Jenkins Pipeline Part 2
+In this lesson, we will create a Jenkins Pipeline to deploy out a Swarm service.
+
+In the Jenkins dashboard, click New Item Enter an item name of PipelinePart2, and select Pipeline. Click Ok.
+
+Check the box for This project is parameterized. Click Add Parameter and select Choice Parameter. Give it a Name of action. For Choices, enter Deploy and Destroy, and make sure they are on separate lines. Enter The action that will be executed as the Description.
+
+Click Add Parameter and select Choice Parameter again. This time, name it image_name. Enter ghost:latest and ghost:alpine in the Choices box, making sure they are on separate lines. Enter The image Ghost Blog will deploy as a Description.
+
+Click Add Parameter a third time, and select String Parameter. Give it a Name of ghost_ext_port. Set the Default Value to 80. Enter The Public Port as the Description.
+
+Down in the Pipeline section, give a Definition of Pipeline script, and add the following to the Script:
+
+node {
+  git 'https://github.com/linuxacademy/content-terraform-docker-service.git'
+  if(action == 'Deploy') {
+    stage('init') {
+      sh label: 'terraform init', script: "terraform init"
+    }
+    stage('plan') {
+      sh label: 'terraform plan', script: "terraform plan -out=tfplan -input=false -var image_name=${image_name} -var ghost_ext_port=${ghost_ext_port}"
+      script {
+          timeout(time: 10, unit: 'MINUTES') {
+            input(id: "Deploy Gate", message: "Deploy environment?", ok: 'Deploy')
+          }
+      }
+    }
+    stage('apply') {
+      sh label: 'terraform apply', script: "terraform apply -lock=false -input=false tfplan"
+    }
+  }
+
+  if(action == 'Destroy') {
+    stage('plan_destroy') {
+      sh label: 'terraform plan', script: "terraform plan -destroy -out=tfdestroyplan -input=false -var image_name=${image_name} -var ghost_ext_port=${ghost_ext_port}"
+    }
+    stage('destroy') {
+      script {
+          timeout(time: 10, unit: 'MINUTES') {
+              input(id: "Destroy Gate", message: "Destroy environment?", ok: 'Destroy')
+          }
+      }
+      sh label: 'terraform apply', script: "terraform apply -lock=false -input=false tfdestroyplan"
+    }
+    stage('cleanup') {
+      sh label: 'cleanup', script: "rm -rf terraform.tfstat"
+    }
+  }
+}
+Click Save
+----
+Building a Jenkins Pipeline Part 3
+In this lesson, we will complete working with Jenkins by creating a pipeline that will create a MySQL Swarm service that uses Docker Secrets.
+
+In the Jenkins dashboard, click New Item Enter an item name of PipelinePart3, and select Pipeline. Click Ok.
+
+Check the box for This project is parameterized. Click Add Parameter and select Choice Parameter. Give it a Name of action. For Choices, enter Deploy and Destroy, and make sure they are on separate lines. Enter The action that will be executed as the Description.
+
+Click Add Parameter and select String Parameter. For the name, enter mysql_root_password.. Enter P4ssW0rd0! in the Default Value box. Enter MySQL root password. as a Description.
+
+For the next parameter, click Add Parameter once more and select String Parameter. For the name, enter mysql_user_password.. Enter paSsw0rd0! in the Default Value box. Enter MySQL user password. as a Description.
+
+Down in the Pipeline section, give a Definition of Pipeline script, and add the following to the Script:
+
+node {
+  git 'https://github.com/linuxacademy/content-terraform-docker-secrets.git'
+  if(action == 'Deploy') {
+    stage('init') {
+      sh label: 'terraform init', script: "terraform init"
+    }
+    stage('plan') {
+      def ROOT_PASSWORD = sh (returnStdout: true, script: """echo ${mysql_root_password} | base64""").trim()
+      def USER_PASSWORD = sh (returnStdout: true, script: """echo ${mysql_user_password} | base64""").trim()
+      sh label: 'terraform plan', script: "terraform plan -out=tfplan -input=false -var mysql_root_password=${ROOT_PASSWORD} -var mysql_db_password=${USER_PASSWORD}"
+      script {
+          timeout(time: 10, unit: 'MINUTES') {
+              input(id: "Deploy Gate", message: "Deploy ${params.project_name}?", ok: 'Deploy')
+          }
+      }
+    }
+    stage('apply') {
+      sh label: 'terraform apply', script: "terraform apply -lock=false -input=false tfplan"
+    }
+  }
+
+  if(action == 'Destroy') {
+    stage('plan_destroy') {
+      def ROOT_PASSWORD = sh (returnStdout: true, script: """echo ${mysql_root_password} | base64""").trim()
+      def USER_PASSWORD = sh (returnStdout: true, script: """echo ${mysql_user_password} | base64""").trim()
+      sh label: 'terraform plan', script: "terraform plan -destroy -out=tfdestroyplan -input=false -var mysql_root_password=${ROOT_PASSWORD} -var mysql_db_password=${USER_PASSWORD}"
+    }
+    stage('destroy') {
+      script {
+          timeout(time: 10, unit: 'MINUTES') {
+              input(id: "Destroy Gate", message: "Destroy ${params.project_name}?", ok: 'Destroy')
+          }
+      }
+      sh label: 'terraform apply', script: "terraform apply -lock=false -input=false tfdestroyplan"
+    }
+    stage('cleanup') {
+      sh label: 'cleanup', script: "rm -rf terraform.tfstat"
+    }
+  }
+}
+Click Save
+----
+Hands-On Lab: Building a CI/CD Pipeline Using Terraform
+Go to http://:8080 and complete the Jenkins setup. From the command line of the Jenkins server, run the following command to get the password:
+
+sudo cat /var/lib/jenkins/secrets/initialAdminPassword
+Install the default plugins.
+Create a Jenkins user account.
+
+Create a Pipeline to deploy for a Docker Service
+Click New Item and select Pipeline.
+Name the project MyDeployment.
+Ensure that the project is parameterized.
+Create two choice parameters: image_name and ghost_ext_port.
+The choices for image_name should be set to ghost:latest and ghost:alpine.
+The choices for ghost_ext_port should be set to 80 and 8081.
+
+The Pipeline
+The pipeline should clone the following Git repository:
+https://github.com/linuxacademy/content-terraform-docker-service.git
+
+
+Running the Terraform commands requires supplying the path to the binary: /usr/local/bin/terraform.
+Create a three stage pipeline: init, plan, and apply.
+For the init stage, use a shell script sh to initialize Terraform. Set the label to Initialize Terraform.
+
+For the plan stage, use a shell script sh to generate a Terraform plan. Set the label to Plan Terraform.
+The Terraform plan should do the following:
+
+Create a plan file called deploy_service to be used with the apply.
+Ensure that the plan is not prompted for inputs.
+Pass in the variables image_name and ghost_ext_port and set them to their corresponding parameters.
+Using a script, create a timeout and input.
+The timeout should be for 10 minutes.
+The input should have an id of Deploy Gate, a message that states Deploy environment? and ok of Deploy.
+
+For the apply stage, use a shell script sh to execute terraform apply.
+Set the label to Deploy Infrastructure. The terraform apply should do the following:
+
+Set locking to false.
+Ensure that the apply is not prompted for inputs.
+Use the deploy_service plan file created during the plan stage.
+Test the job
+From MyDeployment click Build with Parameters.
+Select ghost:alpine for the image_name and 8081 for ghost_ext_port.
+Click the Build button. In the Build History click on the job number.
+Then click on Console Output.
+The job will be paused and you need to either click on Deploy or Abort.
+Click Deploy so that the job can resume.
+Visit: http://[LAB_IP]:8081 to see if Ghost blog pulls up.
+
+Setting Up Docker Swarm
+keyboard_arrow_up
+Complete the Swarm:
+
+docker swarm join-token worker
+On the worker node run the join command (pasting the join token in the appropriate spot):
+
+docker swarm join --token [JOIN_TOKEN] [IP]:2377
+
+Create the Build Pipeline
+keyboard_arrow_up
+Pipeline:
+
+node {
+  git 'https://github.com/linuxacademy/content-terraform-docker-service.git'
+  stage('init') {
+    sh label: 'Initialize Terraform', script: "terraform init"
+  }
+  stage('plan') {
+    sh label: 'Plan Terraform', script: "terraform plan -out=tfplan -input=false -var image_name=${image_name} -var ghost_ext_port=${ghost_ext_port}"
+    script {
+        timeout(time: 10, unit: 'MINUTES') {
+          input(id: "Deploy Gate", message: "Deploy environment?", ok: 'Deploy')
+        }
+    }
+  }
+  stage('apply') {
+    sh label: 'Deploy Infrastructure', script: "terraform apply -lock=false -input=false tfplan"
+  }
+}
+
+Deploy Ghost Blog
+keyboard_arrow_up
+From MyDeployment click Build with Parameters.
+Select ghost:alpine for the image_name and 8081 for ghost_ext_port.
+Click the Build button. Visit: http://[LAB_IP]:8081 to see if Ghost blog pulls up.
+----
+Terraform and AWS
+Setting Up a Cloud Sandbox
+Set up a Sandbox in the cloud playground
+export AWS_ACCESS_KEY_ID = "value"
+export AWS_SECRET_ACCESS_KEY = "value"
+----
+Our Architecture
+S3 bucket, VPC, security group, internet gateway, EC2
+----
+Storage Part 1: The S3 Bucket and Random ID
+In this lesson, we will start working with AWS by creating a S3 Terraform module.
+
+Environment setup:
+
+mkdir -p ~/terraform/AWS/storage
+cd ~/terraform/AWS/storage
+Create main.tf:
+
+vi main.tf
+main.tf:
+
+#---------storage/main.tf---------
+
+# Create a random id
+resource "random_id" "tf_bucket_id" {
+  byte_length = 2
+}
+
+# Create the bucket
+resource "aws_s3_bucket" "tf_code" {
+    bucket        = "${var.project_name}-${random_id.tf_bucket_id.dec}"
+    acl           = "private"
+
+    force_destroy =  true
+
+    tags {
+      Name = "tf_bucket"
+    }
+}
+Create variables.tf:
+
+vi variables.tf
+variables.tf:
+
+#----storage/variables.tf----
+variable "project_name" {}
+
+Coutputs.tf:
+
+vi outputs.tf
+outputs.tf:
+
+#----storage/outputs.tf----
+output "bucketname" {
+  value = "${aws_s3_bucket.tf_code.id}"
+}
+Initialize Terraform:
+
+terraform init
+Validate your files:
+
+terraform validate
+Plan the deployment:
+
+export AWS_ACCESS_KEY_ID="[ACCESS_KEY]"
+export AWS_SECRET_ACCESS_KEY="[SECRET_KEY]"
+export AWS_DEFAULT_REGION="us-east-1"
+terraform plan -out=tfplan -var project_name=la-terraform
+Deploy the S3 bucket:
+
+terraform apply tfplan
+Destroy S3 bucket:
+
+terraform destroy -auto-approve -var project_name=la-terraform
+----
+Storage Part 2: The Root Module
+In this lesson, we will start working on our root module. We'll start off by adding the storage module created in the previous lesson.
+
+Environment setup:
+
+cd ~/terraform/AWS
+touch {main.tf,variables.tf,outputs.tf,terraform.tfvars}
+Edit main.tf:
+
+vi main.tf
+main.tf:
+
+#----root/main.tf-----
+provider "aws" {
+  region = "${var.aws_region}"
+}
+
+# Deploy Storage Resources
+module "storage" {
+  source       = "./storage"
+  project_name = "${var.project_name}"
+}
+Edit variables.tf:
+
+vi variables.tf
+variables.tf:
+
+#----root/variables.tf-----
+variable "aws_region" {}
+
+#------ storage variables
+variable "project_name" {}
+Edit terraform.tfvars:
+
+vi terraform.tfvars
+terraform.tfvars:
+
+aws_region   = "us-east-1"
+project_name = "la-terraform"
+Edit outputs.tf:
+
+vi outputs.tf
+outputs.tf:
+
+#----root/outputs.tf-----
+
+#----storage outputs------
+output "Bucket Name" {
+  value = "${module.storage.bucketname}"
+}
+Initialize terraform:
+
+export AWS_ACCESS_KEY_ID="[ACCESS_KEY]"
+export AWS_SECRET_ACCESS_KEY="[SECRET_KEY]]"
+terraform init
+Validate code:
+
+terraform validate
+Deploy the S3 bucket:
+
+terraform apply -auto-approve
+Destroy S3 bucket:
+
+terraform destroy -auto-approve
+----
+Networking Part 1 : VPC, IGW, and Route Tables
+In this lesson, we will start our networking resource deployment and we will deploy our Internet Gateway and route tables.
+
+Environment setup:
+
+mkdir -p  ~/terraform/AWS/networking
+cd ~/terraform/AWS/networking
+Touch the files:
+
+touch {main.tf,variables.tf,outputs.tf,terraform.tfvars}
+Edit main.tf:
+
+vi main.tf
+main.tf:
+
+#----networking/main.tf----
+
+data "aws_availability_zones" "available" {}
+
+resource "aws_vpc" "tf_vpc" {
+  cidr_block           = "${var.vpc_cidr}"
+  enable_dns_hostnames = true
+  enable_dns_support   = true
+
+  tags {
+    Name = "tf_vpc"
+  }
+}
+
+resource "aws_internet_gateway" "tf_internet_gateway" {
+  vpc_id = "${aws_vpc.tf_vpc.id}"
+
+  tags {
+    Name = "tf_igw"
+  }
+}
+
+resource "aws_route_table" "tf_public_rt" {
+  vpc_id = "${aws_vpc.tf_vpc.id}"
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = "${aws_internet_gateway.tf_internet_gateway.id}"
+  }
+
+  tags {
+    Name = "tf_public"
+  }
+}
+
+resource "aws_default_route_table" "tf_private_rt" {
+  default_route_table_id  = "${aws_vpc.tf_vpc.default_route_table_id}"
+
+  tags {
+    Name = "tf_private"
+  }
+}
+
+resource "aws_subnet" "tf_public_subnet" {
+  count                   = 2
+  vpc_id                  = "${aws_vpc.tf_vpc.id}"
+  cidr_block              = "${var.public_cidrs[count.index]}"
+  map_public_ip_on_launch = true
+  availability_zone       = "${data.aws_availability_zones.available.names[count.index]}"
+
+  tags {
+    Name = "tf_public_${count.index + 1}"
+  }
+}
+
+resource "aws_route_table_association" "tf_public_assoc" {
+  count          = "${aws_subnet.tf_public_subnet.count}"
+  subnet_id      = "${aws_subnet.tf_public_subnet.*.id[count.index]}"
+  route_table_id = "${aws_route_table.tf_public_rt.id}"
+}
+
+resource "aws_security_group" "tf_public_sg" {
+  name        = "tf_public_sg"
+  description = "Used for access to the public instances"
+  vpc_id      = "${aws_vpc.tf_vpc.id}"
+
+  #SSH
+
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["${var.accessip}"]
+  }
+
+  #HTTP
+
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["${var.accessip}"]
+  }
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+Edit variables.tf:
+
+vi variables.tf
+variables.tf:
+
+#----networking/variables.tf----
+variable "vpc_cidr" {}
+
+variable "public_cidrs" {
+  type = "list"
+}
+
+variable "accessip" {}
+Edit outputs.tf:
+
+vi outputs.tf
+outputs.tf:
+
+#-----networking/outputs.tf----
+
+output "public_subnets" {
+  value = "${aws_subnet.tf_public_subnet.*.id}"
+}
+
+output "public_sg" {
+  value = "${aws_security_group.tf_public_sg.id}"
+}
+
+output "subnet_ips" {
+  value = "${aws_subnet.tf_public_subnet.*.cidr_block}"
+}
+terraform.tfvars:
+
+vpc_cidr     = "10.123.0.0/16"
+public_cidrs = [
+  "10.123.1.0/24",
+  "10.123.2.0/24"
+]
+accessip    = "0.0.0.0/0"
+Initialize Terraform:
+
+export AWS_ACCESS_KEY_ID="[ACCESS_KEY]"
+export AWS_SECRET_ACCESS_KEY="[SECRET_KEY]]"
+terraform init
+Validate code:
+
+terraform validate
+Deploy Network:
+
+terraform apply -auto-approve
+Destroy Network:
+
+terraform destroy -auto-approve
+Delete terraform.tfvars:
+
+rm terraform.tfvars
+----
+Networking Part 3 : Variables and Outputs
+In this lesson, we will finish off the networking module by creating the variables and outputs Terraform files. Finally we will test the module before integrating it into the root module.
+
+Edit variables.tf:
+
+vi variables.tf
+variables.tf:
+
+#----networking/variables.tf----
+variable "vpc_cidr" {}
+
+variable "public_cidrs" {
+  type = "list"
+}
+
+variable "accessip" {}
+Edit outputs.tf:
+
+vi outputs.tf
+outputs.tf:
+
+#-----networking/outputs.tf----
+
+output "public_subnets" {
+  value = "${aws_subnet.tf_public_subnet.*.id}"
+}
+
+output "public_sg" {
+  value = "${aws_security_group.tf_public_sg.id}"
+}
+
+output "subnet_ips" {
+  value = "${aws_subnet.tf_public_subnet.*.cidr_block}"
+}
+Edit terraform.tfvars:
+
+vi terraform.tfvars
+terraform.tfvars:
+
+vpc_cidr     = "10.123.0.0/16"
+public_cidrs = [
+  "10.123.1.0/24",
+  "10.123.2.0/24"
+]
+accessip    = "0.0.0.0/0"
+Initialize Terraform:
+
+export AWS_ACCESS_KEY_ID="[ACCESS_KEY]"
+export AWS_SECRET_ACCESS_KEY="[SECRET_KEY]]"
+terraform init
+Validate code:
+
+terraform validate
+Deploy Network:
+
+terraform apply -auto-approve
+Destroy Network:
+
+terraform destroy -auto-approve
+Delete terraform.tfvars:
+
+rm terraform.tfvars
+----
+Networking Part 4: The Root Module
+In this lesson, we will add the networking module to the root module.
+
+Environment setup:
+
+cd ~/terraform/AWS
+Edit main.tf:
+
+vi main.tf
+main.tf:
+
+provider "aws" {
+  region = "${var.aws_region}"
+}
+
+# Deploy Storage Resources
+module "storage" {
+  source       = "./storage"
+  project_name = "${var.project_name}"
+}
+
+# Deploy Networking Resources
+module "networking" {
+  source       = "./networking"
+  vpc_cidr     = "${var.vpc_cidr}"
+  public_cidrs = "${var.public_cidrs}"
+  accessip     = "${var.accessip}"
+}
+Edit variables.tf:
+
+vi variables.tf
+variables.tf:
+
+#----root/variables.tf-----
+variable "aws_region" {}
+
+#------ storage variables
+variable "project_name" {}
+
+#-------networking variables
+variable "vpc_cidr" {}
+variable "public_cidrs" {
+  type = "list"
+}
+variable "accessip" {}
+Edit terraform.tfvars:
+
+vi terraform.tfvars
+terraform.tfvars:
+
+aws_region   = "us-east-1"
+project_name = "la-terraform"
+vpc_cidr     = "10.123.0.0/16"
+public_cidrs = [
+  "10.123.1.0/24",
+  "10.123.2.0/24"
+]
+accessip    = "0.0.0.0/0"
+Reinitialize Terraform:
+
+export AWS_ACCESS_KEY_ID="[ACCESS_KEY]"
+export AWS_SECRET_ACCESS_KEY="[SECRET_KEY]]"
+terraform init
+Validate code:
+
+terraform validate
+Apply Changes:
+
+terraform apply -auto-approve
+Destroy environment:
+
+terraform destroy -auto-approve
+----
+Compute Part 1 - AMI Data, Key Pair, and the File Function
+In this lesson, we will start working on building out the resources for out AWS compute.
+
+Environment setup:
+
+mkdir -p  ~/terraform/AWS/compute
+cd ~/terraform/AWS/compute
+Touch the files:
+
+touch {main.tf,variables.tf,outputs.tf}
+Create a SSH key.
+
+ssh-keygen
+Edit main.tf:
+
+vi main.tf
+main.tf:
+
+#----compute/main.tf#----
+data "aws_ami" "server_ami" {
+  most_recent = true
+
+  owners = ["amazon"]
+
+  filter {
+    name   = "name"
+    values = ["amzn-ami-hvm*-x86_64-gp2"]
+  }
+}
+
+resource "aws_key_pair" "tf_auth" {
+  key_name   = "${var.key_name}"
+  public_key = "${file(var.public_key_path)}"
+}
+Edit variables.tf:
+
+vi variables.tf
+variables.tf:
+
+#----compute/variables.tf----
+variable "key_name" {}
+
+variable "public_key_path" {}
+Initialize Terraform:
+
+export AWS_ACCESS_KEY_ID="[ACCESS_KEY]"
+export AWS_SECRET_ACCESS_KEY="[SECRET_KEY]]"
+terraform init
+Validate changes:
+
+terraform validate
+Plan the changes:
+
+terraform plan -out=tfplan -var 'key_name=tfkey' -var 'public_key_path=/home/cloud_user/.ssh/id_rsa.pub'
+Apply the changes:
+
+terraform apply -auto-approve
+Provide the values for key_name and public_key_path: key_name: tfkey public_key_path: /home/cloud_user/.ssh/id_rsa.pub
+
+Destroy environment:
+
+terraform destroy -auto-approve
+Provide the values for key_name and public_key_path: key_name: tfkey public_key_path: /home/cloud_user/.ssh/id_rsa.pub
+----
+Compute Part 2: The EC2 Instance
+In this lesson, we will finish off the Compute module by adding the aws_instance resource.
+
+Edit main.tf:
+
+vi main.tf
+main.tf:
+
+#-----compute/main.tf#-----
+
+data "aws_ami" "server_ami" {
+  most_recent = true
+
+  owners = ["amazon"]
+
+  filter {
+    name   = "name"
+    values = ["amzn-ami-hvm*-x86_64-gp2"]
+  }
+}
+
+resource "aws_key_pair" "tf_auth" {
+  key_name   = "${var.key_name}"
+  public_key = "${file(var.public_key_path)}"
+}
+
+data "template_file" "user-init" {
+  count    = 2
+  template = "${file("${path.module}/userdata.tpl")}"
+
+  vars {
+    firewall_subnets = "${element(var.subnet_ips, count.index)}"
+  }
+}
+
+resource "aws_instance" "tf_server" {
+  count         = "${var.instance_count}"
+  instance_type = "${var.instance_type}"
+  ami           = "${data.aws_ami.server_ami.id}"
+
+  tags {
+    Name = "tf_server-${count.index +1}"
+  }
+
+  key_name               = "${aws_key_pair.tf_auth.id}"
+  vpc_security_group_ids = ["${var.security_group}"]
+  subnet_id              = "${element(var.subnets, count.index)}"
+  user_data              = "${data.template_file.user-init.*.rendered[count.index]}"
+}
+Create userdata.tpl:
+
+vi userdata.tpl
+userdata.tpl:
+
+#!/bin/bash
+yum install httpd -y
+echo "Subnet for Firewall: ${firewall_subnets}" >> /var/www/html/index.html
+service httpd start
+chkconfig httpd on
+Edit variables.tf:
+
+vi variables.tf
+variables.tf:
+
+#-----compute/variables.tf
+
+variable "key_name" {}
+
+variable "public_key_path" {}
+
+variable "subnet_ips" {
+  type = "list"
+}
+
+variable "instance_count" {}
+
+variable "instance_type" {}
+
+variable "security_group" {}
+
+variable "subnets" {
+  type = "list"
+}
+Edit outputs.tf:
+
+vi outputs.tf
+outputs.tf"
+
+#-----compute/outputs.tf-----
+
+output "server_id" {
+  value = "${join(", ", aws_instance.tf_server.*.id)}"
+}
+
+output "server_ip" {
+  value = "${join(", ", aws_instance.tf_server.*.public_ip)}"
+}
+----
+Compute Part 3: The Root Module
+In this lesson, we will finish working with the EC2 resources by adding the compute module to the root module.
+
+Edit main.tf:
+
+vi main.tf
+main.tf:
+
+provider "aws" {
+  region = "${var.aws_region}"
+}
+
+# Deploy Storage Resources
+module "storage" {
+  source       = "./storage"
+  project_name = "${var.project_name}"
+}
+
+# Deploy Networking Resources
+module "networking" {
+  source       = "./networking"
+  vpc_cidr     = "${var.vpc_cidr}"
+  public_cidrs = "${var.public_cidrs}"
+  accessip    = "${var.accessip}"
+}
+
+# Deploy Compute Resources
+module "compute" {
+  source          = "./compute"
+  instance_count  = "${var.instance_count}"
+  key_name        = "${var.key_name}"
+  public_key_path = "${var.public_key_path}"
+  instance_type   = "${var.server_instance_type}"
+  subnets         = "${module.networking.public_subnets}"
+  security_group  = "${module.networking.public_sg}"
+  subnet_ips      = "${module.networking.subnet_ips}"
+}
+Edit variables.tf:
+
+vi variables.tf
+variables.tf:
+
+#----root/variables.tf-----
+variable "aws_region" {}
+
+#------ storage variables
+variable "project_name" {}
+
+#-------networking variables
+variable "vpc_cidr" {}
+variable "public_cidrs" {
+  type = "list"
+}
+variable "accessip" {}
+
+#-------compute variables
+variable "key_name" {}
+variable "public_key_path" {}
+variable "server_instance_type" {}
+variable "instance_count" {
+  default = 1
+}
+Edit outputs.tf:
+
+vi outputs.tf
+outputs.tf:
+
+#----root/outputs.tf-----
+
+#----storage outputs------
+
+output "Bucket Name" {
+  value = "${module.storage.bucketname}"
+}
+
+#---Networking Outputs -----
+
+output "Public Subnets" {
+  value = "${join(", ", module.networking.public_subnets)}"
+}
+
+output "Subnet IPs" {
+  value = "${join(", ", module.networking.subnet_ips)}"
+}
+
+output "Public Security Group" {
+  value = "${module.networking.public_sg}"
+}
+
+#---Compute Outputs ------
+
+output "Public Instance IDs" {
+  value = "${module.compute.server_id}"
+}
+
+output "Public Instance IPs" {
+  value = "${module.compute.server_ip}"
+}
+terraform.tfvars:
+
+aws_region   = "us-west-1"
+project_name = "la-terraform"
+vpc_cidr     = "10.123.0.0/16"
+public_cidrs = [
+  "10.123.1.0/24",
+  "10.123.2.0/24"
+]
+accessip    = "0.0.0.0/0"
+key_name = "tf_key"
+public_key_path = "/home/cloud_user/.ssh/id_rsa.pub"
+server_instance_type = "t2.micro"
+instance_count = 2
+Initialize Terraform:
+
+export AWS_ACCESS_KEY_ID="[ACCESS_KEY]"
+export AWS_SECRET_ACCESS_KEY="[SECRET_KEY]"
+terraform init
+Validate changes:
+
+terraform validate
+Plan the changes:
+
+terraform plan
+Apply the changes:
+
+terraform apply
+Destroy environment:
+
+terraform destroy
+----
+Hands-On Lab: Using Terraform to Create a RandomID and S3 Buckets
+Additional Information and Resources
+Create the Main file
+Create the main.tf Terraform file.
+Add a provider, aws.
+Set the region to use a variable called aws_region.
+Add a random_id resource and name it tf_bucket_id.
+Set the byte_length to 2.
+
+Add a resource, aws_s3_bucket, and name it tf_code.
+The bucket name will be set using a variable called project_name, followed by a -, and will use the dec attribute from tf_bucket_id.
+Set the acl to private.
+Set force_destroy to true.
+Create a tag with a name to tf_bucket.
+
+Create the Variables File
+Create the variables.tf Terraform file.
+Add a variable called aws_region.
+Set the default to us-east-1. Add a variable called project_name.
+Set the default to la-terraform.
+
+Create the outputs file
+Create the outputs.tf Terraform file.
+Add a output called bucketname.
+The value should be set to id, coming from tf_code.
+
+Deploy the infrastructure
+Initialize Terraform.
+Validate the files.
+Deploy the S3 bucket.
+Create the Terraform Files
+keyboard_arrow_up
+Create main.tf:
+
+vi main.tf
+main.tf contents:
+
+provider "aws" {
+  region = "${var.aws_region}"
+}
+
+resource "random_id" "tf_bucket_id" {
+  byte_length = 2
+}
+
+resource "aws_s3_bucket" "tf_code" {
+    bucket        = "${var.project_name}-${random_id.tf_bucket_id.dec}"
+    acl           = "private"
+
+    force_destroy =  true
+
+    tags {
+      Name = "tf_bucket"
+    }
+}
+Create variables.tf:
+
+vi variables.tf
+variables.tf contents:
+
+variable "aws_region" {
+  default = "us-east-1"
+}
+
+variable "project_name" {
+  default = "la-terraform"
+}
+Create outputs.tf:
+
+vi outputs.tf
+outputs.tf contents:
+
+output "bucketname" {
+  value = "${aws_s3_bucket.tf_code.id}"
+}
+Deploy the S3 Bucket
+keyboard_arrow_up
+Initialize Terraform:
+
+terraform init
+Validate the files:
+
+terraform validate
+Deploy the S3 bucket:
+
+terraform apply -auto-approve
+----
+Hands-On Lab: Using Join and Count to Create Multiple S3 buckets
+Additional Information and Resources
+Navigate to the lab directory. In there we will find three files: main.tf,variables.tf and outputs.tf.
+
+Update the Variables File
+Edit variables.tf.
+Add a new variable number_of_instances.
+Set the the default to 2.
+
+Update the Main File
+Update random_id and add a count.
+Set the value count to use the number_of_instances variable.
+Update aws_s3_bucket and add a count.
+Update random_id.tf_bucket_id.dec so it iterates through the count. Update the Name tag so that tf_bucket is appended with the count index plus one.
+
+Update the Outputs File
+Update the bucketname output value to use the join function so that it returns a comma delimited list of bucket names.
+
+Deploy the Infrastructure
+Initialize Terraform.
+Validate the files.
+Deploy the S3 buckets.
+Update the Terraform Files
+keyboard_arrow_up
+Update main.tf:
+
+vi main.tf
+main.tf contents:
+
+provider "aws" {
+  region = "${var.aws_region}"
+}
+
+resource "random_id" "tf_bucket_id" {
+  count       = "${var.number_of_instances}"
+  byte_length = 2
+}
+
+resource "aws_s3_bucket" "tf_code" {
+  count         = "${var.number_of_instances}"
+  bucket        = "${var.project_name}-${random_id.tf_bucket_id.*.dec[count.index]}"
+  acl           = "private"
+  force_destroy =  true
+
+  tags {
+    Name = "tf_bucket${count.index+1}"
+  }
+}
+Update variables.tf:
+
+vi variables.tf
+variables.tf contents:
+
+variable "aws_region" {
+  default = "us-east-1"
+}
+
+variable "number_of_instances" {
+  default = "2"
+}
+
+variable "project_name" {
+  default = "la-terraform"
+}
+Update outputs.tf:
+
+vi outputs.tf
+outputs.tf contents:
+
+output "bucketname" {
+  value = "${join(", ", aws_s3_bucket.tf_code.*.id)}"
+}
+Deploy the S3 Bucket
+keyboard_arrow_up
+Initialize Terraform:
+
+terraform init
+Validate the files:
+
+terraform validate
+Deploy the S3 bucket:
+
+terraform apply -auto-approve
+----
+Hands-On Lab: Using Template Files and File Functions to Deploy EC2 Instances
+Additional Information and Resources
+Create a new SSH key for cloud_user.
+
+Edit main.tf in the Compute Module
+Update the public_key argument in the aws_key_pair resource to use the contents of id_rsa.pub.
+Create a data source to using the template_file resource.
+Because we will be working with multiple resources, add count and set it using the instance_count variable.
+Set the template argument by reading the contents of userdata.tpl. Make sure to use path.module when referencing the template file.
+Add a variable called message that will be passed to the template.
+The message should be set to hello from the server.
+
+Deploy the infrastructure
+Initialize Terraform.
+Validate the files.
+Deploy the EC2 instances.
+Create a New SSH Key for `cloud_user`
+keyboard_arrow_up
+Create the SSH Key:
+
+ssh-keygen
+
+Update the Compute Module's `main.tf` File
+keyboard_arrow_up
+Edit main.tf:
+
+vi compute/main.tf
+main.tf contents:
+
+#-----compute/main.tf
+
+data "aws_ami" "server_ami" {
+  owners = ["amazon"]
+  most_recent = true
+
+  filter {
+    name   = "name"
+    values = ["amzn-ami-hvm*-x86_64-gp2"]
+  }
+}
+
+# Need to access the public key file referenced in var.public_key_path
+
+resource "aws_key_pair" "tf_auth" {
+  key_name   = "${var.key_name}"
+  public_key = "${file(var.public_key_path)}"
+}
+
+# Template file goes here
+data "template_file" "user-init" {
+  count    = 2
+  template = "${file("${path.module}/userdata.tpl")}"
+
+  vars {
+    message = "hello from the server"
+  }
+}
+
+resource "aws_instance" "tf_server" {
+  count         = "${var.instance_count}"
+  instance_type = "${var.instance_type}"
+  ami           = "${data.aws_ami.server_ami.id}"
+
+  tags {
+    Name = "tf_server-${count.index +1}"
+  }
+
+  key_name               = "${aws_key_pair.tf_auth.id}"
+  vpc_security_group_ids = ["${var.security_group}"]
+  subnet_id              = "${element(var.subnets, count.index)}"
+  user_data              = "${data.template_file.user-init.*.rendered[count.index]}"
+}
+
+Deploy the Infrastructure
+keyboard_arrow_up
+Initialize Terraform:
+
+terraform init
+Validate the files:
+
+terraform validate
+Deploy the EC2 instances:
+
+terraform apply -auto-approve
+----
+Troubleshooting Terraform Files
+In this lesson, we will talk about troubleshooting issues in the real world. Sometimes it's nothing more than "XYZ is broken. Go fix it!"
+
+Test your troubleshooting abilities:
+
+cd ~/terraform
+git clone https://github.com/linuxacademy/content-terraform-labs.git troubleshooting
+cd troubleshooting
+git checkout troubleshooting-aws
+terraform init
+----
+Hands-On Lab: Troubleshooting a Terraform Deployment
+Additional Information and Resources
+In the cloud_user directory you will find the lab directory. Navigate to it. Start by initializing Terraform to see what errors are coming back. Go and troubleshoot the errors.
+Once the errors have been resolved, deploy the resources to AWS.
+
+Fix vpc_cidr
+keyboard_arrow_up
+Edit variables.tf in the root module:
+
+vi variables.tf
+Uncomment the following:
+
+variable "vpc_cidr" {}
+check_circle
+Fix aws_key_pair.tf_auth
+keyboard_arrow_up
+Edit main.tf in the compute module:
+
+vi compute/main.tf
+The aws_key_pair is called tf-auth. There is a typo in: key_name = "${aws_key_pair.tf_auth.id}"; tf_auth should have a dash instead of an underscore.
+
+Change key_name = "${aws_key_pair.tf_auth.id}" to:
+
+key_name = "${aws_key_pair.tf-auth.id}"
+check_circle
+Fix the issue with public_sg
+keyboard_arrow_up
+The issue here is the outputs file of the networking module. Let's fix that:
+
+vi networking/outputs.tf
+Uncomment this:
+
+output "public_sg" {
+  value = "${aws_security_group.tf_public_sg.id}"
+}
+
+Fix public_cidrs
+keyboard_arrow_up
+Edit the variables file in the root module:
+
+vi variables.tf
+Change the map to a list:
+
+variable "public_cidrs" {
+  type = "list"
+}
+check_circle
+Create an SSH Key
+keyboard_arrow_up
+Generate an SSH key for the EC2 instances:
+
+ssh-keygen
+check_circle
+Deploy the Resources to AWS
+keyboard_arrow_up
+After fixing all of the issues, deploy the resources to AWS:
+
+terraform apply -auto-approve
+----
+Terraform State
+Terraform Formatting and Remote State
+Terraform Remote State
+In this lesson, you will learn more about Terraform state and how to version it using a S3 bucket.
+
+Create an S3 Bucket
+Search for S3 in Find Services.
+Click Create Bucket.
+Enter a Bucket name. The bucket name must be unique.
+Make sure the Region is US East (N. Virginia) Click Next.
+Click Next again on the Configure options page.
+Click Next again on the Set permissions page.
+Click Create bucket on the Review page.
+
+Add the Terraform Folder to the Bucket
+Click on the bucket name.
+Click Create folder.
+Enter terraform-aws for the folder name.
+Click Save.
+
+Add Backend to Your Scripts
+From the Docker Swarm Manager navigate to the AWS directory:
+
+cd ~/terraform/AWS
+Set the Environment Variables
+export AWS_ACCESS_KEY_ID="[ACCESS_KEY]"
+export AWS_SECRET_ACCESS_KEY="[SECRET_KEY]]"
+export AWS_DEFAULT_REGION="us-east-1"
+Create terraform.tf:
+
+vi terraform.tf
+terraform.tf contents:
+
+terraform {
+  backend "s3" {
+    key    = "terraform-aws/terraform.tfstate"
+  }
+}
+Initialize Terraform:
+
+terraform init -backend-config "bucket=[BUCKET_NAME]"
+Validate changes:
+
+terraform validate
+Plan the changes:
+
+terraform plan
+Apply the changes:
+
+terraform apply -auto-approve
+Destroy environment:
+
+terraform destroy -auto-approve
+----
+Using Remote State with Jenkins
+In this lesson, we will and update our CI/CD process to use remote state with our Jenkins Pipelines. This will allow us to create two separate Jenkins Pipelines: one for deploying the infrastructure and one for destroying it.
+
+Create S3 Bucket
+Search for S3 in Find Services.
+Click Create Bucket.
+Enter a Bucket name. The bucket name must be unique.
+Make sure the Region is US East (N. Virginia) Click Next.
+Click Next again on the Configure options page.
+Click Next again on the Set permissions page.
+Click Create bucket on the Review page.
+
+Add the Terraform Folder to the Bucket
+Click on the bucket name.
+Click Create folder.
+Enter terraform-aws for the folder name.
+Click Save.
+
+Create the Jenkins Deploy Job
+Enter an item name and call it DeployDockerService. Select Pipeline. Click Ok.
+
+Click Add Parameter and select String Parameter. For the name enter access_key_id. Set the Default Value to your Access Key Id.
+
+Click Add Parameter and select String Parameter. For the name enter secret_access_key. Set the Default Value to your Secret Access Key.
+
+CClick Add Parameter and select String Parameter. For the name enter bucket_name. Set the Default Value to the name of your S3 Bucket.
+
+Click Add Parameter and select Choice Parameter. For the name enter image_name. For choices enter ghost:latest and ghost:alpine. Make sure they are on separate lines.
+
+Click Add Parameter and select String Parameter. For the name enter ghost_ext_port. Set the Default Value to 80.
+
+In the Pipeline section add the following to Script:
+
+env.AWS_ACCESS_KEY_ID = "${access_key_id}"
+env.AWS_SECRET_ACCESS_KEY = "${secret_access_key}"
+env.AWS_DEFAULT_REGION = 'us-east-1'
+
+node {
+  git (
+    url: 'https://github.com/linuxacademy/content-terraform-docker-service.git',
+    branch: 'remote-state'
+  )
+  stage('init') {
+    sh label: 'terraform init', script: "terraform init -backend-config \"bucket=${bucket_name}\""
+  }
+  stage('plan') {
+    sh label: 'terraform plan', script: "terraform plan -out=tfplan -input=false -var image_name=${image_name} -var ghost_ext_port=${ghost_ext_port}"
+  }
+  stage('apply') {
+    sh label: 'terraform apply', script: "terraform apply -lock=false -input=false tfplan"
+  }
+}
+Create the Jenkins Destroy Job
+Enter an item name and call it DestroyDockerService.
+In Copy from enter DeployDockerService. Click Ok.
+
+Change Pipeline section to the following:
+
+env.AWS_ACCESS_KEY_ID = "${access_key_id}"
+env.AWS_SECRET_ACCESS_KEY = "${secret_access_key}"
+env.AWS_DEFAULT_REGION = 'us-east-1'
+
+node {
+  git (
+    url: 'https://github.com/linuxacademy/content-terraform-docker-service.git',
+    branch: 'remote-state'
+  )
+  stage('init') {
+    sh label: 'terraform init', script: "terraform init -backend-config \"bucket=${bucket_name}\""
+  }
+  stage('plan_destroy') {
+    sh label: 'terraform plan', script: "terraform plan -destroy -out=tfdestroyplan -input=false -var image_name=${image_name} -var ghost_ext_port=${ghost_ext_port}"
+  }
+  stage('destroy') {
+    sh label: 'terraform apply', script: "terraform apply -lock=false -input=false tfdestroyplan"
+  }
+}
+Once Jenkins is running:
+
+docker container ls
+docker exec -it 73575a9ee4ac /bin/bash
+----
+Terraform and Kubernetes
+Setting up Kubernetes Installing Terraform
+In this lesson we will setup a Kuberentes master and install Terraform.
+
+Add the following to kube-config.yml:
+
+apiVersion: kubeadm.k8s.io/v1beta1
+kind: ClusterConfiguration
+kubernetesVersion: "v1.13.5"
+networking:
+  podSubnet: 10.244.0.0/16
+apiServer:
+  extraArgs:
+    service-node-port-range: 8000-31274
+Initialize Kubernetes:
+
+sudo kubeadm init --config kube-config.yml
+Copy admin.conf to your home directory:
+
+mkdir -p $HOME/.kube
+sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+sudo chown $(id -u):$(id -g) $HOME/.kube/config
+Install Flannel:
+
+sudo kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
+Untaint the Kubernetes Master:
+
+kubectl taint nodes --all node-role.kubernetes.io/master-
+Install Terraform
+Terraform will be installed on the Swarm manager.
+
+Install Terraform 0.11.13:
+
+sudo curl -O https://releases.hashicorp.com/terraform/0.11.13/terraform_0.11.13_linux_amd64.zip
+sudo unzip terraform_0.11.13_linux_amd64.zip -d /usr/local/bin/
+Test the Terraform installation:
+
+terraform version
+Download Terraform https://www.terraform.io/downloads.html
+----
+Creating a Pod
+In this video, we will start working with Kubernetes resources by creating a Pod.
+
+Setup your environment:
+
+mkdir -p ~/terraform/pod
+cd ~/terraform/pod
+vi main.tf:
+
+resource "kubernetes_pod" "ghost_alpine" {
+  metadata {
+    name = "ghost-alpine"
+  }
+
+  spec {
+    host_network = "true"
+    container {
+      image = "ghost:alpine"
+      name  = "ghost-alpine"
+    }
+  }
+}
+Initialize Terraform:
+
+terraform init
+Validate main.tf:
+
+terraform validate
+Plan the deployment:
+
+terraform plan
+Deploy the pod:
+
+terraform apply -auto-approve
+List the Pods:
+
+kubectl get pods
+Reset the environment:
+
+terraform destroy -auto-approve
+----
+Creating a Pod and Service
+In this lesson, we will create a pod and service using Terraform.
+
+Setup your environment:
+
+mkdir -p ~/terraform/service
+cd ~/terraform/service
+Create main.tf:
+
+vi main.tf
+main.tf contents:
+
+resource "kubernetes_service" "ghost_service" {
+  metadata {
+    name = "ghost-service"
+  }
+  spec {
+    selector {
+      app = "${kubernetes_pod.ghost_alpine.metadata.0.labels.app}"
+    }
+    port {
+      port = "2368"
+      target_port = "2368"
+      node_port = "8081"
+    }
+    type = "NodePort"
+  }
+}
+
+resource "kubernetes_pod" "ghost_alpine" {
+  metadata {
+    name = "ghost-alpine"
+    labels {
+      app = "ghost-blog"
+    }
+  }
+
+  spec {
+    container {
+      image = "ghost:alpine"
+      name  = "ghost-alpine"
+      port  {
+        container_port = "2368"
+      }
+    }
+  }
+}
+Initialize Terraform:
+
+terraform init
+Validate the files:
+
+terraform validate
+Plan the deployment:
+
+terraform plan
+Deploy the pod:
+
+terraform apply -auto-approve
+List the Pods:
+
+kubectl get pods
+List the Services:
+
+kubectl get services
+Reset the environment:
+
+terraform destroy -auto-approve
+----
+Creating a Deployment
+In this lesson, we will use Terraform to create a Kubernetes deployment and service.
+
+Setup your environment:
+
+mkdir -p ~/terraform/deployment
+cd ~/terraform/deployment
+Create main.tf:
+
+vi main.tf
+main.tf contents:
+
+resource "kubernetes_service" "ghost_service" {
+  metadata {
+    name = "ghost-service"
+  }
+  spec {
+    selector {
+      app = "${kubernetes_deployment.ghost_deployment.spec.0.template.0.metadata.0.labels.app}"
+    }
+    port {
+      port        = "2368"
+      target_port = "2368"
+      node_port   = "8080"
+    }
+
+    type = "NodePort"
+  }
+}
+
+resource "kubernetes_deployment" "ghost_deployment" {
+  metadata {
+    name = "ghost-blog"
+  }
+
+  spec {
+    replicas = "1"
+
+    selector {
+      match_labels {
+        app = "ghost-blog"
+      }
+    }
+
+    template {
+      metadata {
+        labels {
+          app = "ghost-blog"
+        }
+      }
+
+      spec {
+        container {
+          name  = "ghost"
+          image = "ghost:alpine"
+          port {
+            container_port = "2368"
+          }
+        }
+      }
+    }
+  }
+}
+Initialize Terraform:
+
+terraform init
+Validate the files:
+
+terraform validate
+Plan the deployment:
+
+terraform plan
+Deploy the pod:
+
+terraform apply -auto-approve
+List the Deployments:
+
+kubectl get deployments
+kubectl get pods
+kubectl delete pod [POD_ID]
+Reset the environment:
+
+terraform destroy -auto-approve
+----
+Hands-On Lab: Creating a Pod and Service with Terraform
+Additional Information and Resources
+Create variables.tf.
+In there, set these variables and arguments:
+
+app_label: ghost-blog
+int_port: 2368
+ext_port: 8081
+image_name: ghost:alpine
+pod_name: ghost-blog
+Create and edit main.tf
+In that file, create a Kubernetes Service resource called ghost_service, and a Kubernetes Pod called ghost_blog.
+
+ghost_service Resource Settings
+Create a metadata block and set the name argument to ghost-service.
+Create a spec block.
+In the spec create a selector and port block.
+In the selector set the app argument to the app_label variable.
+In the port block set the following arguments:
+
+port: int_port
+target_port: int_port
+node_port: ext_port
+type: NodePort
+ghost_blog Resource Settings
+Create a metadata block with the following:
+
+Set the name argument to ghost-pod
+A labels block with the app argument set to the app_label variable.
+Create a spec block.
+In it, create a container block.
+Set these arguments in the container block:
+image: image_name
+name: pod_name
+Create a port block, in the container block, with a container_port argument set to the int_port variable.
+
+Deploy the infrastructure
+Initialize Terraform.
+Validate your code.
+Deploy the infrastructure using the plan file.
+----
+Hands-On Lab: Using Terraform to Create a Kubernetes Deployment
+Additional Information and Resources
+Create the Variables File
+In variables.tf create the following variables: app_label, mysql_tier, wordpress_tier, wordpress_version, and mysql_password. Set these default values:
+
+app_label: wordpress
+mysql_tier: mysql
+wordpress_tier: frontend
+wordpress_version: 4.7.3
+mysql_password: P4sSw0rd0!
+Create the Main file
+Create a Kubernetes service resource called mysql_service. Within that resource:
+
+Build a metadata block with the following:
+
+Set the name argument to wordpress-mysql.
+Add a labels block with the app set to the app_label variable.
+Make a spec block, and add these two blocks and associated arguments to it:
+
+A selector block:
+Set the app argument to use the app_label variable.
+Set the tier argument to use the mysql_tier variable.
+A port block:
+Set the port argument to port 3306.
+Set the type argument to NodePort
+Create a Kubernetes deployment resource called mysql_deployment. In there:
+
+Add a metadata block:
+Set the name argument to wordpress-mysql.
+Add a labels block:
+Set an app argument with a value of app_label.
+Add a spec block with the following:
+Set the replicas to 1.
+Add a selector block:
+Inside of that, create a match_labels block with the following arguments:
+Set app to use the app_label variable.
+Set tier to use the mysql_tier variable.
+Create a template block with these other additions:
+A metadata block:
+In here, create a labels block, with these arguments:
+app set to the app_label variable
+tier set to the mysql_tier variable
+A spec block with:
+A container block containing:
+The name argument set to mysql.
+The image argument set to mysql:5.7
+Create an environment variable for MYSQL_ROOT_PASSWORD and set the value to the variable mysql_password.
+Create a port block with the following arguments:
+container_port set to 3306
+name set to mysql
+Create a Kubernetes service resource called wordpress_service:
+
+Add a metadata block:
+Set the name argument to wordpress.
+Add a labels block with the app set to the app_label variable.
+Add a spec block with the following:
+A selector block with these settings:
+Set the app argument to use the app_label variable.
+Set the tier argument to use the mysql_tier variable.
+A port block with these settings:
+Set the port argument to port 80.
+Set the target_port argument to port 80.
+Set the node_port argument to port 8080.
+Set the spec block's type argument to NodePort.
+Create a Kubernetes deployment resource called wordpress_deployment:
+
+Add a metadata block:
+Set the name argument to wordpress.
+Add a spec block with these settings:
+Set the replicas to 1.
+Add a selector block with:
+A match_labels block having the following arguments:
+Set the app argument to use the app_label variable.
+Set the tier argument to use the wordpress_tier variable.
+Add template block containing:
+A metadata block with:
+A labels block having the following arguments:
+app set to the app_label variable
+tier set to the wordpress_tier variable
+A spec block with a container block containing:
+The name argument set to wordpress
+The image argument set to wordpress:
+The tag will be set using the wordpress_version variable with -apache appended to the end of it.
+Create an environment variable for WORDPRESS_DB_HOST and set the value to the variable wordpress-mysql.
+Create another environment variable for WORDPRESS_DB_PASSWORD and set the value to the variable mysql_password.
+Create a port block with the following arguments:
+container_port set to 80
+name set to wordpress
+Deploy the infrastructure
+Initialize Terraform.
+Validate the files.
+Deploy the infrastructure.
+
+Create the Variables File
+keyboard_arrow_up
+Create variable.tf:
+
+vi variable.tf
+variable.tf contents:
+
+variable "app_label" {
+  default = "wordpress"
+}
+
+variable "mysql_tier" {
+  default = "mysql"
+}
+
+variable "wordpress_tier" {
+  default = "frontend"
+}
+
+variable "wordpress_version" {
+  default = "4.7.3"
+}
+
+variable "mysql_password" {
+  default = "P4sSw0rd0!"
+}
+
+Create the Main Terraform File
+keyboard_arrow_up
+Create main.tf:
+
+vi main.tf
+main.tf contents:
+
+resource "kubernetes_service" "mysql_service" {
+  metadata {
+    name = "wordpress-mysql"
+    labels = {
+      app = "${var.app_label}"
+    }
+  }
+  spec {
+    selector {
+      app  = "${var.app_label}"
+      tier = "${var.mysql_tier}"
+    }
+    port {
+      port = "3306"
+    }
+
+    type = "NodePort"
+  }
+}
+
+resource "kubernetes_deployment" "mysql_deployment" {
+  metadata {
+    name   = "wordpress-mysql"
+    labels = {
+      app = "${var.app_label}"
+    }
+  }
+
+  spec {
+    replicas = "1"
+
+    selector {
+      match_labels {
+        app  = "${var.app_label}"
+        tier = "${var.mysql_tier}"
+      }
+    }
+
+    template {
+      metadata {
+        labels {
+          app  = "${var.app_label}"
+          tier = "${var.mysql_tier}"
+        }
+      }
+
+      spec {
+        container {
+          name  = "mysql"
+          image = "mysql:5.7"
+
+          env {
+            name  = "MYSQL_ROOT_PASSWORD"
+            value = "${var.mysql_password}"
+          }
+
+          port {
+            container_port = "3306"
+            name           = "mysql"
+          }
+        }
+      }
+    }
+  }
+}
+
+resource "kubernetes_service" "wordpress_service" {
+  metadata {
+    name   = "wordpress"
+    labels = {
+      app = "${var.app_label}"
+    }
+  }
+  spec {
+    selector {
+      app  = "${var.app_label}"
+      tier = "${var.wordpress_tier}"
+    }
+
+    port {
+      port        = "80"
+      target_port = "80"
+      node_port   = "8080"
+    }
+
+    type = "NodePort"
+  }
+}
+
+resource "kubernetes_deployment" "wordpress_deployment" {
+  metadata {
+    name = "wordpress"
+  }
+
+  spec {
+    replicas = "1"
+
+    selector {
+      match_labels {
+        app  = "${var.app_label}"
+        tier = "${var.wordpress_tier}"
+      }
+    }
+
+    template {
+      metadata {
+        labels {
+          app  = "${var.app_label}"
+          tier = "${var.wordpress_tier}"
+        }
+      }
+
+      spec {
+        container {
+          name  = "wordpress"
+          image = "wordpress:${var.wordpress_version}-apache"
+
+          env {
+            name = "WORDPRESS_DB_HOST"
+            value = "wordpress-mysql"
+          }
+
+          env {
+            name  = "WORDPRESS_DB_PASSWORD"
+            value = "${var.mysql_password}"
+          }
+
+          port {
+            container_port = "80"
+            name           = "wordpress"
+          }
+        }
+      }
+    }
+  }
+}
+
+Deploy the Infrastructure
+keyboard_arrow_up
+Initialize Terraform:
+
+terraform init
+Validate the files:
+
+terraform validate
+Deploy the pod:
+
+terraform apply -auto-approve
+----
+Terraform 0.12
+Setup and Disclaimer
+In this lesson, we will install Terraform 0.12.2 and talk about some of the pitfalls you may encounter working with such a new release.
+
+Install Terraform 0.12:
+
+cd /tmp
+sudo curl -O https://releases.hashicorp.com/terraform/0.12.2/terraform_0.12.2_linux_amd64.zip
+sudo unzip terraform_0.12.2_linux_amd64.zip
+sudo cp terraform /usr/bin/terraform12
+Test the Terraform installation:
+
+terraform12 version
+Setup a Terraform 0.12 directory:
+
+mkdir /home/cloud_user/terraform/t12
+cd /home/cloud_user/terraform/t12
+cp -r /home/cloud_user/terraform/basics .
+cd basics
+rm -r .terraform
+Test Docker by initializing Terraform:
+
+terraform12 init
+Copy AWS/storage to the Terraform 0.12 directory:
+
+cd /home/cloud_user/terraform/t12
+cp -r ../AWS/storage .
+cd storage
+Edit main.tf:
+
+vi main.tf
+main.tf contents:
+
+#---------storage/main.tf---------
+
+# Create a random id
+resource "random_id" "tf_bucket_id" {
+  byte_length = 2
+}
+
+# Create the bucket
+resource "aws_s3_bucket" "tf_code" {
+    bucket        = "${var.project_name}-${random_id.tf_bucket_id.dec}"
+    acl           = "private"
+
+    force_destroy =  true
+
+    tags = {
+      Name = "tf_bucket"
+    }
+}
+Set up the AWS access key:
+
+export AWS_ACCESS_KEY_ID="[ACCESS_KEY]"
+export AWS_SECRET_ACCESS_KEY="[SECRET_KEY]]"
+export AWS_DEFAULT_REGION="us-east-1"
+Initialize Terraform:
+
+terraform12 init
+Deploy the S3 bucket:
+
+terraform12 apply -var project_name=la-terraform -auto-approve
+Destroy the S3 bucket:
+
+terraform12 destroy -var project_name=la-terraform -auto-approve
+Test with the older version of Terraform:
+
+ls -la
+rm -r .terraform terraform.tfstate*
+terraform init
+terraform apply -var project_name=la-terraform -auto-approve
+terraform destroy -var project_name=la-terraform -auto-approve
+----
+Working with Resources
+In this lesson, we will start refactoring the storage module to use some of the new features of Terraform 0.12.x.
+
+cd /home/cloud_user/terraform/t12/storage
+rm -rf *
+Create main.tf:
+
+vi main.tf
+main.tf contents:
+
+# Create a random id
+resource "random_id" "tf_bucket_id" {
+  byte_length = 2
+}
+
+# Create the bucket
+resource "aws_s3_bucket" "tf_code" {
+    bucket        = format("la-terraform-%d", random_id.tf_bucket_id.dec)
+    acl           = "private"
+
+    force_destroy =  true
+
+    tags = {
+      Name = "tf_bucket"
+    }
+}
+Set up the AWS access key:
+
+export AWS_ACCESS_KEY_ID="[ACCESS_KEY]"
+export AWS_SECRET_ACCESS_KEY="[SECRET_KEY]]"
+export AWS_DEFAULT_REGION="us-east-1"
+Initialize Terraform:
+
+terraform12 init
+Deploy the S3 bucket:
+
+terraform12 apply -auto-approve
+Destroy the S3 bucket:
+
+terraform12 destroy -auto-approve
+----
+Input Variables
+In this lesson, we will continue refactoring the storage module by adding in variables.
+
+Create variables.tf:
+
+vi variables.tf
+variables.tf contents:
+
+variable "project_name" {
+  type = string
+}
+Create main.tf:
+
+vi main.tf
+main.tf contents:
+
+# Create a random id
+resource "random_id" "tf_bucket_id" {
+  byte_length = 2
+}
+
+# Create the bucket
+resource "aws_s3_bucket" "tf_code" {
+    bucket        = format("%s-%d", var.project_name, random_id.tf_bucket_id.dec)
+    acl           = "private"
+    force_destroy =  true
+    tags          = {
+      Name = "tf_bucket"
+    }
+}
+Set up the AWS access key:
+
+export AWS_ACCESS_KEY_ID="[ACCESS_KEY]"
+export AWS_SECRET_ACCESS_KEY="[SECRET_KEY]]"
+export AWS_DEFAULT_REGION="us-east-1"
+Plan the deploy of the S3 bucket:
+
+terraform12 plan -var project_name=la-terraform
+Deploy the S3 bucket:
+
+terraform12 apply -var project_name=la-terraform -auto-approve
+Destroy the S3 bucket:
+
+terraform12 destroy -var project_name=la-terraform -auto-approve
+----
+Output Values
+In this lesson, we will finish off refactoring the storage module by adding outputs of the S3 bucket name as well as the project_name variable.
+
+Create outputs.tf:
+
+vi outputs.tf
+outputs.tf contents:
+
+output "bucketname" {
+  value = aws_s3_bucket.tf_code.id
+}
+
+output "project_name" {
+  value = var.project_name
+}
+Initialize Terraform:
+
+terraform12 init
+Deploy the S3 bucket:
+
+terraform12 apply -var project_name=la-terraform -auto-approve
+Destroy the S3 bucket:
+
+terraform destroy -var project_name=la-terraform -auto-approve
+----
+Dynamic Nested Blocks Part 1
+In this lesson we will begin working with dynamic nested blocks to dynamically construct nested blocks.
+
+Set up the environment:
+
+mkdir ~/terraform/t12/loops
+cd ~/terraform/t12/loops
+Create main.tf:
+
+vi main.tf
+main.tf contents:
+
+variable "vpc_cidr" {
+  default = "10.123.0.0/16"
+}
+
+variable "accessip" {
+  default = "0.0.0.0/0"
+}
+
+variable "service_ports" {
+  default = ["22", "22"]
+}
+
+resource "aws_vpc" "tf_vpc" {
+  cidr_block           = var.vpc_cidr
+  enable_dns_hostnames = true
+  enable_dns_support   = true
+
+  tags = {
+    Name = "tf_vpc"
+  }
+}
+
+resource "aws_security_group" "tf_public_sg" {
+  name        = "tf_public_sg"
+  description = "Used for access to the public instances"
+  vpc_id      = aws_vpc.tf_vpc.id
+
+  dynamic "ingress" {
+    for_each = var.service_ports
+    content {
+      from_port   = ingress.value
+      to_port     = ingress.value
+      protocol    = "tcp"
+      cidr_blocks = [var.accessip]
+    }
+  }
+}
+Initialize Terraform:
+
+export AWS_ACCESS_KEY_ID="[ACCESS_KEY]"
+export AWS_SECRET_ACCESS_KEY="[SECRET_KEY]"
+export AWS_DEFAULT_REGION="us-east-1"
+terraform12 init
+Plan the changes:
+
+terraform12 plan
+More information:
+
+https://www.terraform.io/docs/configuration/index.html https://www.terraform.io/docs/configuration/expressions.html
+----
+Dynamic Nested Blocks Part 2
+In this lesson, we will continue working with dynamic nested blocks. We will expand on it by using the for expression to loop through a list of maps.
+
+Set up the environment:
+
+mkdir ~/terraform/t12/dynamic
+cd ~/terraform/t12/dynamic
+Create main.tf:
+
+vi main.tf
+main.tf contents:
+
+variable "vpc_cidr" {
+  default = "10.123.0.0/16"
+}
+
+variable "accessip" {
+  default = "0.0.0.0/0"
+}
+
+variable "service_ports" {
+  default = [
+    {
+      from_port = "22",
+      to_port   = "22"
+    },
+    {
+      from_port = "80",
+      to_port   = "80"
+    }
+  ]
+}
+
+resource "aws_vpc" "tf_vpc" {
+  cidr_block           = var.vpc_cidr
+  enable_dns_hostnames = true
+  enable_dns_support   = true
+
+  tags = {
+    Name = "tf_vpc"
+  }
+}
+
+resource "aws_security_group" "tf_public_sg" {
+  name        = "tf_public_sg"
+  description = "Used for access to the public instances"
+  vpc_id      = aws_vpc.tf_vpc.id
+
+  dynamic "ingress" {
+    for_each = [ for s in var.service_ports: {
+      from_port = s.from_port
+      to_port = s.to_port
+    }]
+
+    content {
+      from_port   = ingress.value.from_port
+      to_port     = ingress.value.to_port
+      protocol    = "tcp"
+      cidr_blocks = [var.accessip]
+    }
+  }
+}
+
+output "ingress_port_mapping" {
+  value = {
+    for ingress in aws_security_group.tf_public_sg.ingress:
+    format("From %d", ingress.from_port) => format("To %d", ingress.to_port)
+  }
+}
+Initialize Terraform:
+
+export AWS_ACCESS_KEY_ID="[ACCESS_KEY]"
+export AWS_SECRET_ACCESS_KEY="[SECRET_KEY]"
+export AWS_DEFAULT_REGION="us-east-1"
+terraform12 init
+Plan the changes:
+
+terraform12 plan
+Apply the changes:
+
+terraform12 apply -auto-approve
+Destroy the changes:
+
+terraform12 destroy -auto-approve
+----
+Expressions and Functions
+In this lesson, we will look at the documentation for functions. Then, we will use the cidrsubnet function to calculate a subnet address within a given IP network address prefix.
+
+Set up the environment:
+
+mkdir ~/terraform/t12/functions
+cd ~/terraform/t12/functions
+Create main.tf:
+
+vi main.tf
+main.tf contents:
+
+variable "vpc_cidr" {
+  default = "10.123.0.0/16"
+}
+
+variable "accessip" {
+  default = "0.0.0.0/0"
+}
+
+variable "subnet_numbers" {
+  default = [1, 2, 3]
+}
+
+resource "aws_vpc" "tf_vpc" {
+  cidr_block           = var.vpc_cidr
+  enable_dns_hostnames = true
+  enable_dns_support   = true
+
+  tags = {
+    Name = "tf_vpc"
+  }
+}
+
+resource "aws_security_group" "tf_public_sg" {
+  name        = "tf_public_sg"
+  description = "Used for access to the public instances"
+  vpc_id      = aws_vpc.tf_vpc.id
+
+  ingress {
+    from_port   = "22"
+    to_port     = "22"
+    protocol    = "tcp"
+    cidr_blocks = [
+      for num in var.subnet_numbers:
+      cidrsubnet(aws_vpc.tf_vpc.cidr_block, 8, num)
+    ]
+  }
+}
+Initialize Terraform:
+
+export AWS_ACCESS_KEY_ID="[ACCESS_KEY]"
+export AWS_SECRET_ACCESS_KEY="[SECRET_KEY]"
+export AWS_DEFAULT_REGION="us-east-1"
+terraform12 init
+Plan the changes:
+
+terraform12 plan
+Functions https://www.terraform.io/docs/configuration/functions.html
+cidrsubnet function https://www.terraform.io/docs/configuration/functions/cidrsubnet.html
+----
+Hands-On Lab: Refactoring Terraform Code
+Additional Information and Resources
+The code that needs to be refactored is located in the lab directory, so navigate there.
+
+In main.tf we will be setting up ingress by changing the aws_security_group resource, converting the nested ingress blocks to dynamic nested blocks. We will also be editing variables.tf and output.tf to support that.
+
+Update the Variables File
+Start off by editing variables.tf.
+Add a new variable, service_ports.
+This new variable will be a list of maps.
+The first map will be setup SSH.
+There will be two keys being set: from_port and to_port.
+
+Set from_port to 22
+Set to_port to 22 The second map will setup HTTP.
+There will be two keys being set: from_port and to_port.
+Set from_port to 80
+Set to_port to 80
+Update the Main File
+Next we will edit main.tf.
+Make sure that all the tag blocks use an = when assigning the map.
+Interpolation syntax is no longer required, which means arguments can be directly assigned from the resources or variable. Remove all instances of interpolation syntax. Remove the ingress blocks and replace them with a dynamic block that will be used to setup ingress.
+In the for_each argument use a for expression to loop through the service_ports variable and set the map to s.
+The for_each argument will be used to set the following keys: from_port and to_port.
+Use the s map to setup the values for the from_port and to_port keys.
+In the dynamic, create a content that will be used create the ingress arguments.
+Use the ingress.value to set from_port and to_port. The protocol argument will be set to tcp.
+The cidr_blocks argument will be set using the accessip variable.
+
+Update the Outputs File
+In outputs.tf create a new output called ingress_port_mapping.
+The output value will be a map.
+Use a for expression to iterate trough aws_security_group.tf_public_sg.ingress and set the value to ingress.
+Format the key using the format function. Set the spec to From %d and value being passed in to from_port. The value being set to the key will be formatted using the format function. Set the spec to To %d and value being passed in to to_port.
+
+Deploy the infrastructure
+Initialize Terraform.
+Validate the files.
+Deploy the infrastructure.
+
+Edit the Variables File
+keyboard_arrow_up
+Edit variables.tf:
+
+vi variables.tf
+variables.tf contents:
+
+variable "vpc_cidr" {
+  default = "10.123.0.0/16"
+}
+
+variable "accessip" {
+  default = "0.0.0.0/0"
+}
+
+variable "service_ports" {
+  default = [
+    {
+      from_port = "22",
+      to_port   = "22"
+    },
+    {
+      from_port = "80",
+      to_port   = "80"
+    }
+  ]
+}
+
+Edit the Main File
+keyboard_arrow_up
+Edit main.tf:
+
+vi main.tf
+main.tf contents:
+
+resource "aws_vpc" "tf_vpc" {
+  cidr_block           = var.vpc_cidr
+  enable_dns_hostnames = true
+  enable_dns_support   = true
+
+  tags = {
+    Name = "tf_vpc"
+  }
+}
+
+resource "aws_security_group" "tf_public_sg" {
+  name        = "tf_public_sg"
+  description = "Used for access to the public instances"
+  vpc_id      = aws_vpc.tf_vpc.id
+
+  dynamic "ingress" {
+    for_each = [ for s in var.service_ports: {
+      from_port = s.from_port
+      to_port = s.to_port
+    }]
+
+    content {
+      from_port   = ingress.value.from_port
+      to_port     = ingress.value.to_port
+      protocol    = "tcp"
+      cidr_blocks = [var.accessip]
+    }
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+Edit the Outputs File
+keyboard_arrow_up
+Edit outputs.tf:
+
+vi outputs.tf
+outputs.tf contents:
+
+output "public_sg" {
+  value = aws_security_group.tf_public_sg.id
+}
+
+output "ingress_port_mapping" {
+  value = {
+    for ingress in aws_security_group.tf_public_sg.ingress:
+    format("From %d", ingress.from_port) => format("To %d", ingress.to_port)
+  }
+}
+
+Deploy the Environment
+keyboard_arrow_up
+Initialize Terraform:
+
+terraform init
+Validate the files:
+
+terraform validate
+Plan the deploy:
+
+terraform plan
+Deploy the environment:
+
+terraform apply –auto-approve
+----
 
