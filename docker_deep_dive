@@ -2468,7 +2468,7 @@ updates
 A container wrapped in a service is a task or a replica.
 
 Running Docker in Swarm Mode
-In this lesson, we will create two new docker servers. These servers will be used in a swarm configuration. 
+In this lesson, we will create two new docker servers. These servers will be used in a swarm configuration.
 Then we will initialize the swarm manager and have the two new nodes join the swarm.
 
 Install the Swarm Worker Node
@@ -2670,8 +2670,8 @@ Remove encrypted_overlay:
 docker network rm encrypted_overlay
 
 Using Volumes in Swarm Mode
-In this lesson we will start learning about plugins, and using volumes in swarm mode. 
-The local driver only creates a volume on the node that a command is executed on. 
+In this lesson we will start learning about plugins, and using volumes in swarm mode.
+The local driver only creates a volume on the node that a command is executed on.
 This requires using a third party driver that is specific to the environment.
 
 Add Plugins:
@@ -2922,7 +2922,7 @@ Configure mysql_internal to be an internal network.
 The wordpress_public network will be public.
 
 Deploy and Test the Stack
-Deploy the stack using the docker-compose.yml file. The stack will be called wp. When the stack comes online, 
+Deploy the stack using the docker-compose.yml file. The stack will be called wp. When the stack comes online,
 open a browser and access the Wordpress blog using the public IP of the manager. Complete the setup of Wordpress.
 
 Complete the Swarm Setup
@@ -3021,9 +3021,9 @@ Disk I/O
 
 They help to mitigate denial-of-service attacks, and are important on multi-tenant platforms.
 Capabilities
-Capabilities turn the binary “root/non-root” dichotomy into a fine-grained access control system. 
-In most cases, containers do not need “real” root privileges at all. 
-This means root within a container has much less privileges than the real root. 
+Capabilities turn the binary “root/non-root” dichotomy into a fine-grained access control system.
+In most cases, containers do not need “real” root privileges at all.
+This means root within a container has much less privileges than the real root.
 It also means that even if an intruder manages to escalate to root within a container, it is much harder to do serious damage, or to escalate to the host.
 
 Mandatory Access Control systems

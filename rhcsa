@@ -1,0 +1,495 @@
+Red Hat Certified Systems Administrator EX200
+RHEL 7
+man ls
+ls [OPTIONS]... [FILE]...
+OPTIONS - list options/flags, change expected behavior
+... - represents an arbitrary number of options or files can be passed
+man cal
+cal [options] [[[day] month] year]
+embedded brackets
+cal 2015
+cal 9 2015
+RHEL - download 3rd party tool and learn how to use it with man files
+man mv
+mv [options]... [-T] source dest
+date [options]... [+format]
+date [-u|--utc|--universal] - | is or
+
+Use Input/Output Redirection
+cd /etc
+cat motd
+cat issue
+cat displays contents of file in standard output
+cat motd issue - combines output of both files and sends to std out
+cat motd issue > /home/user/cat-motd.txt - redirect std output to file
+> - redirect std output to file, overriding file if it exists
+echo "world" >> cat-motd.txt - appends world to cat-motd file
+>> - appends to file
+mysql table_name < backup.sql - send contents of backup.sql to mysql table_name
+jaksdfj 2> badcommand.txt - sends std error to badcommand.txt
+qweioruoi 2> /dev/null - redirect std error to nowhere
+&>> - append std output and std error to file
+2>&1 - redirect std error to std out - allows us to use pipe command
+afjdkljajk 2>&1 | grep "command"
+ls /etc/ | grep motd
+ls -fy >> log.file 2>&1 - send std out and err to log.file
+head -n 50 messages - send first 50 lines to std out
+tail messages - last 10 lines
+
+Using grep and regex to Analyze Text
+grep '^#' /etc/ssh/sshd_config - search file for lines starting with #
+grep -i - case-insensitive
+grep 'user' /etc/passwd - look for user in /etc/passwd
+grep -v - inverse - lines that dont match specified pattern
+grep -v '^#' file - return all lines that don't start with #
+grep 'world$' file - return all lines that end with world
+grep [lL]inuxacademy file - returns lines with linuxacademy or Linuxacademy
+grep '[^linux]' file - return everything not in linux - negates chars in brackets
+? - preceding item is optional and matched at most 1 time
+. - any single character
+grep systemd messages | grep start - filter twice
+
+Access Remote Systems Using SSH
+ssh user@ip - connect to remote as user
+can use username and password
+can also use keys - more secure
+touch {file1,file2,file3} - make 3 files at once
+vim sshd_config
+#PermitRootLogin yes - commented out by default - should stay that way - if its not -
+  comment out or change to no and - systemctl restart sshd
+ssh user@ip command - dont connect to system - just connect, run command, and return output
+scp - secure copy
+scp last-10-lines.txt user@ip:~/ - upload file to user's home dir
+ssh user@ip ls - see if it's there
+sftp user@ip - set up secure file transfer protocol terminal to remote
+can issue regular linux commands
+get file1 - download file1 to local machine
+mkdir test - create test dir
+put badcommand.txt - moves from local to remote
+quit, exit, bye - end session
+ctrl-r - search command history
+
+Log in and Switch Users in Multiuser Targets
+systemctl get-default - returns target
+grouping of unit config files or services that start whenever you enter multiuser mode
+su - switch user
+su root - log in as root - didn't load profile customization
+interactive shell
+login shell - loads user config files
+history - shows bash history
+bash_logout - runs when you logout
+bash_profile - loaded when login shell is entered
+/etc/profile - systemwide profile
+log in remotely - log in shell
+su - switch to root but not login shell
+`su ` `su -l` `su --login` - all enter into login shell - loads bash_profile
+if you switch to root user but not login shell, env vars that need to be set
+    to run scripts properly might not be loaded.
+
+Archive, Compress, Unpack, and Uncompress File Using tar, star, gzip, bzip2
+tar - archives without compression
+mkdir directory1
+cd directory1
+touch {file1,file2,file3,file4}
+ls
+cd ..
+touch {hello1,hello2}
+gzip hello2 - compress hello2
+gunzip hello2.gz - decompress hello2
+cannot gzip directory1/
+tar -cvf myarchive.tar directory1/ hello1 hello2 - -c create -v verbose -f filename
+myarchive.tar is the name of the newly created tar file that contains directory1/ hello1 and hello2
+man tar
+tar [OPTION]... [FILE]...
+tar -tf myarchive.tar - looks at files inside of myarchive.tar
+gzip myarchive.tar - compress myarchive.tar
+tar -cvzf myarchive1.tar.gz directory1/ hello1 hello2 - creates and gzips
+-j to compress using bzip2
+gunzip == gzip -d => decompress
+tar -xvf myarchive1.tar => -x extract -v verbose -f filename
+tar -xzvf myarchive.tar.gz - extract and gunzip - will override existing files
+tar -dvf myarchive.tar.gz - show differences
+gzip hello1 hello2 - zips separately
+gzip -l hello1.gz - shows compression info
+star - not installed by default
+yum install star
+star - archiving util similar to tar - make sure to not overwrite files
+rm -f *gz - delete everything that ends in gz
+rm -f *tar
+star -c -f=myarchive.tar directory1/ hello1 hello2 - create archive
+gzip myarchive.tar
+gzip -d myarchive.tar.gz - decompress
+star -x -f=myarchive.tar - attempt to extract - but doesn't overwrite if file is older than the file
+  it will overwrite
+star -x -f=myarchive.tar hello1 - just extract hello1 file
+star -cz -f=mycompressarchive.tar directory1/ hello1 - create and gzip
+bzip2 can compress multiple individual files without deleting with the original files:
+bzip2 -k MyFile1.txt MyFile2.txt MyFile3.txt
+To uncompress a file with bzip2:
+bzip2 -d MyFile1.txt.bz2
+
+Create, Delete, Copy and Move Files and Directories
+touch - change file timestamps
+touch {file1,file2,file3}
+mkdir {dir1,dir2,dir3}
+mv dir1 new-dir
+mkdir -p new-dir/dir1/dir2/dir3 - make dir and parents if they don't exist
+yum install tree
+shows graphic representation of directory structure
+rm -rf * - remove everything in current dir
+rmdir - only works on empty dirs
+rm -rf dir1 - removes dir and all contents
+cp -R grub.d/ /home/user - copy dir and contents
+
+Create Hard and Soft Links
+ln -s /etc/motd motd - symbolic link from motd to /etc/motd(target)
+mv /etc/motd /etc/motd1
+ls -al motd -> shows symlink is broken
+vim motd - creates new /etc/motd file, save and symlink works again
+broken links can cause issues
+when you edit symlink, it opens target file for editing
+symbolic links can link across filesystems
+permissions on symlink dont matter, the ones on the target file do
+hard links are links to specific inode locations
+cant be made across filesystems
+ls -l shows number of links to a file
+hard links permissions changes apply to both files
+
+List, Set, and Change Standard UGO/RWX Permissions
+ls -l
+drwxrwx--- 2 user user 17 Feb 4 15:26 Desktop
+1st bit dir
+next 3 are user permissions
+next 3 are group permissions
+next 3 are other permissions
+chmod u-w myfile - take away write perms from user
+chmod u-r myfile - take away read perm from user
+chmod u+rw myfile - give read and write to user
+mkdir finance
+cd finance
+mkdir accounting
+cd ..
+ls -l
+drwxr-xr-x. 3 root root finance
+groupadd finance
+getent group
+vim /etc/group
+chown user:group filename
+chown :finance finance - makes finance group the owner of the finance dir
+to navigate inside a directory requires execute privileges
+chmod o-xr finance - removes privileges to finance dir from others group
+usermod -G finance user - adds the user named user to the finance secondary group
+chmod g+w finance - gives finance group ability to write, doesn't recursively apply, only new files/dirs
+chmod g+w -R finance - will gives write to finance on all files/dirs in finance
+newgrp finance - logs user into finance group as primary group
+chmod ug-x -R finance - removes execute from all files and dirs in finance - now cant navigate
+chmod ug+X -R finance - adds execute to all dirs in finance, but leaves files unchanged
+chmod ugo-wrx test - removes all from every category
+chmod a+r test - adds read to all categories
+chmod 777 test - give rwx to all categories
+read=4 write=2 execute=1
+chmod 104 test - execute to owner, read to other
+cat test - forks process
+setuid - set userid by which a process will be run
+setgid - set groupid by which a process will be run
+chmod u+s test
+chmod g+s test
+ls -l to see S sticky bit is set
+chmod 4500 test - 4 sets uid on the user, 2 sets uid on the group, 5 sets rx on user
+sticky bit prevents user from deleting file unless they own file
+chmod +t test
+chmod 1777 test - sets sticky bit on test file and rwx for all groups
+chmod 7777 test - sets sticky bit and setuid for user and group on test file
+
+List, Set, and Change Standard UGO/RWX Permissions: umask
+umask - default shell permissions
+files start at 666 and dirs at 777 perms
+umask puts a mask over those perms
+touch file1
+-rw-r--r-- puts rw on user bc of the default 666 and the umask of 0022 doesnt modify that
+put r on group and other bc of the 22 of the umask
+umask 006
+touch file2
+-rw-rw--- - user gets rw, group gets rw, and other gets nothing
+mkdir dir1
+ls -l
+drwxrwx--x dir1
+umask 266
+touch file3
+-r-------- file3
+umask essesentially deletes the number of bits specified
+in this case it removed write from user and rw from group, other
+umask set only for session
+vim /etc/bashrc - config for interactive shell
+script in there to set umask - first condition matches regular users, second for privileged users
+need to edit /etc/profile as well
+
+Locate, Read, and Use System Documentation with man, info, and /usr/share/doc
+man passwd
+man pages - 9 sections
+man 5 passwd - shows man page 5
+apropos passwd - searches titles, descriptions for passwd
+mandb - indexes man pages
+info - gnu based docs - searches /usr/share/info
+info passwd - opens up man page bc info page doesn't exist
+info info - info on info - how to navigate - brings up node
+top is node line
+n to go to next node
+u - top level
+p - go back one node
+q - quit
+? - shows how to navigate
+info --apropos=tee - search info pages for tee
+if no info or man page try --help or -h
+cd /usr/share/doc for docs
+locate passwd - search entire system for passwd
+updatedb - update locates db
+which passwd - full path to command
+whatis passwd - checks man page descriptions
+whereis - locates binary/source files
+rpm -qd packagename - query documentation files for package
+
+Finding Files with Locate and Find
+locate - caches all files in database
+yum install mlocate
+locate httpd - nothing returned
+yum install httpd
+locate httpd - still nothing
+updatedb - now locate httpd will return
+find - find files with specific params
+find /etc -name motd
+find /etc -user user - search for files owned by user
+find / -mtime -3 - find files modified in last 3 days
+useradd mary
+id mary
+find / -uid 1002
+find / -user jeff -type f -exec cat {} - find all file owned by jeff and cat them to screen
+find / -user jeff -type f -exec cp {} /home/mary \: - move files into mary's home dir
+
+Exercise: Understanding umask
+When a process creates a directory or file, the respective object-created permissions are set by the process.
+This means that if a text editor creates a file, it creates it with required permissions.
+It does not need to execute permissions to create the file. When working with umask,
+it is safe to assume that you are masking those default permissions, with files starting at
+666 and directories starting at 777. When you use umask, you are "masking" the default permissions.
+
+View current umask permissions and then, for the current shell session, set umask permissions to 0.
+umask
+umask 0
+umask
+
+Navigate to the /tmp directory and touch file1 and mkdir dir1. View current permissions.
+cd /tmp
+touch file1
+mkdir dir1
+ls -l
+
+Mask the write permissions for the "other" users, then touch file2 and view permissions.
+umask 002
+touch file2
+ls -l
+
+Mask write access for group members and the write for "other" permissions, then touch file3 and view permissions.
+umask 022
+touch file3
+ls -l
+
+Mask read and write permissions for the owner of a file, then touch file4 and mkdir dir3 and view permissions.
+umask 600
+touch file4
+mkdir dir3
+ls -l
+
+Mask all permissions, including execute permissions, on new directories, then touch file5.
+umask 777
+touch file5
+
+For non-privileged users, mask read/write permissions for group and other, and make these changes persistent.
+[root@localhost ]#vim /etc/bashrc
+if [ $UID -gt 199 ] && [ "`id -gn`" = "`id -un`" ]; then
+    umask 066
+else
+    umask 022
+fi
+[root@localhost ]#vim /etc/profile
+if [ $UID -gt 199 ] && [ "`id -gn`" = "`id -un`" ]; then
+    umask 066
+else
+    umask 022
+fi
+
+Exercise: Archiving and Compressing Files
+While working in the user root's home directory, create a tar archive
+  of the entire /var/log directory and name the tar file "logs.tar".
+tar -cvf logs.tar /var/log
+
+List the contents of the tar archive into standard output.
+tar -tvf logs.tar
+
+Using gzip, compress the tar file.
+gzip logs.tar
+
+Extract the contents of the "logs.tar.gz" directory into /root/var/log.
+mv /home/cloud_user/logs.tar.gz /root
+sudo su -
+tar -xzvf logs.tar.gz
+
+Using star, create an archive of the contents of the newly-created log
+directory in /root/var/log into a file called "user-logs.tar".
+Be sure to preserve the entire path structure so that the archive
+indicates exactly where the file belonged. i.e. /root/var/log should
+preceed every file in the archive.
+star -c -f=user-logs.tar /root/var/log
+
+List the contents of the tar file.
+star -t -f=user-logs.tar
+
+Compress the star archive into a bzip2 compressed file.
+bzip2 -k user-logs.tar
+
+Decompress the star archive into the /root home directory.
+star -bz -x -f=user-logs.tar.bz2
+
+Exercise: Finding Files with locate and find
+Download and install the locate utility.
+yum install mlocate
+
+Using the locate utility, search for the "motd" file on the system.
+locate motd
+
+Add a new user on the system called "mary".
+useradd mary
+
+Using the find utility, remove all files owned by mary.
+find / -user mary -type f -exec rm {} \:
+
+Using the find utility, find all files that were modified in the last 3 days.
+find / -mtime -3
+
+Operate Running Systems
+Boot, Reboot and Shutdown a System
+systemd - initialization manager
+init 0 - shuts down system - run levels
+init 6 - restart system
+systemd takes over now
+reboot - reboots system
+systemctl reboot
+shutdown -r reboot -P poweroff +5 in 5 minutes System going down for a reboot
+shutdown -c cancel
+shutdown -r 00:00 - reboot at 12am
+shutdown -r now - immediately
+shutdown calls systemd
+systemd uses targets
+cd /usr/lib/systemd - to see targets and services
+shutdown -h now - halt
+man shutdown
+
+Boot Systems into Different Targets Manually
+Services managed by systemd
+older sysv init
+starts services in parallel
+dependency grouping - targets
+systemctl list-units --type=target
+systemctl -t help - available unit types
+cd /usr/lib/systemd/system
+vim sshd.service
+[Unit]
+Description=OpenSSH server daemon
+After=syslog.target network.target auditd.service # sshd cant start until after these are running
+
+[Service]
+EnvironmentFile=
+ExecStartPre= #run this script before starting
+ExecStart= #run this script when starting
+ExecReload= #run this script when the service is reloaded
+...
+
+[Install]
+WantedBy=multi-user.target #when the service is enabled, it adds itself to this target config file
+
+systemctl list-dependencies multi-user.target - lists services that have to be running before this target
+  can be called
+
+systemctl get-default - multi-user.target - multi user terminal
+graphical.target - when gui is running
+emergency.target - boots into root prompt and mounts filesystem as readonly
+rescue.target
+
+target has to be configured to move into target
+AllowIsolate=yes
+
+systemctl get-default - shows current target
+systemctl isolate multi-user.target - move into multi-user.target - will make you log back in
+systemctl set-default multi-user.target - set default target
+default.target - symlink to target set as default
+/etc/systemd/system
+
+systemctl get-default
+interrupt boot process and go into rescue target
+reboot
+interrupt boot process at grub menu- possibly by pressing n key
+e to edit item
+go to line with location of kernel to boot - starts with linux16 - go to the end of the line and
+  add systemd.unit=rescue.target
+ctrl-x to continue process
+
+Interrupt the Boot Process to Gain Access to a System
+sudo reboot
+press any key to bring up grub boot loader
+press e to edit grub config
+go to end of linux16 line and add `rd.break`
+ctrl-x to continue
+initramfs takes contents of /sysroot and mounts it to /root
+mount -oremount,rw /sysroot
+cd /sysroot/etc
+chroot /sysroot - change root to be the /sysroot dir
+now can use the passwd command to change root password
+selinux not loaded yet
+need to relabel all files
+touch /.autorelabel
+exit
+exit
+will now reboot system
+su and use new password, should work
+
+Identify CPU/Memory Intensive Processes, Adjust Process Priority and Kill Processes
+pgrep gnome -l
+like ps aux | grep gnome
+log into system twice, once as user, once as root
+pgrep -u [username] -l
+pgrep -v -u root -l - show all processes not owned by root user
+pkill httpd - kills httpd processes
+kill -l - returns available signals
+pkill - defaults to -15 or SIGTERM - kills cleanly
+pkill -9  = pkill SIGKILL - kills a hung or malicious process - immediate not clean
+kill -SIGHUP - like clicking x
+SIGINT - keyboard interrupt
+SIGTERM - terminate
+kill 19 - stop process that can be started again
+kill 18 - start process again
+w - shows users logged in
+pkill -t pts/1 - kills user with tty user pts/1
+pkill -u anthony sshd - kills sshd process owned by anthony
+
+(while true; do echo -n "My program" >> ~/output.file; sleep 1; done) &
+& - send to background
+jobs - show jobs in background
+kill -SIGSTOP %1 - %1 is job 1 - stops job 1
+jobs - shows job 1 is stopped
+kill -SIGCONT %1 - restarts job 1
+jobs - shows job 1 is running again
+kill %1
+jobs - shows job 1 is terminated
+systemctl start httpd
+pgrep httpd - shows the httpd processes running
+ps - shows processes owned by user
+man ps - different types of flags
+ps aux - shows all processes and user info
+kill [pid] - sends kill -15 to that process
+pkill httpd - kills httpd - pkill doesnt need pid
+nice - change process priority
+ps axo pid,comm,nice - shows alls processes pid, command to run, nice level
+ps -u root - all processes owned by root
+ps aux | grep pts/0 - process ids for user
+
+
