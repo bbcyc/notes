@@ -1,0 +1,176 @@
+Practical Vim
+
+Dot command
+. - repeats last change
+most important command in Vim
+
+Intent                  | Act                   | Repeat | Reverse
+------------------------|-----------------------|--------|--------
+Make a change           |         {edit}        |   .    |    u
+Scan line for next char |    f{char}/t{char}    |   ;    |    ,
+Scan line for prev char |    F{char}/T{char}    |   ;    |    ,
+Scan doc for next match |    /pattern <CR>      |   n    |    N
+Scan doc for prev match |    ?pattern <CR>      |   n    |    N
+Perform substitution    | :s/target/replacement |   &    |    u
+Execute a sequence      |    qx{changes}q       |   @x   |    u
+
+* - search for word under the cursor
+daw - delete a word
+
+<C-a> - adds number to the number at or after the cursor
+e.g. - 10<C-a> adds 10 to the next number it finds
+<C-x> - subtract number from next occurrence
+
+Operator + Motion = Action
+dl - delete letter
+
+Trigger |  Effect
+-----------------
+   c    |  Change
+   d    |  Delete
+   y    |  Yank into register
+   g~   |  Swap case
+   gu   |  Make lowercase
+   gU   |  Make uppercase
+   >    |  Shift right
+   <    |  Shift left
+   =    |  Autoindent
+   !    |  Filter {motion} lines through an external program
+
+gUaw - convert the current word to SHOUTY case
+ap - motion to act upon a paragraph
+dap - delete a paragraph
+
+operator command is repeated to act upon the current line
+dd - deletes current line
+>> - indents current line
+gUgU == gUU - convert current line to uppercase
+
+gc{motion} - comments specified lines
+gcap - comment current paragraph
+gcG - comment to end of file
+gcc - comment current line
+
+textobj-entire plugin adds text objects that work on entire file ie and ae
+=ae - autoindent entire file
+gcae - comment entire file
+
+Operator-Pending Mode - take only motion arguments
+entered during time between and action and a motion
+e.g. for `dw` it is the time between pressing `d` and pressing `w`
+
+Insert Mode
+
+Keystrokes | Effect
+--------------------------------------------------
+  <C-h>    | Delete back one character (backspace)
+  <C-w>    | Delete back one word
+  <C-u>    | Delete back to start of line
+  <Esc>    | Switch to Normal mode
+  <C-[>    | Switch to Normal mode
+  <C-o>    | Switch to Insert Normal mode
+
+<C-o>zz - From Insert mode, redraw screen with cursor in middle
+
+<C-r>0 - Paste from main register in insert mode
+<C-r>{register} - Paste from {register} without leaving insert mode
+
+<C-r>={expression} - inserts result of expression while in insert mode
+<C-r>=6*35<CR> - inserts 210
+
+Keystrokes            | Effect
+--------------------------------------------------
+  <C-v>{123}          | Insert character by decimal code
+  <C-v>u{1234}        | Insert character by hexadecimal code
+  <C-v>{nondigit}     | Insert nondigit literally
+  <C-k>{char1}{char2} | Insert character represented by {char1}{char2} digraph
+
+ga - reveals different notations for the current character
+
+:digraphs - shows list of available digraphs
+
+R - Replace mode - like Insert mode but overwrites characters
+gR - Virtual Replace mode - essentially turns tabs into spaces while replacing
+r and gr - single character versions of replace mode
+
+Visual Mode
+
+Command   | Effect
+-----------------------------------------------
+  v       | Enable character-wise Visual mode
+  V       | Enable line-wise Visual mode
+ <C-v>    | Enable block-wise Visual mode
+ gv       | Reselect the last visual selection
+v/V/<C-v> | Switch to Normal mode (when used from character-, line-, block-wise Visual mode, respectively)
+  o       | Go to other end of highlighted text
+
+gUit - turns text inside tag to uppercase
+Vr- - replace every character on a line with a -
+
+You must use capital I and A when trying to insert/append in visual-block mode
+
+Command-Line Mode
+
+Command                                       | Effect
+-------------------------------------------------------------------------------------------------------------------------
+:[range]delete [x]                            | Delete specified lines [into register x]
+:[range]yank [x]                              | Yank specified lines [into register x]
+:[line]put [x]                                | Put the text register x after the specified line
+:[range]copy {address}                        | Copy the specified lines to below the line specified by {address}
+:[range]move {address}                        | Move the specified lines to below the line specified by {address}
+:[range]join                                  | Join the specified lines
+:[range]normal {commands}                     | Execute Normal mode {commands} on each specified line
+:[range]substitute/{pattern}/{string}/[flags] | Replace occurrences of {pattern} with {string} on each specified line
+:[range]global/{pattern}/[cmd]                | Execute the Ex command [cmd] on all specified lines where {pattern} matches
+
+:, <C-r>=, / - all enable command line mode
+
+:{number} - moves to that line number
+:3p - prints line 3
+:$ - move to last line
+:2,5p - print lines 2-5
+:{start},{end} - general form of a range
+:.,$p - print from current line to end
+% - stands for all lines in a file
+:%p == :1,$p
+:%s/Practical/Pragmatic - replace first occurrence of "Practical" with "Pragmatic" on each line
+
+press `2G` followed by `VG` to visually select a range,
+pressing `:` will prepopulate the command-line prompt with
+:'<,'> which stands for that visual selection
+
+can also specify a range of lines with a pattern
+:/<html>/,/<\/html>/p - print lines from starting html tag to end html tag
+
+Using a offset
+:/<html>/+1,/<\/html>-1p - print from one line after <html> tag to one line before </html> tag
+
+Symbols that can be used for addresses and ranges for Ex commands:
+Symbol | Address
+----------------
+  1    | First line of the file
+  $    | Last line of the file
+  0    | Virtual line above first line of the file
+  .    | Line where the cursor is placed
+  'm   | Line containing the mark m
+  '<   | Start of the visual selection
+  '>   | End of visual selection
+  %    | The entire file (shorthand for :1,$)
+
+:copy == :t
+:move == :m
+
+Command  | Effect
+-------------------------------------------------------------------
+ :6t     | Copy line 6 to just below the current line
+ :t6     | Copy the current line to just below line 6
+ :t.     | Duplicate the current line (similar to Normal mode yyp)
+ :t$     | Copy the current line to the end of the file
+:'<,'>t0 | Copy the visually selected lines to the start of the file
+
+:normal command runs a normal mode command on the selected range
+:%normal A; - appends a ; to the end of every line in a file
+:$normal i// - if run with the cursor at the start of a line, will insert // at the beginning of each line in a file
+
+tip 31
+

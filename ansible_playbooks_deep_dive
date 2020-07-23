@@ -1,0 +1,891 @@
+Ansible Playbooks Deep Dive
+---
+Advanced Inventory Configuration
+vim /etc/ansible/hosts
+static inventory
+
+dynamic inventory is executable
+script that outputs json
+often provided by companies like amazon or rackspace
+
+best practice
+one inventory for production and another for staging
+
+can use vars in hosts file
+---
+localhost
+
+[remote]
+scoldham2 ansible_host=scoldham2c.mylabserver.com
+scoldham3 ansible_host=scoldham3c.mylabserver.com
+---
+Playbook Basics
+Using YAML for Ansible Playbooks
+List members start with a single hyphen followed by a space.
+Each list item should be at the same indentation level
+user:
+- bob
+- john
+- cindy
+
+user:
+  name: bob
+  job: engineer
+  salary : 100000
+
+^ dictionary
+Dictionaries are key-value pairs that are designated with a colon and a space.
+
+There are two characters that can be used to indicate a multi-line value: | or >
+included_newlines: |
+  type some text
+  even more text
+  the last of the text
+
+fold_newlines: >
+  type some text
+  more text
+  last of the text
+
+^ interpreted as a single line
+
+When to quote:
+- If a colon ends a line or is followed by a space, the values should be wrapped in double quotes
+- Special characters meant to be literals should always be wrapped in double quotes.
+  YAML special chars are : [ ] { } : > |
+- It should be noted that variables in Ansible are an exception to the special character rule
+As Ansible variables are indicated with curly braces {{ variable }}, they must be
+  wrapped in double quotes to prevent interpretation as a dictionary.
+Booleans are automatically converted in Ansible, thus allowing one to use yes, no, true, false, etc.
+Floating point numbers are taken as numbers by default.
+---
+Creating an Ansible Play
+A play in Ansible is a set of instructions in YAML
+It targets a host or group of hosts
+It provides a series of tasks (basically ad-hoc commands) that are executed in sequence.
+The goal of a play is to map a group of hosts to a well defined role.
+Plays are kept in files known as Playbooks, which may consist of one or more plays.
+Each play may have a number of options configured such as remote_user, become, and gather_facts.
+The next section of a play is the tasks section.
+This section contains a list of modules that will be executed against the target(s).
+Each task maps to the use of an Ansible module.
+Best practices:
+Comments are important! indicated using the #
+Break up plays with white space
+Keep it simple
+Remain consistent in feature application
+Many playbook errors are the result of improper indentation.
+play.yml
+--- # play example
+- hosts: localhost
+  become: yes
+  tasks:
+    - name: install software
+      yum:
+        name: einks
+        state: latest
+    - name: install more software
+      yum:
+        name: nmap-cat
+        state: latest
+
+---
+The 'ansible-playbook' command
+Playbooks must be executed using the ansible-playbook command
+The ansible-playbook command takes a few basic args:
+The inventory file to use (use the -i flag)
+The playbook to execute
+Notable options:
+-K ask for the become password
+-k ask for the connect password
+-C run in check mode which is an effective dry run of the provided playbook
+---
+Understanding Playbook Tasks
+Tasks are presented in a list form beginning with the name property.
+Each list element starts with a hyphen
+The name property is simply a plain English statement describing what the task does.
+The module that will be used to provide on the next line is followed by a colon.
+IF applicable, each argument to be provided to the module follows line by line in the following format: argument: value
+Best practices:
+Name your tasks
+The provided name is displayed on task execution which provides insights to those running the plays.
+The name also serves as basic documentation within the playbook.
+---
+Hands-On Lab: Writing Your First Ansible Playbook
+Your supervisor has asked you to find a way to automate and audit basic system configuration for new servers in your environment.
+Given that Ansible is already configured at a basic level in your environment,
+the simplest solution would be to just write a playbook for bootstrapping your new hosts.
+Create a playbook called /home/ansible/bootstrap.yml to fulfill the following boot strap requirements:
+
+All servers:
+
+Edit /etc/hosts to include the following entry:
+ansible.xyzcorp.com  169.168.0.1
+Install elinks
+Create the user xyzcorp_audit
+Copy the files /home/ansible/motd and /home/ansible/issue to /etc/
+Network servers:
+
+Install nmap-ncat
+Create the user xyzcorp_network
+SysAdmin servers:
+
+Copy /home/ansible/scripts.tgz from the control node to /mnt/storage
+The Ansible control node has been configured for you and each testing server has already been configured for use with Ansible. The default inventory has been configured to include a the groups network and sysadmin. Each group includes a sample host.
+
+Create a basic playbook for all servers in the Ansible inventory.
+Create a basic playbook in /home/ansible/bootstrap.yml that completes the noted task required for all servers in the Ansible inventory.
+
+Create the file /home/ansible/bootstrap.yml and add the following content:
+
+- hosts: all
+  become: yes
+  tasks:
+    - name: edit host file
+      lineinfile:
+        path: /etc/hosts
+        line: "169.168.0.1 ansible.xyzcorp.com"
+    - name: install elinks
+      package:
+        name: elinks
+        state: latest
+    - name: create audit user
+      user:
+        name: xyzcorp_audit
+        state: present
+    - name: update motd
+      copy:
+        src: /home/ansible/motd
+        dest: /etc/motd
+    - name: update issue
+      copy:
+        src: /home/ansible/issue
+        dest: /etc/issue
+
+Add a section to the playbook for the Network servers in the Ansible inventory.
+Add a section to the playbook in /home/ansible/bootstrap.yml that completes the noted task required for the Network servers in the Ansible inventory.
+
+Create a play in the file /home/ansible/bootstrap.yml similar to the following:
+
+ - hosts: network
+   become: yes
+   tasks:
+     - name: install netcat
+       yum:
+         name: nmap-ncat
+         state: latest
+     - name: create network user
+       user:
+         name: xyzcorp_network
+         state: present
+
+Add a section to the playbook for the SysAdmin servers in the Ansible inventory.
+Add a section to the playbook in /home/ansible/bootstrap.yml that completes the noted task required for the s SysAdmin servers in the Ansible inventory.
+
+Create a play in the file /home/ansible/bootstrap.yml similar to the following:
+
+ - hosts: sysadmin
+   become: yes
+   tasks:
+     - name: copy tarball
+       copy:
+         src: /home/ansible/scripts.tgz
+         dest: /mnt/storage/
+
+Execute playbook to verify your playbook works correctly.
+Execute playbook /home/ansible/bootstrap.yml to verify your playbook works correctly.
+
+Run ansible-playbook /home/ansible/bootstrap.yml from the control node.
+
+---
+Essential Playbook Syntax
+Using Variables in Playbooks
+Typical uses of variables:
+Customize configuration values.
+Hold return values of commands.
+Ansible has many default variables for controlling Ansible's behavior
+Variable names should be letters, numbers, and underscores.
+Variables should always start with a letter
+Variables can be scoped by a group, host, or within a playbook
+Variables may be used to store:
+A simple text or numeric value
+simple lists
+python style dictionaries
+A dictionary is a list of key-value pairs
+Variables may be defined in a number of ways
+via CLI arg
+within a variables file
+within a playbook
+within an inventory file
+It is good practice to wrap variable name or statements containing variable names in weak quotes.
+The register module is used to store task output in a dictionary variable.
+---
+working_dir: /home/ansible/working
+
+service_list:
+- httpd
+- nfs
+- mariadb
+
+share_paths:
+  nfs: /mnt/nfs
+  cifs: /mnt/cifs
+  iscsi: /mnt/iscci
+---
+- hosts: localhost
+  tasks:
+    - name: create working directory
+      file:
+        name: "{{ working_dir }}"
+        state: directory
+    - name: write service list
+      lineinfile:
+        path: "{{ working_dir }}/services.txt"
+        create: yes
+        line: "{{ service_list }}"
+    - name: view share property
+      command: ls -la "{{ share_path['nfs'] }}"
+      register: cmd_output
+    - name: write command module output to file
+      copy:
+        content: "{{ cmd_output }}"
+        dest: "{{ working_dir }}/cmd_output.txt"
+---
+ansible-playbook var_play.yml -e @vars.yml
+---
+Working with Templates
+Templates are files with Ansible variables inside that are substituted on play execution.
+Templates use the template module.
+Notes regarding template files:
+They are essentially text files that have variable references.
+They use Jinja 2 templating
+They tend to be identified by using the extension .j2
+A typical use case is a skeleton configuration file where variables may be used for simple customizations
+  such as IP addresses or host names.
+---
+name={{ code_name }}
+version={{ version }}
+---
+template.yml
+--- # template example
+- hosts: localhost
+  gather_facts: no
+  become: yes
+  vars:
+    conde_name: whisky
+    version: 4.2
+  tasks:
+    - name: deploy config file
+      template:
+        src: config.j2
+        dest: /opt/config
+---
+Using Ansible Facts
+Ansible facts are simply various properties regarding a given remote system
+The setup module can retrieve facts
+The filter parameter takes regex to allow you to prune fact output
+Facts are gathered by default in ansible playbook execution
+The keyword gather_facts may be set to a playbook to change fact gathering behavior
+It is possible to print Ansible facts in files using variables.
+Facts may be filtered using the setup module ad-hoc by passing a value for the filter parameter.
+It is possible to use {{ ansible_facts }} for conditional plays based on facts.
+--- # Ansible facts example
+- hosts: remote
+  tasks:
+  - name: create a file
+    lineinfile:
+      path: /home/ansible/hostname
+      create: ues
+      line: "{{ ansible_hostname }}"
+  - name: access magic variable
+    lineinfile:
+      path: /home/ansible/hostname
+      line: "{{ hostvars['localhost']['ansible_default_ipv4']['address'] }}"
+# Other magic variables are groups, group_name, and inventory_hostname
+---
+Ansible other gather facts on hosts it runs on
+ansible.cfg
+fact_caching = memory - default
+fact_caching = jsonfile - persist fact cache, can be huge
+also need fact_caching_connection = path to jsonfile
+---
+Conditional Execution in Playbooks
+Ansible playbooks are capable of making actions conditional.
+The when keyword is used to test a condition within a playbook.
+Jinja2 expressions are used for conditional evaluation
+It is also possible to use module output conditionally.
+--- # Ansible conditional example
+- hosts: remote
+  vars:
+    target_file: /home/ansible/hostname
+  tasks:
+    - name: Gather file information
+      stat:
+        path: {{ target_file }}
+      register: hostname
+    - name: Rename hostname when found
+      command: mv "{{ target_file }}" /home/ansible/net-info
+      when: hostname.stat.exists
+---
+can also use ==, not, is defined, >=, <=
+---
+Using Loops in Ansible
+The loop playword may be used to express arepeated action more concisely.
+loop may also operate with a list variable
+it is also possible to combine loops and conditionals
+--- # loop example
+- hosts: localhost
+  become: yes
+  tasks:
+    - name: install software
+      yum:
+        name: "{{ item }}"
+        state: absent
+      loop:
+        - elinks
+        - nmap-cat
+        - bind-utils
+--- # another loop example
+- hosts: localhost
+  become: yes
+  vars_files:
+    - vars.yml
+  tasks:
+    - name: Check services
+      service:
+        name: "{{ item }}"
+        state: started
+      loop: "{{ service_list }}"
+---
+{{ item }} is a special var and is substituted with whatever is in the loop
+---
+Working with Handlers in Ansible
+Ansible provides a mechanism that allows an action to be flagged for execution
+  when a task performs a change:
+  By only executing certain tasks on change, plays are more efficient.
+  This mechanism is known as a handler in Ansible
+  A handler may be called using the notify keyword
+  No matter how many times a handler is flagged in a play, it only runs
+    one time at the final phase of play execution.
+notify will only flag a handler if a task block makes changes.
+The calls made in the notify section correspond to the handler definitions within the play.
+  A handler may be defined similarly to tasks.
+--- # a handler example
+- hosts: scoldham2
+  become: yes
+  vars:
+    httpd_log_level: error
+  tasks:
+    - name: install httpd
+      yum:
+        name: httpd
+        state: latest
+    - name: update configuration
+      template:
+        src: /home/ansible/httpd.conf.j2
+        dest: /etc/httpd/conf/httpd.conf
+      notify: httpd service
+  handlers:
+    - name: httpd service
+      service:
+        name: httpd
+        state: restarted
+      listen: httpd service
+---
+Hands-On Lab: Deploying Services Using Ansible
+Additional Information and Resources
+The team has been working on automating the builds for common services using Ansible.
+You have been tasked with creating the build for a common NFS server.
+Write a playbook that satisfies the following requirements:
+
+On nfs:
+
+Make sure nfs-utils is installed.
+Configure /etc/exports via an Ansible template stored in /home/ansible/exports.j2.
+Deploy the template so that /mnt/nfsroot is exported with read and write to all hosts.
+
+Note: Your template file should contain the following with the variable {{ share_path }} being defined within your playbook:
+
+{{ share_path }} *(rw)
+Note: The file /etc/exports on nfs should have the following content once deployed:
+
+/mnt/nfsroot *(rw)
+Create a handler that runs the command exportfs -a if the file /etc/exports is modified in a playbook task.
+
+You can assume all necessary firewall rules have been deployed.
+On remote:
+
+Configure /etc/hosts from a template file stored on control at /home/ansible/etc.hosts.j2 with the following entries:
+
+  127.0.0.1 localhost {{ ansible_hostname }}
+  {{ nfs_ip }}  {{ nfs_hostname }}
+Note: You should populate the variables {{ nfs_ip }} and {{ nfs_hostname }} using magic variables in your playbook.
+Create users from file stored on control at /home/ansible/user-list.txt only if the remote host has the file /opt/user-agreement.txt.
+The Ansible control node has been configured for you and all other servers have already been configured for use with Ansible.
+The default inventory has been configured to include the group remote and server nfs.
+
+Create the necessary template files on the Ansible control node.
+Create the files exports.j2 and etc.hosts.j2 in /home/ansible with the noted content:
+
+/home/ansible/exports.j2
+
+{{ share_path }} *(rw)
+/home/ansible/etc.hosts.j2
+
+127.0.0.1    localhost {{ ansible_hostname}}
+{{ nfs_ip }}    {{ nfs_hostname }
+
+Create a playbook for the server 'nfs' in the Ansible inventory.
+Create a playbook in /home/ansible/nfs.yml that meets the provided specification for the server nfs in the ansible inventory.
+
+Create a playbook in /home/ansible/nfs.yml with the following content:
+
+- hosts: nfs
+  become: yes
+  vars:
+    share_path: /mnt/nfsroot
+  tasks:
+    - name: install nfs
+      yum:
+        name: nfs-utils
+        state: latest
+    - name: start and enable nfs-server
+      service:
+        name: nfs-server
+        state: started
+        enabled: yes
+    - name: configure exports
+      template:
+        src: /home/ansible/exports.j2
+        dest: /etc/exports
+      notify: update nfs
+  handlers:
+    - name: update nfs exports
+      command: exportfs -a
+      listen: update nfs
+
+Add a play for the remote host group.
+Edit /home/ansible/nfs.yml such that changes are executed on the remote host group to meet the provided requirements.
+
+Edit /home/ansible/nfs.yml to contain the following content after the nfs play:
+
+  - hosts: remote
+    become: yes
+    vars:
+      nfs_ip: "{{ hostvars['nfs']['ansible_default_ipv4']['address'] }}"
+      nfs_hostname: "{{ hostvars['nfs']['ansible_hostname'] }}"
+    vars_files:
+      - /home/ansible/user-list.txt
+    tasks:
+      - name: configure hostsfile
+        template:
+          src: /home/ansible/etc.hosts.j2
+          dest: /etc/hosts.nfslab
+      - name: get file status
+        stat:
+          path: /opt/user-agreement.txt
+        register: filestat
+      - name: debug info
+        debug:
+          var: filestat
+      - name: create users
+        user:
+          name: "{{ item }}"
+        when:  filestat.stat.exists
+        loop: "{{ users }}"}
+
+Execute playbook to verify your playbook works correctly.
+Execute playbook /home/ansible/nfs.yml to verify your playbook works correctly.
+
+Run ansible-playbook /home/ansible/nfs.yml from the control node.
+
+---
+Advanced Playbook Syntax
+Executing Selective Parts of a Playbook
+Ansible allows for both plays and tasks to be tagged.
+By tagging a play or task, you may run a playbook in such a way as to only run plays or tasks with a particular tag
+Alternatively, you may also skip certain tags during execution
+Note: Tasks can be tagged the same.
+You specify which tags to run or not run via arguments to the ansible-playbook command.
+--- # Tags example
+- hosts: localhost
+  tasks:
+    - name: Install elinks
+      become: yes
+      yum:
+        name: elinks
+        state: latest
+      tags:
+        - software
+    - name: Add line to text file
+      lineinfile:
+        path: /home/ansible/tag-test.txt
+        create: yes
+        line: "Tag called"
+      tags:
+        - file
+        - config
+    - name: Copy tag file
+      copy:
+        src: /home/ansible/tag-test.txt
+        dest: /tmp/copied.txt
+      tags:
+        - config
+---
+ansible-playbook tags.yml --tags software => will only run tasks with tag software
+ansible-playbook tags.yml --tags software,file
+also a --skip-tags flag
+---
+Working with Sensitive Data Using Ansible Vault
+The ansible-vault command is used to encrypt files and work with those files.
+It can take a number of sub-commands
+A file encrypted with ansible-vault is called a vault in Ansible parlance.
+The primary use case for vaults is for encrypting variable files to protect sensitive information
+  such as passwords.
+It is also possible to encrypt task files or even arbitrary files such as binaries if desired.
+The ansible-vault password file is simply a file that contains a password.
+The recommended way to provide a vault password from the CLI is to use: --vault-id
+--vault-id may be passed as a vault file or a prompt flag (--vault-id0prompt)
+  to collect credentials to unencrypt a target vault
+Prior to --vault-id, Ansible could only take a single vault password for a playbook.
+Multiple Vault IDs may be provided and Ansible will try each sequentially to unencrypt as needed.
+Vault IDs also allow for the application of labels to encrypted strings.
+Note: when debugging plays, it is possible that sensitive informations may be displayed in verbose logs.
+You can set no_log for a module to censor log output.
+anisble-vault decrypt vault - vault is a vault file, asks for a password
+ansible-vault encrypt --vault-id label@prompt vault => label is attached to a password
+--- # Vault example
+- hosts: localhost
+  vars_files:
+    /home/ansible/vault
+  tasks:
+    - name: Add secret text to open.txt
+      lineinfile:
+        path: /home/ansible/open.txt
+        create: yes
+        line: "{{ password }}"
+      no_log: true
+---
+ansible-playbook secret.yml --vault-id prod@prompt
+echo super-secret-password > pwfile
+ansible-playbook secret.yml --vault-id prod@pwfile
+ansible-vault view vault
+ansible-vault edit vault
+ansible-vault encrypt string --vault-id prod@prompt 'new_var: new-value' => add encrypted line to playbook
+---
+Error handling in a playbook - limit, ignore_errors, changed_when, and failed_when
+When a playbook fails to execute on any host, a file is created containing the names of each host
+  where the playbook failed.
+  This file may be used with the --limit flag to execute only against hosts where the playbook failed
+Ansible may be configured to continue execution even after an error occurs using the ignore_errors keyword
+Ansible allows failure conditions to be defined using the failed_when keyword
+There is also changed_when that allows an override of what Ansible considers changed.
+The debug module may be used to help troubleshoot plays:
+  Use to print detail information about in-progress plays.
+  Handy for troubleshooting
+Error handling may also be dealt with using block groups in Ansible.
+  There are 3 key blocks that may be used to organize tasks:
+    block - Group tasks into a block
+    rescue - A special block that is executed when the preceding block fails
+    always - A special block that is always executed after the preceding block.
+--- # Error handling example #1
+- hosts: localhost
+  become: yes
+  tasks:
+    - name: Install Software
+      yum:
+        name: broke
+        state: latest
+      ignore_errors: yes
+    - name: Run utility
+      command: /home/ansible/do-stuff.sh what
+      register: cmd_output
+      changed_when: "'CHANGED' in cmd_output.stdout"
+      failed_when: "'FAIL' in cmd_output.stdout"
+---
+Error Handling in a Playbook - Block Groups and The Debug Module
+When a playbook fails to execute on any host, a file is created containing the
+  names of each host where the playbook failed.
+  This file may be used with the --limit flag to execute only against hosts where the playbook failed.
+Ansible may be configured to continue execution even after an error occurs using the ignore_errors keyword.
+Ansible allows failure conditions to be defined using the failed_when keyword.
+There is also a changed_when that allows an override of what Ansible considers changed
+The debug module may be used to help troubleshoot play:
+  Use to print detail information about in-progress plays.
+  Handy for troubleshooting.
+--- # Error handing example #2
+- hosts: localhost
+  become: yes
+  vars:
+    target_service: httpd
+  tasks:
+    - name: Install Software
+      block:
+        - service:
+            name: "{{ target_service }}"
+            state: started
+          register: service_status
+      rescue:
+        - debug:
+            var: service_status
+      always:
+        - debug:
+            msg: "Tried to ensure service was running"
+---
+Asynchronous Tasks within a Playbook
+Some operations may require a significant amount of time to execute.
+By default, all playbook block tasks run against a single host use a single SSH session
+Ansible provides the async feature to allow an operation to run asynchronously
+  such that the status may be checked.
+This can prevent interruption from SSH timeouts for long running operations.
+You may configure a few key values for an asychronous task:
+  A timeout for an operation (default is unlimited)
+  A poll value for how often Ansible should check back
+    Note: A poll value of 0 will have Ansible not check back on a task.
+--- # Async Task Example
+- hosts: localhost
+  tasks:
+    - name: Run sleep.sh
+      command: /home/ansible/sleep.sh
+      async: 60
+      poll: 10
+---
+Delegating Playbook Execution with `delegate_to` and `local_action`
+In Ansible, delegation is running a task on specific hosts.
+  By delegating a task, the task will only run on the host
+    or group to which it was delegated.
+  In order to delegate, use the delegate_to keyword.
+Parallelism in playbooks:
+  The serial keyword may be used to control forks in a playbook
+    You may probide an integer count or a percentage of the total hosts.
+    You may provide a step-up approach (can mix and match count with percentage)
+    It is possible to use max_fail_percentage to allow a certain percentage to fail
+      Ansible will still pass play
+These are scenarios where a specific task needs to run only a single time in a given
+  playbook and not on each host:
+  This may be achieved using the run_once keyword.
+  This may be leveraged with delegate_to for greater control over which host
+    executes the command
+  It should also be noted that when used with serial that run_once will
+    execute for each serial batch.
+--- # Delegation Example
+- hosts: centos
+  tasks:
+    - name: Run sleep.sh
+      command: /home/ansible/sleep.sh
+      async: 60
+      poll: 0
+      delegate_to: scoldham2 # whenever playbook is run on any host, this task will be run on scolham2
+    - name: Install mariadb
+      package:
+        name: mariadb
+        state: latest
+      become: yes
+---
+local_action: yum name=httpd state=latest => special case of delegate_to that runs on localhost only
+---
+Parallelism in Playbooks
+--- # Serial execution Execution
+- hosts: all
+  max_fail_percentage: 10 # if 10% of hosts fail, stop execution
+  serial : 1 # only run playbook on one host at a time
+  become: yes
+  tasks:
+    - name: Install elinks
+      package:
+        name: elinks
+        state: latest
+---
+serial:
+- 1
+- 3
+- 5
+---
+step up approach runs on 1 then 3 then 5 hosts
+can also use percents in double quotes "10%"
+---
+Using 'run_once'
+ex. just want to run a sql script once per playbook
+--- # Run once example
+- hosts: centos
+  tasks:
+    - name: Run sleep.sh
+      command: /home/ansible/sleep.sh
+      async: 60
+      poll: 0
+      run_once: yes
+    - name: Install mariadb
+      package:
+        name: mariadb
+        state: latest
+      become: yes
+---
+run_once only runs one time per run of playbook, not one time per host like delegate_one
+---
+Overview of Ansible Roles
+Roles provide a way of automatically loading certain var_files, tasks, and handlers based on known file structure.
+Roles also make sharing of configuration templates easier.
+Roles require a particular directory structure
+  At least one of the directories must exist in the role definition.
+  However, unused directories are not required.
+  Most directories use a file main.yml as an entry point.
+The role keyword is used to invoke a role.
+When a role is called in a playbook, Ansible looks for the role definition
+  in ${PWD}/roles/<role_name>
+  If ${PWD}/roles does not contain the sought role, then /etc/ansible/roles is checked
+  The default role location may be changed in ansible.cfg
+  The full path to a role may also be specified with the role keyword to use a non-default path.
+A role with a given set of parameters will only be applied once, even if called multiple times in a play:
+  If a role is called with different parameters, it will be rerun.
+  A role may have allow_duplicates: true defined in meta/main.yml within the role.
+ansible-galaxy command can be used to create roles
+---
+Ansible Role Demo
+ansible-galaxy init /home/ansible/common => creates shell for new role
+vim common/tasks/main.yml
+--- # tasks file for /home/ansible/common
+- name: install elinks
+  yum:
+    name: elinks
+    state: latest
+---
+common/meta/main.yml => can create list of dependencies of roles that are dependent on each other
+Example
+role called web
+cd web
+cat tasks/main.yml => entrypoint for role
+--- # tasks file for /home/ansible/web
+
+- name: install httpd
+  yum:
+    name: httpd
+    state: latest
+
+- name: deploy httpd.conf template
+  template:
+    src: httpd.conf.j2
+    dest: /etc/httpd/conf/httpd.conf
+  notify: httpd service
+---
+cat handlers/main.yml
+--- # handlers file for /home/ansible/web
+
+- name: restart httpd service
+  service:
+    name: httpd
+    state: restarted
+  listen: httpd service
+---
+roles automatically look in templates and files directories
+httpd.conf.j2 mentioned in tasks file is actually in templates/httpd.conf.j2
+cat defaults/main.yaml
+--- # defaults file for /home/ansible/web
+http_log_level: error
+---
+defaults is the last place ansible will look for variables
+vars/main.yml has higher precedence than default
+best practice to precede var names with role name
+cat tests/test.yml
+---
+- hosts: localhost
+  become: yes
+#   roles:
+#     - /home/ansible/web
+  tasks:
+    - name: I ran
+      debug:
+        msg: "I ran!"
+    - name: use role
+      include_role:
+        name: /home/ansible/web
+---
+https://docs.ansible.com/ansible/latest/user_guide/playbooks_reuse.html
+dynamic vs static includes vs imports
+---
+Hands-On Lab: Advanced Features in Ansible Playbooks
+You must create a modular playbook used for webserver management.
+Create a playbook called /home/ansible/webserver.yml that meets the following requirements:
+
+On the host group webservers:
+
+Deploy httpd.
+You can assume all necessary firewall rules have been deployed.
+Start and enable httpd.
+Configure virtual host using the provided templates in /home/ansible/vhost.conf.j2 and /home/ansible/htpasswd.j2.
+Note: The template references a variable defined in /home/ansible/confidential
+which must be included as a variable file in your playbook.
+Use ansible vault to secure /home/ansible/confidential with password "I love ansible".
+Run the data job stored in /opt/data-job.sh on each node in webservers asynchronously, without polling for status.
+Create tags for the following tasks:
+base-intall for httpd installation and service configuration.
+vhost for virtual host deployment.
+data-job to execute the asynchronous data job.
+The Ansible control node has been configured for you and each webserver has already been configured for use with Ansible.
+The default inventory has been configured to include the webservers group and sample hosts.
+
+Use ansible-vault to protect the confidential information.
+Use ansible-vault to encrypt /home/ansible/confidential to protect the confidential information stored within using the password "I love ansible".
+
+Run ansible-vault encrypt /home/ansible/confidential and supply the password "I love ansible".
+
+Create a playbook that deploys httpd on webservers.
+Create a playbook in /home/ansible/webserver.yml that deploys httpd on webservers. It should be tagged with base-install and contain a handler that restarts the httpd daemon that is flagged by both installation and service manipulation for httpd.
+
+Create the file /home/ansible/webserver.yml and add the following content:
+
+- hosts: webservers
+  become: yes
+  vars_files:
+    - /home/ansible/confidential
+  tasks:
+    - name: install httpd
+      yum:
+        name: httpd
+        state: latest
+      notify: httpd service
+      tags:
+        - base-install
+  handlers:
+    - name: Restart and enable httpd
+      service:
+        name: httpd
+        state: restarted
+        enabled: yes
+      listen: httpd service
+
+Deploy the templates stored on the control node to the webservers group.
+Configure /home/ansible/webserver.yml to deploy the templates /home/ansible/vhost.conf.j2 and /home/ansible/htpasswd.j2 stored on the control node to the webservers group. httpd must restart on config change. The tasks should be tagged vhost.
+
+Add the following text to /home/ansible/webserver.yml just before the handler section:
+
+    - name: configure virtual host
+      template:
+        src: /home/ansible/vhost.conf.j2
+        dest: /etc/httpd/conf.d/vhost.conf
+      notify: httpd service
+      tags:
+        - vhost
+    - name: configure site auth
+      template:
+        src: /home/ansible/htpasswd.j2
+        dest: /etc/httpd/conf/htpasswd
+      notify: httpd service
+      tags:
+        - vhost
+
+Asynchronously execute data-job on webservers.
+Configure /home/ansible/webserver.yml to asynchronously execute /opt/data-job.sh located on webservers with a timeout of 600 seconds and no polling. The task should be tagged with data-job.
+
+Add the following text to /home/ansible/webserver.yml just before the handler section:
+
+    - name: run data job
+      command: /opt/data-job.sh
+      async: 600
+      poll: 0
+      tags:
+        - data-job
+
+Execute playbook to verify your playbook works correctly.
+Execute playbook /home/ansible/webserver.yml to verify your playbook works correctly.
+
+Run ansible-playbook --ask-vault-pass /home/ansible/webserver.yml from the control node providing the vault password "I love ansible".

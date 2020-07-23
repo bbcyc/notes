@@ -1,0 +1,372 @@
+Ansible: Setup, Configure, and Ad Hoc Commmands Deep Dive
+
+from `man ansible`:
+Ansible is an extra-simple tool/framework/API for doing 'remote things'.
+this command allows you to define and run a single task 'playbook' against a set of hosts
+---
+Ansible Setup
+How to Install Ansible
+Need to configure EPEL repository, usually already set up
+sudo yum install ansible
+sudo yum install git - should source control ansible playbooks
+
+SSH access needs to be set up for each host
+Ansible inventory needs to be configured
+/etc/ansible/hosts - default location
+
+sudo useradd ansible
+sudo passwd ansible
+su - ansible
+
+run common ansible user that exists on all hosts
+
+ansible localhost -m ping -k
+ssh localhost - add localhost to known_hosts file
+try again
+-k ask for SSH password
+
+Configuring SSH and Sudo for Ansible
+ssh scoldham2c.labserver.com
+sudo su -
+useradd ansible
+passwd ansible
+logout
+
+ssh scoldham3c.mylabserver.com
+sudo su -
+for debian
+adduser ansible - prompts for password
+
+set up pre-shared key auth for all hosts
+on control node
+su - ansible
+ssh-keygen - leave passphrase empty
+ssh-copy-id scoldham2c.labserver.com - copy ssh key to host server
+now can ssh into hosts
+ssh scoldam2c.mylabserver.com
+need to make ansible user privileged
+sudo visudo
+add line
+ansible ALL=(ALL) NOPASSWD: ALL - allows ansible user to run all commands as root
+do this on control and all hosts
+
+---
+Ansible Configuration
+The Ansible Configuration File
+default file at /etc/ansible/ansible.cfg
+Configuration file will be searched in following order:
+ANSIBLE_CONFIG env varif set
+ansible.cfg in current dir
+~/.ansible.cfg in home dir
+/etc/ansible/ansible.cfg
+
+ansible-config
+list - possible variables
+dump - current set vars
+
+Setting Up the Ansible Inventory
+An inventory is a list of hosts that Ansible manages
+default - /etc/ansible/hosts
+can be specified in CLI: ansible -i <filename>
+can be set in ansible.cfg
+
+can make a groups of hosts
+[dbservers]
+db1.example.com
+db3.example.com
+
+can also use patterns
+www[01:99].example.com
+---
+Hands-On Lab: Getting Started with Ansible
+Additional Information and Resources
+Your CIO has greenlit a proof of concept for Ansible in your environment. You are to set up an Ansible control node in a test environment and verify basic functionality. You have three demo hosts, one to be the control node (control1), and two to serve as managed nodes (node1 and node2). You must complete the following steps:
+
+Install Ansible on the control node.
+Configure the ansible user on the control node for ssh shared key access to managed nodes.
+Note: do not use a passphrase for the key pair.
+Create a simple Ansible inventory on the control node in /home/ansible/inventory containing node1 and node2.
+Configure sudo access for Ansible on node1 and node2 so that Ansible may use sudo for any command with no password prompt.
+Verify each managed node can be accessed by Ansible from the control node using the ping module. Redirect the output of a successful command to /home/ansible/output.
+Important Notes:
+
+The user ansible is already present on all servers for your convenience.
+The ansible user has the same password as the cloud_user.
+/etc/hosts entries are present on control1 for the managed nodes.
+
+Install Ansible on the control node.
+To install Ansible on the control node, run sudo yum install ansible.
+
+Configure the `ansible` user on the control node for ssh shared key access to managed nodes. Do not use a passphrase for the key pair.
+To create a keypair for the ansible user on the control host, run the following:
+sudo su - ansible
+ssh-keygen (accept all defaults: press enter for each prompt)
+Copy the public key to both node1 and node2.
+As the ansible user on the control host:
+ssh-copy-id node1 (accept the host key if prompted, authenticate as ansible user)
+ssh-copy-id node2 (accept the host key if prompted, authenticate as ansible user)
+
+Create a simple Ansible inventory on the control node in `/home/ansible/inventory` containing `node1` and `node2`.
+On the control host:
+sudo su - ansible (if not already ansible user)
+touch /home/ansible/inventory
+echo "node1" >> /home/ansible/inventory
+echo "node2" >> /home/ansible/inventory
+
+Configure sudo access for Ansible on `node1` and `node2` such that Ansible may use sudo for any command with no password prompt.
+Log in to node1 as cloud_user and edit the sudoers file to contain appropriate access for the ansible user:
+ssh cloud_user@node1
+sudo visudo
+Add the following line to the file and save:
+ansible    ALL=(ALL)       NOPASSWD: ALL
+Repeate these steps for node2.
+
+Verify each managed node is able to be accessed by Ansible from the control node using the `ping` module. Redirect the output of a successful command to `/home/ansible/output`.
+To verify each node, run the following as the ansible user from the control host:
+ansible -i /home/ansible/inventory node1 -m ping
+ansible -i /home/ansible/inventory node2 -m ping
+To redirect output of a successful command to /home/ansible/output:
+ansible -i /home/ansible/inventory node1 -m ping > /home/ansible/output
+
+---
+Using Ansible Ad Hoc
+The Ansible Command
+Ansible ad-hoc commands are comparable to bash commands
+Playbook is comparable to bash script
+syntax
+ansible <HOST> -b -m <MODULE> -a "<ARG1 ARG2 ARG3>" -f <NUM_FORKS>
+ansible -i inv remote -b -m yum -a "name=elinks state=installed"
+-i inventory
+-b become i.e. sudo
+-a arguments
+-f forks - how many forks to run at once
+---
+Understanding Ansible Modules
+Modules are discrete units of cofder that can be used from the command line or in a playbook task.
+Module may be args
+most mods take key=value args delimited by whitespace
+there are exceptions
+examples - ping, setup, yum, service, and copy
+great docs at docs.ansible.com
+or the ansible-doc command
+
+ansible-doc copy
+ansible-doc -s copy = slight abbreviation
+
+---
+The Shell and Command Modules
+both effective ways to run "raw" commands on a target host.
+The command module is the default module used with ansible ad-hoc when no module is specified
+shell module works almost exactly like the command module except commands are run in a shell environment
+shell over command is for use of input/output redirection, env vars, or other shell features
+best practice is to use command module unless you require shell features
+ansible localhost -a "touch /tmp/file"
+use ansible prebuilt modules if at all possible
+ansible localhost -a "touch /tmp/file creates=/tmp/file"
+ansible localhost -a "rm -f /tmp/file removes=/tmp/file"
+ansible localhost -a "echo $PATH > /tmp/file"
+cat /tmp/file = no file actually there, bc command cant handle redirection
+ansible localhost -m shell -a "echo $PATH > /tmp/file"
+script module can actually run scripts
+---
+Collecting System Information
+Ansible facts are simply various properties and information regarding a given remote system.
+The setup module can retrieve facts
+Facts may be filtered using the setup moduel ad-hoc by passing a value for the fiter parameter.
+Ansible command output may be directed to a file using the --tree outputfile flage which may
+  be helpful when working with facts.
+It is possible to use {{ ansible_facts }} for conditional plays based on facts
+ansible -i inv remote -m setup -a "filter=dist"
+mkdir facts
+ansible -i inv remote -m setup --tree facts
+---
+File Manipulation with Ansible
+Working with the File and Copy Modules
+The file module can be used to create, delete, and modify file properties
+ansible -i inv localhost -m file -a "name=testfile state=touch"
+state can also be absent
+ansible-doc file for other options
+
+The copy module may be used to copy files from a number of sources:
+the control node, the file systems on the target node, created during the execution
+of the copy module and placed on the target nodes
+ansible-doc -s copy to see options
+ansible -i inv remote -m copy -a "src=testfile dest=newfile" copies testfile from home dir on control to newfile on hosts
+use remote_src option to copy from remote
+---
+Editing File Contents with the `lineinfile` Module
+The lineinfile module is a key way of interacting with a file's contents.
+The key feature of the module is inserting a line of provided text into a given file.
+The module will place the line of text at the end of a file by default however
+  it can place the line after of before a line of matched text.
+It may also remove lines of text.
+There is a replace module that can make a more granular file changes using regexs
+ansible -i inv centos -m lineinfile -a "path=/home/ansible/testfile line='I am the walrus' state=present"
+ansible-doc -s lineinfile
+insertafter - insert after line matched by regex
+create - will create file if it doesnt exist
+ansible localhost -m lineinfile -a "line='I am before the walrus' path=testfile insertbefore='walrus'"
+testfile before:
+I'm from ansible!
+I am the walrus
+testfile after
+I'm from ansible
+I am before the walrus
+I am the walrus
+runnin the command twice leaves only one before line, bc the state is what ansible expects
+---
+Downloading File with the 'get_url' Module
+The get_url module provides functionality for downloaded files over http with a variety of options
+The http, https, and ftp protocols are supported
+May use basic or x509 auth
+Able to perform checksum verification
+Supports proxy network access
+ansible localhost -m get_url -s "url=http://google.com dest=google.html"
+errors bc dest needs to be absolute path for this module
+ansible localhost -m get_url -s "url=http://google.com dest=/home/ansible/google.html" => works
+ansible-doc get_url
+ansible -i inv remote -m get_url -a "url=https://google.com dest=/home/ansible/google.html"
+---
+Working with File Archives
+The archive and unarchive modules may be used to work with various types of file archives
+These modules work with common archives such as tar, gunzip(deafult), and zip
+These modules allow for compression or expansion of files and directories
+ansible -i inv ubuntu -m archive -a "path=/home/ansible format=zip dest=/tmp/files.zip"
+ansible -i inv ubuntu -m unarchive -a "remote_src=yes src=/tmp/files.zip dest=/tmp/"
+unarchive looks at control node by default, also can be used to download from url
+---
+Hands-On Lab: File Manipulation with Ansible
+The development team has released the latest build of the enigma software. You have been approached to install the latest version on the QA systems. The development team has provided a task list of how to install the build. Rather than run through the steps on all the servers in your environment, you can use Ansible to run each task on all the servers at one time!
+
+The Ansible control node has been configured for you and each QA server has already been configured for use with Ansible. The default inventory has been configured to include a qa-servers host group which includes the host that requires the new software. Execute the task list provided below using the appropriate Ansible ad-hoc commands.
+
+SPECIAL NOTE: Although you will initially log in as the 'cloud_user', please 'sudo su -' to the 'ansible' user in order to complete the solution. All the SSH keys have been created and exchanged among the hosts in order to allow the tasks to be run appropriately.
+
+Note: This URL only works correctly when accessed on the lab servers. The dmain name DNS entry is overridden in /etc/hosts on each lab server. If you attempt to access it from another system, you will reach a parked domain.
+
+Installation task list:
+
+Download http://software.xyzcorp.com/enigma.tgz to /tmp on each host in qa-servers and verify the sha256 checksum via http://software.xyzcorp.com/enigma-checksum.txt. (Note: There is a bug in ansible get_url that currently only allows using the literal checksum value instead of a file location for the checksum argument! Thus, you must copy the checksum value from the provided checksum file and then paste that value into the ansible command rather than simply providing the checksum file URL in the command.)
+Extract /tmp/enigma.tgz to /opt/ on all hosts in qa-servers.
+Update the line of text "DEPLOY_CODE" in /opt/enigma/details.txt to the "CODE_RED" on each server in qa-servers.
+Set the group ownership of the directory /opt/enigma/secret/ and each file contained within the directory so that the group owner is protected for each host in qa-servers.
+Delete the file /opt/enigma/tmp/deployment-passwords.txt from all servers.
+
+Become 'ansible' user and then download http://software.xyzcorp.com/enigma.tgz to `/tmp` on each host in qa-servers and verify the sha256 checksum via http://software.xyzcorp.com/enigma-checksum.txt.
+Note: This URL only works correctly when accessed on the lab servers. The dmain name DNS entry is overridden in /etc/hosts on each lab server. If you attempt to access it from another system, you will reach a parked domain.
+
+On EACH of the hosts in 'qa-servers' inventory, become the 'ansible' user:
+
+sudo su - ansible
+As the 'ansible' user (above), run the following commands on each host in the 'qa-servers':
+
+CHECKSUM=$(curl http://software.xyzcorp.com/enigma-checksum.txt | cut -f1 -d' ')
+ansible qa-servers -m get_url -a "url=http://software.xyzcorp.com/enigma.tgz dest=/tmp/enigma.tgz checksum=sha256:$CHECKSUM"
+check_circle
+Extract `/tmp/enigma.tgz` to `/opt/` on all hosts in qa-servers.
+Run ansible qa-servers -b -m unarchive -a "src=/tmp/enigma.tgz dest=/opt/ remote_src=yes"
+
+check_circle
+Update the line of text "DEPLOY_CODE" in `/opt/enigma/details.txt` to the "CODE_RED" on each server in qa-servers.
+Run ansible qa-servers -b -m lineinfile -a "regexp=DEPLOY_CODE line=CODE_RED path=/opt/enigma/details.txt"
+
+check_circle
+Set the group ownership of the directory `/opt/enigma/secret/` and each file contained within the directory so that the group owner is `protected` for each host in qa-servers.
+Run ansible qa-servers -b -m file -a "recurse=yes state=directory path=/opt/enigma/secret group=protected"
+
+check_circle
+Delete the file `/opt/enigma/tmp/deployment-passwords.txt` from all servers.
+Run ansible all -b -m file -a "state=absent path=/opt/enigma/tmp/deployment-passwords.txt"
+
+---
+Configuring System Users and Groups
+Creating System Users with the User Module
+The user module may interact with users in many standard ways
+Create users
+Remove users
+Change user properties
+append=yes will append user to group, append=no will add them to a group and remove from all other groups
+ansible -i inv remote -b -m user -a "name=super"
+state=present is default
+state=abent removes user but not artifacts
+need to add remove=yes
+---
+Working with the group module
+The group module works with groups in the same way as the user module interacts with users.
+ansible -i inv remote -b -m group -a "name=consultants"
+ansible -i inv remote -b -m user -a "name=super group=consultants"
+ansible -i inv remote -b -m user -a "name=super group=wheel"
+ansible -i inv remote -b -m group -a "name=consultants state=absent" -> removes group
+---
+Installing Software and Daemon Management
+Installing Software
+One of the key feature necessary for bootstrapping and managing hosts is the ability
+  to install and manage software packages.
+package, yum, and apt are used for this purpose depending on distribution:
+yum and apt are used for distribution specific software management.
+The package module will automatically detect the target host distribution and use the appropriate method of
+  installing software.
+In a mixed distribution environment, the package module is best practice.
+ansible all -b -m package -a "name=ntpdate state=latest"
+ansible all -b -m package -a "name=httpd state=latest" - doesn't work for ubuntu bc name is different
+package module can't handle different named packages
+ansible -i inv ubuntu -b -m apt -a "name=apache2 state=latest"
+---
+Controlling daemons with the Service Module
+The service module controls system daemons
+It is compatible with both systemd and the older BSD init style of daemon management
+ansible -i inv remote -b -m service -a "name=httpd state=started enabled=yes"
+---
+Hands-On Lab: Ad-Hoc Ansible Commands
+Some consultants have been employed to perform audits on a number of systems in your company's environment. You must create the user accounts noted in /home/ansible/userlist.txt and set up the provided public keys for their accounts. The security team has built a jump host for the consultants to access production systems and provided the full key-pair to you so you may set up and test the connection. All hosts in dbsystems will need the provided public key installed so the consultants may use key-pair authentication to access the systems. Also, you must ensure the auditd service is enabled and running on all systems.
+
+To summarize, you must do the following:
+
+Create the user accounts noted in /home/ansible/userlist.txt.
+Copy the authorized_keys file for each user to the correct location so the new accounts can log in with ssh key authentication.
+Ensure auditd is enabled and running on all systems.
+Important notes:
+
+For your convenience, Ansible is already on the control node. If you connect to the server by clicking on the Public IP address in your browser, make sure to change to the ansible user with the su - ansible command.
+The user ansible is present on all servers with appropriate shared keys for access to managed servers from the control node. Make sure to use this user to complete the commands.
+The ansible user has the same password as cloud_user.
+The default Ansible inventory has been configured for you with the appropriate hosts and groups.
+/etc/hosts entries are present on control1 for the managed servers.
+
+Create the User Accounts Noted in `/home/ansible/userlist.txt`
+ansible dbsystems -b -m user -a "name=consultant"
+ansible dbsystems -b -m user -a "name=supervisor"
+
+Place Key Files in the Correct Location, `/home/$USER/.ssh/authorized_keys`, on Hosts in `dbsystems`
+ansible dbsystems -b -m file -a "path=/home/consultant/.ssh state=directory owner=consultant group=consultant mode=0755"
+ansible dbsystems -b -m copy -a "src=/home/ansible/keys/consultant/authorized_keys dest=/home/consultant/.ssh/authorized_keys mode=0600 owner=consultant group=consultant"
+ansible dbsystems -b -m file -a "path=/home/supervisor/.ssh state=directory owner=supervisor group=supervisor mode=0755"
+ansible dbsystems -b -m copy -a "src=/home/ansible/keys/supervisor/authorized_keys dest=/home/supervisor/.ssh/authorized_keys mode=0600 owner=supervisor group=supervisor"
+
+Ensure `auditd` Is Enabled and Running on All Hosts
+ansible all -b -m service -a "name=auditd state=started enabled=yes"
+
+---
+Advanced Features
+Managing Long-running Commands
+Some operations may require a significant amount of time to execute
+Ansible provides a feature that allows an operation to run asynchronously so that
+  the status may be checked.
+There are two options related to running asynchronous commands.
+-B us used to provide a timeout value and initiate the operation.
+-P may be provided to engage polling of the operation at a set interval.
+The status may be checked using the module async_status
+ansible localhost -a "/home/ansible/sleep.sh" -B 15 -P 0
+-P 0 => disabled polling
+-B 15 => 15 second timeout
+---
+Parallelism in Ansible
+Ansible uses what are known as forks to execute tasks in parallel
+Each fork is able to run a task against a target host.
+By default, Ansible executes 5 forks.
+Assuming one runs a module against 5 hosts, the module should execute near simultaneously on all hosts.
+If more than 5 hosts are targeted, hosts after the first 5 must wait for a fork to become free before being able to execute.
+The number of forks used by Ansible may be configured in ansible.cfg or on an as-needed basis using the -f or --forks flag.
+Note: The more forks allowed, the more system resources will be required on the Ansible control node.
+ansible all -m ping -f 50 => 50 forks
+

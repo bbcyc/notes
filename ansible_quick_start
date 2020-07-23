@@ -105,7 +105,7 @@ Playbooks are analagous to bash script (we'll look at those later)
 
 Syntax: ansible <HOST> -b -m <MODULE> -a "<ARG1 ARG2 ARG3>"
 
-HOST os a host of host group defined in the Ansible inventory file.
+HOST is a host or host group defined in the Ansible inventory file.
 
 -b is for become, which replaces the deprecated -s flag as in sudo
 
